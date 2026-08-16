@@ -25,7 +25,14 @@ export default function LoginScreen() {
     try {
       await login(mobile.trim(), password);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.");
+      // TEMPORARY diagnostic -- shows exactly what was typed (wrapped in
+      // brackets to reveal invisible leading/trailing whitespace) so a
+      // remote debugging session can see it without screen access.
+      // Remove once the real-device login issue is resolved.
+      const debugInfo = `\n\n[debug] mobile=[${mobile}] password=[${password}] password.length=${password.length}`;
+      setError(
+        (e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.") + debugInfo,
+      );
     } finally {
       setSubmitting(false);
     }

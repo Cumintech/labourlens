@@ -2,7 +2,10 @@
 
 Build sprint — each day ships working, testable code. See
 [SPEC.md](SPEC.md) for scope and [DATA_MODEL.md](DATA_MODEL.md) for the
-schema.
+schema. Anything beyond this 5-day scope (consultant multi-client
+support, license/deadline management, broader statutory compliance) is
+tracked in [PHASE2_BACKLOG.md](PHASE2_BACKLOG.md) — designed where useful,
+explicitly not being built during this sprint.
 
 ## Day 1 — Spec, scaffolding, Test Portal
 - Data model + quick spec (this doc + SPEC.md + DATA_MODEL.md)

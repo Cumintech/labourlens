@@ -26,9 +26,17 @@ Confirmed real, confirmed Phase 2 (not sprint scope). Design as discussed:
 Certificate," etc.), `document_number`, `issuing_authority`, `issue_date`,
 `expiry_date` (nullable — some certificates don't expire), `file_key`
 (reference to stored file, not the file itself), `status` (active /
-expired / renewal_in_progress / superseded), `last_alerted_at` (stops the
-alert job from re-notifying about the same deadline daily),
-`uploaded_by`, `uploaded_at`.
+expired / renewal_in_progress / superseded), `uploaded_by`, `uploaded_at`.
+
+**Alert-tracking fields**: `last_alerted_threshold` (int, one of
+90/60/30/7/0 — which urgency bucket the last alert was for) and
+`last_alerted_at`. A single timestamp alone isn't enough to prevent
+spam — it can't tell "already alerted at the 30-day mark" apart from
+"already alerted at the 7-day mark," so it would either re-alert daily
+in the gap between thresholds or skip the more urgent follow-up.
+Tracking the threshold itself means each crossing (90 → 60 → 30 → 7 →
+overdue) fires exactly one alert, not one alert repeated daily for
+however many days sit between two thresholds.
 
 **`document_versions`** — worth having from day one, not bolted on later.
 When a license renews, keep the old file linked to the new one rather
@@ -43,11 +51,18 @@ since these files can reveal other sensitive business details.
 
 **Alert engine**: reuses the same scheduled-job mechanism as the Portal
 Sync Worker (Day 3) — one scheduler, two jobs, not two pieces of
-infrastructure. Daily run checks `expiry_date` against a threshold ladder
-(90/60/30/7 days out is a reasonable default), notifies once per
-threshold crossing using `last_alerted_at` to avoid daily spam. The
-"what's due" dashboard itself is a live query (sorted by nearest expiry),
-not its own stored alert state.
+infrastructure. Once a day is the right cadence here (unlike the Portal
+sync question, license expiries don't move fast enough to need
+minute-level freshness). Each run is a single indexed query — `WHERE
+expiry_date <= today + 90 days AND status = 'active'` — cheap regardless
+of how many documents/clients exist, not a per-document check. For each
+row returned: compute days-until-expiry, work out which bucket it falls
+into (90/60/30/7/overdue), and only send a notification if that bucket is
+more urgent than `last_alerted_threshold` — i.e. exactly one alert per
+threshold crossing over a document's life, not a repeat every day between
+two thresholds. The "what's due" dashboard is separate and unrelated to
+this job's cadence — a live query, run fresh whenever opened, no stored
+alert state involved.
 
 **Consolidated cross-client view**: depends on the Consultant tenant
 layer above — once it exists, this is `WHERE owners.consultant_id = X

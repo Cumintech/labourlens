@@ -17,6 +17,14 @@ schema.
 - Owner login, multi-tenant scoping enforced at the query level
 - Save flow: mask Aadhaar (last 4 visible), encrypt PII at rest
 - 50-worker-per-owner limit
+- **Real-device verification via Expo Go** — Day 1's login screen and
+  navigation shell were only verified at the API/bundler level (no
+  emulator available in this environment). Day 2 is the first day there's
+  a camera-dependent feature (Aadhaar scan), which can't be meaningfully
+  tested any other way — so this is where actual on-phone testing starts,
+  not something to keep deferring. Covers: Day 1's login flow tapped for
+  real, plus every Day 2 screen (scan, manual-correction, save) on an
+  actual device.
 
 ## Day 3 — Portal Sync Worker
 - Sync worker: create on registration, remove/update on deactivation

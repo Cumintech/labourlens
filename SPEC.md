@@ -53,24 +53,19 @@ assistant — noted so it's traceable, not silently assumed)
   conclusion is worth a real legal sign-off before go-live, separate from
   the engineering work here.
 
-## Open discrepancy — flagged, not silently resolved
+## Discrepancy — resolved 2026-08-17
 
-The confirming brief's sync model is explicit: **"No verification
-round-trip... no read-back or 'check if already registered' step. The app
-is the source of truth; Portal sync is one-directional, fire-and-forget
-with retry."**
+Day 1 flagged a contradiction: the confirming brief says **"no
+verification round-trip... no read-back or 'check if already registered'
+step,"** while slide 2 of the spec deck describes a Portal-side duplicate-
+Aadhaar check ("shows existing record if found").
 
-Slide 2 of the spec deck describes something different: **"Portal Aadhaar
-check — shows existing record if found," "Activate at this factory if
-Portal record is inactive."** That's a read-back/verification step,
-directly contradicting the brief's "no verification round-trip" framing.
-
-Treating the brief's simplified model (pure fire-and-forget create/remove,
-no read-back) as authoritative for Day 1-3's build, since it's the more
-recent, explicit instruction. This needs confirming before Day 3 (Portal
-Sync Worker) locks in the design — a Portal-side duplicate-Aadhaar check
-is a meaningfully different, larger feature than a pure create/remove
-sync, and building the wrong one costs real rework.
+**Confirmed by the client: no verification round-trip.** The brief's
+simplified model is correct — pure fire-and-forget create on
+registration, remove/update on deactivation, no read-back, no
+duplicate-Aadhaar check against the Portal. The deck's slide 2 is stale;
+disregard it for the Sync Worker's design (Day 3). This is now locked in,
+not still open.
 
 ## Stack (chosen Day 1, see [BUILD_PLAN.md](BUILD_PLAN.md) for why)
 

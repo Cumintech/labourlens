@@ -77,3 +77,8 @@ not still open.
   partner Portal (its own login, its own worker list) — the only thing
   the Sync Worker talks to through Day 4. The real Portal is never touched
   until Day 5's single supervised cutover test.
+- **Confirmed 2026-08-17: the real Portal's login is direct** — plain
+  username/password, no CAPTCHA, no OTP, no multi-step flow. The Test
+  Portal's shape (login form → session → form-based create/deactivate)
+  matches this as-is; no rework needed before Day 3's Sync Worker gets
+  built against it.

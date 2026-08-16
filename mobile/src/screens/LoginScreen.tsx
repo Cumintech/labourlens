@@ -55,6 +55,8 @@ export default function LoginScreen() {
         onChangeText={setPassword}
         secureTextEntry
         placeholder="••••••••"
+        autoCapitalize="none"
+        autoCorrect={false}
       />
 
       {error && <Text style={styles.error}>{error}</Text>}

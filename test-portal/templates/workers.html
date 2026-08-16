@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head><title>Test Portal — Workers</title></head>
+<body style="font-family: sans-serif; max-width: 720px; margin: 40px auto;">
+  <h2>State Labour Portal (Test) — Workers</h2>
+  <p><a href="/workers/new">+ New worker</a> &nbsp;|&nbsp; <a href="/logout">Log out</a></p>
+  <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+    <tr><th>ID</th><th>Name</th><th>Aadhaar (last 4)</th><th>Factory</th><th>External ref</th><th>Status</th><th></th></tr>
+    {% for w in workers.values() %}
+    <tr>
+      <td>{{ w.id }}</td>
+      <td>{{ w.name }}</td>
+      <td>{{ w.aadhaar_last4 }}</td>
+      <td>{{ w.factory_name }}</td>
+      <td>{{ w.external_ref }}</td>
+      <td>{{ w.status }}</td>
+      <td>
+        {% if w.status == "active" %}
+        <form method="post" action="/workers/{{ w.id }}/deactivate" style="display:inline;">
+          <button type="submit">Deactivate</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</body>
+</html>

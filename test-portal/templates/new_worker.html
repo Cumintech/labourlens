@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head><title>Test Portal — New Worker</title></head>
+<body style="font-family: sans-serif; max-width: 360px; margin: 80px auto;">
+  <h2>New worker entry</h2>
+  <form method="post" action="/workers/new">
+    <p><label>Name<br><input type="text" name="name" required></label></p>
+    <p><label>Aadhaar (last 4)<br><input type="text" name="aadhaar_last4" maxlength="4" required></label></p>
+    <p><label>Factory<br><input type="text" name="factory_name" required></label></p>
+    <p><label>External ref (app-side worker id)<br><input type="text" name="external_ref"></label></p>
+    <button type="submit">Create</button>
+  </form>
+  <p><a href="/workers">Back to list</a></p>
+</body>
+</html>

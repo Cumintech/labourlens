@@ -8,3 +8,9 @@ bcrypt==4.2.1
 python-multipart==0.0.20
 psycopg2-binary==2.9.10
 pydantic[email]==2.10.4
+
+# Aadhaar OCR (see ocr.py for why EasyOCR over Tesseract on this
+# machine). Heavy (PyTorch-based) -- revisit if this ends up deployed
+# somewhere Tesseract's system binary is easy to install (any normal
+# Linux host, unlike this Windows dev machine).
+easyocr==1.7.2

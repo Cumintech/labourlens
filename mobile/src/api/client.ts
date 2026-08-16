@@ -67,4 +67,82 @@ export function getMe(token: string): Promise<Owner> {
   });
 }
 
+export type OcrFields = {
+  name: string | null;
+  dob: string | null; // YYYY-MM-DD
+  gender: string | null;
+  aadhaar_number: string | null;
+};
+
+export type Worker = {
+  id: number;
+  owner_id: number;
+  name: string;
+  mobile: string | null;
+  dob: string | null;
+  gender: string | null;
+  aadhaar_last4: string;
+  status: string;
+  created_at: string;
+};
+
+export type WorkerCreateInput = {
+  name: string;
+  mobile?: string;
+  dob?: string;
+  gender?: string;
+  aadhaar_number: string;
+  current_address?: string;
+  current_district?: string;
+  native_address?: string;
+  native_district?: string;
+};
+
+// Multipart upload -- not JSON, so this bypasses the request() helper
+// above (which always sends Content-Type: application/json).
+export async function scanAadhaar(
+  token: string,
+  frontUri: string,
+  backUri: string | null,
+): Promise<OcrFields> {
+  const formData = new FormData();
+  formData.append("front_image", {
+    uri: frontUri,
+    name: "front.jpg",
+    type: "image/jpeg",
+  } as any);
+  if (backUri) {
+    formData.append("back_image", {
+      uri: backUri,
+      name: "back.jpg",
+      type: "image/jpeg",
+    } as any);
+  }
+
+  const res = await fetch(`${API_BASE_URL}/workers/ocr`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail ?? `OCR failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export function createWorker(token: string, input: WorkerCreateInput): Promise<Worker> {
+  return request<Worker>("/workers", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export function listWorkers(token: string): Promise<Worker[]> {
+  return request<Worker[]>("/workers", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export { ApiError };

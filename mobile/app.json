@@ -1,13 +1,16 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Labour Lens",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Labour Lens uses the camera to scan Aadhaar cards for worker registration."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,6 +23,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Labour Lens uses the camera to scan Aadhaar cards for worker registration."
+        }
+      ]
+    ]
   }
 }

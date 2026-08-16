@@ -46,4 +46,38 @@ schema.
 
 ## Daily status log
 
-### Day 1 — [in progress, see below once complete]
+### Day 1 — done
+
+**Achieved**
+- SPEC.md + DATA_MODEL.md written from the deck + confirming brief.
+- Backend: owner signup/login/me (bcrypt + JWT), field-level PII
+  encryption verified genuinely at rest (not just via the ORM's own
+  decrypt path — checked the raw SQLite bytes directly).
+- Test Portal: separate mock app, HTML-form-based (matching the real
+  Portal's no-API reality), full login/create/deactivate flow verified
+  via curl.
+- Mobile: Expo scaffold, working login screen wired to the real backend,
+  navigation shell with placeholders for the other screens. `tsc --noEmit`
+  clean; Metro bundler forced to actually bundle (996 modules, no errors).
+- Repo created at github.com/Cumintech/labourlens (**private** — this
+  project handles PII-adjacent code and will eventually hold real Portal
+  automation logic, so private was the default choice, not asked about;
+  flag if it should be public instead) and pushed.
+
+**Blockers / open items for Day 2+**
+- **Scope discrepancy, needs your confirmation before Day 3**: the spec
+  deck (slide 2) describes a Portal-side duplicate-Aadhaar check
+  ("shows existing record if found"), which contradicts the brief's
+  explicit "no verification round-trip" sync model. Built nothing
+  Portal-sync-related yet, so no rework has happened either way — but
+  Day 3's Sync Worker design depends on which model is correct.
+- **Not verified on an actual physical device.** No Android emulator or
+  iOS simulator is available in this environment (no Mac, no Android
+  Studio installed) — verification today was: backend endpoints via curl,
+  encryption via raw DB inspection, and the mobile bundle via Metro's own
+  bundler (996 modules, no errors), but nobody has tapped the actual
+  Login button on a real screen yet. See `mobile/README.md` for how to
+  run it on your own phone via Expo Go — that's the next real check.
+- Aadhaar OCR itself: not started (Day 2). No compliance review performed
+  by this assistant — see SPEC.md's note on why that's out of scope for
+  an engineering assistant to confirm, restated once, not repeatedly.

@@ -5,6 +5,20 @@ codebase. See root [SPEC.md](../SPEC.md) for why Expo — no Mac is
 available for this project, and Expo is the path to real iOS testing
 without one.
 
+## Expo SDK is pinned to 54, not latest — deliberately
+
+As of 2026-08-17, the Expo Go app you get from the Play Store/App Store is
+stuck on **SDK 54** — Apple hasn't approved Expo's newer Expo Go
+submissions in months, so the store build hasn't caught up. This project
+was briefly on SDK 57 (Day 1's default scaffold) and hit "project is
+incompatible with this version of Expo Go" as a result. Downgraded via
+`npx expo install expo@^54.0.0 && npx expo install --fix` on Day 2.
+
+**Don't casually bump this back to "latest"** — check whether the
+store-published Expo Go has actually caught up first (see
+[expo.dev/changelog](https://expo.dev/changelog) for Expo Go/App Store
+updates), or you'll hit this same error again.
+
 ## Running it on your own phone
 
 1. Install **Expo Go** from the Play Store (Android) or App Store (iOS).

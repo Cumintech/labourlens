@@ -92,3 +92,59 @@ explicitly not being built during this sprint.
 - Aadhaar OCR itself: not started (Day 2). No compliance review performed
   by this assistant — see SPEC.md's note on why that's out of scope for
   an engineering assistant to confirm, restated once, not repeatedly.
+
+### Day 2 — done except real-device verification (needs you)
+
+**Achieved**
+- Aadhaar OCR (`backend/ocr.py`): server-side, EasyOCR — see the file's
+  docstring for why server-side (not on-device: plain Expo Go can't load
+  native OCR modules without switching away from the simple "scan a QR
+  code" flow) and why EasyOCR over Tesseract (no package manager on this
+  dev machine, official Tesseract installer blocks non-browser
+  downloads). Extracts name/DOB/gender/Aadhaar number via regex over the
+  raw OCR text — genuinely imperfect on purpose, which is exactly why the
+  manual-correction UI exists.
+- `POST /workers/ocr`, `POST /workers` (encrypts PII via Day 1's crypto
+  layer, enforces the 50-per-owner limit), `GET /workers`, `GET
+  /workers/{id}` — all scoped to the authenticated owner.
+- Verified via `backend/verify_registration.py` (self-contained, no
+  external fixture file): real OCR extraction, PII confirmed encrypted at
+  rest via raw SQLite bytes (not just the ORM's own decrypt path), API
+  responses never leak the raw/encrypted Aadhaar number, a second owner
+  can neither list nor fetch Owner A's worker (multi-tenant scoping), and
+  the 50-worker limit rejects a 51st worker with 422. All pass.
+- Mobile: real camera-capture scan screen, a real manual-correction
+  screen (fields OCR missed are visibly flagged, not just silently
+  blank), and a real worker list wired to the backend (replacing Day 1's
+  placeholder — needed some way to see that Save actually persisted).
+  `tsc --noEmit` clean; Metro bundle forced and verified (1003 modules,
+  no errors).
+- Backend (bound to `0.0.0.0:8010`, not just `127.0.0.1`) and the Expo
+  dev server are both running now and confirmed reachable on this
+  machine's LAN IP (`192.168.1.6`) — ready for the real-device step
+  below.
+
+**Blocked — this needs you, not more of my building**
+- **Real-device verification could not be completed by me** — no
+  physical device access, same limitation as Day 1. Everything above was
+  verified at the API/OCR/bundler level, which is real verification, but
+  it is not the same thing as tapping through the actual scan → correct →
+  save flow on a phone. To do it: open Expo Go, connect to
+  `exp://192.168.1.6:8081` (manual URL entry, since the QR code doesn't
+  render in this non-interactive environment), log in, tap **+ New
+  Worker**, scan a real Aadhaar card (or any card-shaped document, to
+  check the flow mechanically) front and back, confirm the extracted
+  fields land in the correction screen with the "not found by scan"
+  flags showing correctly on whatever OCR missed, fix them, save, and
+  confirm the worker shows up in the list after.
+- If your phone and this PC are on different networks (phone on mobile
+  data, PC on a VPN, etc.) the connection will fail — both need to be on
+  the same Wi-Fi. If it still doesn't connect, Windows Firewall may be
+  blocking the inbound connection to port 8010/8081 from another device
+  on the network (unlike this machine reaching its own LAN IP, which
+  firewalls often allow regardless) — worth checking if the above steps
+  don't work.
+- OCR accuracy on a *real* card is genuinely unknown until that test
+  happens — the verification above proves the pipeline works, not that
+  it reads real Aadhaar cards well. Expect the manual-correction UI to
+  matter in practice, not just in theory.

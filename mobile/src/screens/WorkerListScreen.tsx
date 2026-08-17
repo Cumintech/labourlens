@@ -12,6 +12,7 @@ import {
 import { listWorkers, Worker } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { colors, radius, spacing } from "../theme";
 
 // Real list wired to the backend -- not a placeholder. Search and
 // Deactivate (per the mockups) are Day 4 scope; this proves Day 2's save
@@ -44,7 +45,7 @@ export default function WorkerListScreen({ navigation }: Props) {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} />
+        <ActivityIndicator style={{ marginTop: 40 }} color={colors.teal} />
       ) : workers.length === 0 ? (
         <Text style={styles.empty}>No workers registered yet.</Text>
       ) : (
@@ -57,7 +58,11 @@ export default function WorkerListScreen({ navigation }: Props) {
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.meta}>Aadhaar •••• •••• {item.aadhaar_last4}</Text>
               </View>
-              <Text style={styles.status}>{item.status}</Text>
+              <View style={[styles.badge, item.status === "active" ? styles.badgeActive : styles.badgeInactive]}>
+                <Text style={styles.badgeText}>
+                  {item.status === "active" ? "Active" : "Deactivated"}
+                </Text>
+              </View>
             </View>
           )}
         />
@@ -67,20 +72,30 @@ export default function WorkerListScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 16 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  count: { fontSize: 16, fontWeight: "700" },
-  addLink: { color: "#1a1a2e", fontWeight: "600" },
-  empty: { textAlign: "center", color: "#888", marginTop: 40 },
+  container: { flex: 1, backgroundColor: colors.white, padding: spacing.md },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  count: { fontSize: 16, fontWeight: "700", color: colors.navy },
+  addLink: { color: colors.teal, fontWeight: "700" },
+  empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    paddingVertical: spacing.sm + 4,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.fieldBg,
+    borderRadius: radius.sm,
+    marginBottom: spacing.xs,
   },
-  name: { fontSize: 15, fontWeight: "600" },
-  meta: { fontSize: 12, color: "#888", marginTop: 2 },
-  status: { fontSize: 12, color: "#2a9d5c", fontWeight: "600", textTransform: "capitalize" },
+  name: { fontSize: 15, fontWeight: "700", color: colors.navy },
+  meta: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  badge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeActive: { backgroundColor: colors.teal },
+  badgeInactive: { backgroundColor: colors.muted },
+  badgeText: { color: colors.white, fontSize: 11, fontWeight: "700" },
 });

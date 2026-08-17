@@ -9,6 +9,7 @@ import NewWorkerDetailsScreen from "../screens/NewWorkerDetailsScreen";
 import NewWorkerScanScreen from "../screens/NewWorkerScanScreen";
 import PlaceholderScreen from "../screens/PlaceholderScreen";
 import WorkerListScreen from "../screens/WorkerListScreen";
+import { colors } from "../theme";
 
 export type RootStackParamList = {
   Dashboard: undefined;
@@ -41,7 +42,14 @@ export default function RootNavigator() {
           has no functionality until Day 4 and would be a dead end with
           no way to reach the screens that actually exist. Revert once
           Dashboard is real. */}
-      <Stack.Navigator initialRouteName="WorkerList">
+      <Stack.Navigator
+        initialRouteName="WorkerList"
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.white },
+          headerTitleStyle: { color: colors.navy, fontWeight: "700" },
+          headerTintColor: colors.teal,
+        }}
+      >
         <Stack.Screen name="Dashboard" options={{ title: "Dashboard" }}>
           {() => <PlaceholderScreen title="Dashboard" day="Day 4" />}
         </Stack.Screen>

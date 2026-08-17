@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { colors, radius, spacing } from "../theme";
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -45,6 +46,7 @@ export default function LoginScreen() {
         onChangeText={setMobile}
         keyboardType="phone-pad"
         placeholder="9840XXXXXX"
+        placeholderTextColor={colors.muted}
         autoCapitalize="none"
       />
 
@@ -55,6 +57,7 @@ export default function LoginScreen() {
         onChangeText={setPassword}
         secureTextEntry
         placeholder="••••••••"
+        placeholderTextColor={colors.muted}
         autoCapitalize="none"
         autoCorrect={false}
       />
@@ -66,31 +69,43 @@ export default function LoginScreen() {
         onPress={handleLogin}
         disabled={submitting}
       >
-        {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Log In</Text>}
+        {submitting ? (
+          <ActivityIndicator color={colors.white} />
+        ) : (
+          <Text style={styles.buttonText}>Log In</Text>
+        )}
       </TouchableOpacity>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: "#fff" },
-  title: { fontSize: 28, fontWeight: "700", textAlign: "center", marginBottom: 40, letterSpacing: 1 },
-  label: { fontSize: 12, fontWeight: "600", color: "#666", marginBottom: 4, marginTop: 16 },
+  container: { flex: 1, justifyContent: "center", padding: spacing.lg, backgroundColor: colors.white },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 40,
+    letterSpacing: 1,
+    color: colors.teal,
+  },
+  label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.md },
   input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
+    borderWidth: 0,
+    backgroundColor: colors.fieldBg,
+    borderRadius: radius.sm,
     padding: 12,
     fontSize: 16,
+    color: colors.navy,
   },
-  error: { color: "#c0392b", marginTop: 16, textAlign: "center" },
+  error: { color: colors.danger, marginTop: spacing.md, textAlign: "center" },
   button: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 8,
+    backgroundColor: colors.teal,
+    borderRadius: radius.sm,
     padding: 16,
     alignItems: "center",
-    marginTop: 32,
+    marginTop: spacing.xl,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
 });

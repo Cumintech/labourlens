@@ -4,6 +4,7 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { colors, spacing } from "../theme";
 
 export default function PlaceholderScreen({ title, day }: { title: string; day: string }) {
   const { owner, logout } = useAuth();
@@ -21,10 +22,10 @@ export default function PlaceholderScreen({ title, day }: { title: string; day: 
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24, backgroundColor: "#fff" },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 8 },
-  note: { fontSize: 14, color: "#888", textAlign: "center", marginBottom: 24 },
-  owner: { fontSize: 13, color: "#444", marginBottom: 24 },
-  logoutButton: { padding: 12 },
-  logoutText: { color: "#c0392b", fontSize: 14, fontWeight: "600" },
+  container: { flex: 1, justifyContent: "center", alignItems: "center", padding: spacing.lg, backgroundColor: colors.white },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: spacing.sm, color: colors.navy },
+  note: { fontSize: 14, color: colors.muted, textAlign: "center", marginBottom: spacing.lg },
+  owner: { fontSize: 13, color: colors.navy, marginBottom: spacing.lg },
+  logoutButton: { padding: spacing.sm },
+  logoutText: { color: colors.danger, fontSize: 14, fontWeight: "700" },
 });

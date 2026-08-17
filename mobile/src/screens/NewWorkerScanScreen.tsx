@@ -14,6 +14,7 @@ import {
 import { ApiError, scanAadhaar } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "NewWorkerScan">;
 
@@ -87,35 +88,39 @@ export default function NewWorkerScanScreen({ navigation }: Props) {
         onPress={handleScanNow}
         disabled={scanning || !frontUri}
       >
-        {scanning ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Scan Now</Text>}
+        {scanning ? (
+          <ActivityIndicator color={colors.white} />
+        ) : (
+          <Text style={styles.buttonText}>Scan Now</Text>
+        )}
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, backgroundColor: "#fff", flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 24 },
+  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: spacing.lg, color: colors.navy },
   scanBox: {
     height: 160,
-    borderWidth: 2,
-    borderColor: "#ccc",
-    borderStyle: "dashed",
-    borderRadius: 12,
-    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: colors.teal,
+    backgroundColor: colors.tealLight,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  scanBoxLabel: { fontSize: 16, color: "#888", fontWeight: "600" },
+  scanBoxLabel: { fontSize: 16, color: colors.teal, fontWeight: "700" },
   preview: { width: "100%", height: "100%" },
-  hint: { fontSize: 13, color: "#888", marginBottom: 24, textAlign: "center" },
+  hint: { fontSize: 13, color: colors.muted, marginBottom: spacing.lg, textAlign: "center" },
   button: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 8,
+    backgroundColor: colors.teal,
+    borderRadius: radius.sm,
     padding: 16,
     alignItems: "center",
   },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
 });

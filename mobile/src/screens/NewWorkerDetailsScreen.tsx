@@ -13,6 +13,7 @@ import {
 import { ApiError, createWorker } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "NewWorkerDetails">;
 
@@ -70,6 +71,7 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
       <Text style={styles.title}>Worker Details</Text>
       <Text style={styles.subtitle}>Review what was scanned and fix anything that's wrong.</Text>
 
+      <Text style={styles.sectionLabelTeal}>From Aadhaar</Text>
       <Field label="Name" value={name} onChangeText={setName} needsReview={ocrMissed.name} />
       <Field
         label="Date of birth (YYYY-MM-DD)"
@@ -87,12 +89,16 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
         keyboardType="number-pad"
       />
 
-      <Text style={styles.sectionLabel}>Owner adds</Text>
+      <Text style={styles.sectionLabelAmber}>Owner adds</Text>
       <Field label="Mobile" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
       <Field label="Current address" value={currentAddress} onChangeText={setCurrentAddress} />
 
       <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save Worker</Text>}
+        {saving ? (
+          <ActivityIndicator color={colors.white} />
+        ) : (
+          <Text style={styles.buttonText}>Save Worker</Text>
+        )}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -131,27 +137,43 @@ function Field({
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, backgroundColor: "#fff", flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 4 },
-  subtitle: { fontSize: 13, color: "#888", marginBottom: 24 },
-  sectionLabel: { fontSize: 12, fontWeight: "700", color: "#666", marginTop: 8, marginBottom: 8 },
-  fieldWrap: { marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: "600", color: "#666", marginBottom: 4 },
+  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
+  subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.lg },
+  sectionLabelTeal: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.teal,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    textTransform: "uppercase",
+  },
+  sectionLabelAmber: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.amber,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    textTransform: "uppercase",
+  },
+  fieldWrap: { marginBottom: spacing.md },
+  label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
   input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
+    borderWidth: 0,
+    backgroundColor: colors.fieldBg,
+    borderRadius: radius.sm,
     padding: 12,
     fontSize: 16,
+    color: colors.navy,
   },
-  inputNeedsReview: { borderColor: "#e0a030", backgroundColor: "#fff8ec" },
+  inputNeedsReview: { borderWidth: 1.5, borderColor: colors.amber, backgroundColor: "#FFF8EC" },
   button: {
-    backgroundColor: "#1a1a2e",
-    borderRadius: 8,
+    backgroundColor: colors.teal,
+    borderRadius: radius.sm,
     padding: 16,
     alignItems: "center",
-    marginTop: 16,
+    marginTop: spacing.md,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
 });

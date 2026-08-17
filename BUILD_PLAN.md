@@ -80,6 +80,25 @@ the synthetic test image):
 - Final review: encryption on all PII fields, audit log on every
   activate/deactivate
 
+## Day 6 — App store publishing (added 2026-08-17)
+
+Separate phase from the 5-day build sprint — Expo Go (used for all real-device
+testing through Day 5) is dev-testing only, not a distributable app. Nothing
+here starts until Day 5's functionality and real-Portal cutover are stable;
+no point submitting for review while the feature set is still moving.
+
+- **Developer accounts (user action, not something I can do)**: Google Play
+  Developer ($25 one-time), Apple Developer Program ($99/year). Needs to
+  happen before anything else in this list.
+- **Standalone builds via EAS Build** (Expo's cloud build service — no local
+  Xcode/Android Studio needed): signed `.aab` for Android, `.ipa` for iOS.
+- **Store listing assets**: app icon, screenshots, description, and a
+  **privacy policy** — mandatory given Aadhaar/PII handling, both stores
+  reject submission without one.
+- **Submit for review**: Google Play typically same-day to ~1 day; Apple
+  typically 1-3 days, possibly longer with back-and-forth given the app's
+  government-ID-adjacent OCR functionality.
+
 ## Daily status log
 
 ### Day 1 — done

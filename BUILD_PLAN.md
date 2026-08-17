@@ -29,7 +29,32 @@ explicitly not being built during this sprint.
   real, plus every Day 2 screen (scan, manual-correction, save) on an
   actual device.
 
-## Day 3 — Portal Sync Worker
+## Day 3 — Portal Sync Worker + OCR refinements from real-device testing
+
+**OCR/registration fixes** (added 2026-08-17, from real-card test results
+— name/DOB/Aadhaar/address all tested against an actual card, not just
+the synthetic test image):
+- **Address**: add OCR extraction — was previously owner-entered only
+  (matching the original mockup's "Owner adds" column), but confirmed
+  real-card testing shows this should now be pulled from the scan too.
+  Back-of-card text is denser and multi-line, so this needs its own
+  parsing logic, not a copy of the name/DOB/Aadhaar regexes.
+- **Name**: real-card test showed the wrong line getting picked — likely
+  a regional-language line, since Aadhaar cards print the name in both
+  English and a regional script and the current heuristic doesn't
+  distinguish between them at all. Fix: filter candidate name lines to
+  ones that are predominantly Latin-script (English), not just "first
+  non-boilerplate line with enough letters."
+- **Gender**: extraction already exists (`GENDER_KEYWORDS` in
+  `backend/ocr.py`) but wasn't confirmed working on the real card the
+  same test covered — verify it's actually firing reliably, harden if
+  not (same class of issue as name: real-card OCR noise the synthetic
+  test image never exercised).
+- Re-run `backend/verify_registration.py` after these changes, and
+  re-test on the real device — synthetic-image tests alone already
+  proved insufficient once, don't repeat that mistake for these fixes.
+
+**Portal Sync Worker** (original Day 3 scope):
 - Sync worker: create on registration, remove/update on deactivation
   (login-based automation against the Test Portal)
 - Queue + retry; per-worker Synced/Pending/Failed status, app state never
@@ -93,7 +118,7 @@ explicitly not being built during this sprint.
   by this assistant — see SPEC.md's note on why that's out of scope for
   an engineering assistant to confirm, restated once, not repeatedly.
 
-### Day 2 — done except real-device verification (needs you)
+### Day 2 — done, including real-device verification
 
 **Achieved**
 - Aadhaar OCR (`backend/ocr.py`): server-side, EasyOCR — see the file's
@@ -124,27 +149,22 @@ explicitly not being built during this sprint.
   machine's LAN IP (`192.168.1.6`) — ready for the real-device step
   below.
 
-**Blocked — this needs you, not more of my building**
-- **Real-device verification could not be completed by me** — no
-  physical device access, same limitation as Day 1. Everything above was
-  verified at the API/OCR/bundler level, which is real verification, but
-  it is not the same thing as tapping through the actual scan → correct →
-  save flow on a phone. To do it: open Expo Go, connect to
-  `exp://192.168.1.6:8081` (manual URL entry, since the QR code doesn't
-  render in this non-interactive environment), log in, tap **+ New
-  Worker**, scan a real Aadhaar card (or any card-shaped document, to
-  check the flow mechanically) front and back, confirm the extracted
-  fields land in the correction screen with the "not found by scan"
-  flags showing correctly on whatever OCR missed, fix them, save, and
-  confirm the worker shows up in the list after.
-- If your phone and this PC are on different networks (phone on mobile
-  data, PC on a VPN, etc.) the connection will fail — both need to be on
-  the same Wi-Fi. If it still doesn't connect, Windows Firewall may be
-  blocking the inbound connection to port 8010/8081 from another device
-  on the network (unlike this machine reaching its own LAN IP, which
-  firewalls often allow regardless) — worth checking if the above steps
-  don't work.
-- OCR accuracy on a *real* card is genuinely unknown until that test
-  happens — the verification above proves the pipeline works, not that
-  it reads real Aadhaar cards well. Expect the manual-correction UI to
-  matter in practice, not just in theory.
+**Real-device verification — done, by the user (I have no physical
+device access)**
+- Two real bugs found and fixed only because this actually happened on a
+  phone, not just in my own verification: SDK 57 vs. the store's SDK
+  54-pinned Expo Go ("project is incompatible with this version of Expo
+  Go"), and the login password field auto-capitalizing its first
+  character (`autoCapitalize="none"` was missing) — silently turning
+  "ganesh" into "Ganesh" before it was ever sent. Confirmed via the
+  backend's own access log that requests were reaching the server fine
+  and getting genuine 401s, which is what pointed at something mangling
+  the password client-side rather than a connectivity problem.
+- **Real Aadhaar card scan results**: DOB and Aadhaar number extracted
+  correctly — confirms the regex-based extraction genuinely works on a
+  real card, not just the synthetic test image. Name extraction picked
+  the wrong line (see Day 3's OCR refinements above — likely grabbed a
+  regional-language line instead of the English one). Address wasn't
+  extracted, which is correct as-built — the original mockup only ever
+  scoped Name/DOB/Aadhaar to OCR, with address under "Owner adds" — now
+  being expanded into OCR scope per the user's Day 3 addition above.

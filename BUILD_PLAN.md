@@ -168,3 +168,62 @@ device access)**
   extracted, which is correct as-built — the original mockup only ever
   scoped Name/DOB/Aadhaar to OCR, with address under "Owner adds" — now
   being expanded into OCR scope per the user's Day 3 addition above.
+
+### Day 3 — done
+
+**Achieved**
+- **Real mockup colors applied app-wide.** The deck's earlier text-only
+  extraction never captured shape fill/font colors — pulled them properly
+  this time via python-pptx's color APIs (navy #1B2340, teal #1F9D82,
+  amber #E2A63D, danger #D9534F, plus the light background tints) and
+  applied them to every screen and the navigation header. `mobile/src/theme.ts`
+  is the single source of these values now.
+- **OCR refinements from real-card testing**: found and fixed a real bug
+  (gender matching checked "MALE" before "FEMALE" via substring `in`
+  checks — "MALE" is literally a substring of "FEMALE", so a female
+  card's OCR text would have incorrectly matched "Male" first; fixed with
+  word-boundary regex). Name extraction now filters to predominantly-
+  Latin-script lines, preferring the English line over a regional-script
+  one. Address extraction added (new capability, not a fix — it never
+  existed before, matching last week's mockup's original "owner adds"
+  scoping). All three verified via `backend/verify_ocr_refinements.py`,
+  plus a full re-run of `verify_registration.py` to confirm nothing
+  broke.
+- **Portal Sync Worker**, real Playwright browser automation against the
+  real Test Portal (not mocks): login, create-worker, deactivate-worker.
+  One browser session per owner, not per worker. Matching key for
+  deactivation is the **full Aadhaar number** (confirmed by the user —
+  not name, which risks duplicates/instability, and not an external-
+  reference field, which only works if the real Portal has an equivalent
+  one, unknown). Portal credentials stored per-owner (confirmed: each
+  factory owner has their own separate Portal login), encrypted the same
+  way as Worker PII.
+- Verified via `backend/verify_sync_worker.py` against the actually-
+  running Test Portal: registration → pending sync_status → real
+  automated Portal creation → confirmed present via the Portal's own
+  search endpoint (a separate authenticated session, not just trusting
+  our own database) → deactivation → confirmed inactive on the Portal
+  side too. Also tested a genuine failure path (wrong Portal password)
+  end to end — confirmed it fails loudly with a real recorded error, not
+  silently.
+- Manual `/sync/run` trigger added so testing doesn't wait for a real
+  daily schedule — production cadence (once-daily, confirmed earlier) is
+  still not wired to an actual scheduler; that's a real gap, not
+  forgotten, see below.
+
+**Not done / open**
+- **No actual daily scheduler exists yet.** `/sync/run` is manual-trigger
+  only. Where this runs in production (in-process vs. separate service)
+  was explicitly left open in an earlier conversation — still open, and
+  now slightly more concrete since the code exists to hang a scheduler
+  off of, but nothing schedules it automatically yet.
+- **Real-device verification of the Day 3 changes (theme colors, OCR
+  fixes) has not happened yet** — the user said they'd check on their
+  phone later. Everything above was verified at the API/browser-
+  automation level, which is real, but not the same as confirming it
+  looks and works right on an actual device — same caveat as every prior
+  day whenever this gap exists.
+- Whether the *real* Portal has a searchable-by-Aadhaar interface (the
+  thing `/workers/search` on the Test Portal stands in for) is still
+  unconfirmed — same category of open question as Day 5's eventual
+  cutover risk list.

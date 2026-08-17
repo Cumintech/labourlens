@@ -1,29 +1,39 @@
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import date as date_, datetime, timezone
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
 import ocr
+import reports
 import sync_worker
 from auth import create_token, get_current_owner, hash_password, verify_password
 from crypto import mask_aadhaar
 from database import Base, engine, get_db
+from email_service import send_report_email
 from schemas import (
+    AttendanceMarkIn,
+    AttendanceOut,
+    DashboardOut,
     HealthOut,
     OcrFieldsOut,
     OwnerLoginIn,
     OwnerOut,
     OwnerSignupIn,
     PortalCredentialIn,
+    ReportEmailIn,
+    SlotSummary,
     SyncStatusOut,
     TokenOut,
     WorkerCreateIn,
     WorkerOut,
 )
+
+ATTENDANCE_SLOTS = ("AM", "PM", "Evening")
+ATTENDANCE_STATUSES = ("present", "absent")
 
 MAX_WORKERS_PER_OWNER = 50
 
@@ -253,6 +263,155 @@ def list_sync_status(
     )
 
 
-# Day 4: /attendance, /dashboard, /reports
-# Routes intentionally not stubbed here -- an empty/fake endpoint would
-# claim functionality that doesn't exist yet.
+@app.post("/attendance", response_model=AttendanceOut)
+def mark_attendance(
+    body: AttendanceMarkIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    if body.slot not in ATTENDANCE_SLOTS:
+        raise HTTPException(status_code=422, detail=f"slot must be one of {ATTENDANCE_SLOTS}")
+    if body.status not in ATTENDANCE_STATUSES:
+        raise HTTPException(status_code=422, detail=f"status must be one of {ATTENDANCE_STATUSES}")
+
+    worker = (
+        db.query(models.Worker)
+        .filter(models.Worker.id == body.worker_id, models.Worker.owner_id == owner.id)
+        .first()
+    )
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    # Upsert on (worker_id, date, slot) -- re-marking the same slot updates
+    # it rather than creating a duplicate row (matches the DB's own unique
+    # constraint, so this also avoids ever hitting that constraint error).
+    record = (
+        db.query(models.Attendance)
+        .filter(
+            models.Attendance.worker_id == body.worker_id,
+            models.Attendance.date == body.date,
+            models.Attendance.slot == body.slot,
+        )
+        .first()
+    )
+    if record:
+        record.status = body.status
+        record.marked_by = owner.id
+        record.marked_at = datetime.now(timezone.utc)
+    else:
+        record = models.Attendance(
+            worker_id=body.worker_id,
+            date=body.date,
+            slot=body.slot,
+            status=body.status,
+            marked_by=owner.id,
+        )
+        db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@app.get("/attendance", response_model=list[AttendanceOut])
+def list_attendance(
+    date: date_ = Query(default_factory=date_.today),
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(models.Attendance)
+        .join(models.Worker, models.Worker.id == models.Attendance.worker_id)
+        .filter(models.Worker.owner_id == owner.id, models.Attendance.date == date)
+        .all()
+    )
+
+
+@app.get("/dashboard", response_model=DashboardOut)
+def get_dashboard(
+    date: date_ = Query(default_factory=date_.today),
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    active_workers = (
+        db.query(models.Worker)
+        .filter(models.Worker.owner_id == owner.id, models.Worker.status == "active")
+        .all()
+    )
+    total = len(active_workers)
+    active_ids = {w.id for w in active_workers}
+
+    records = (
+        db.query(models.Attendance)
+        .join(models.Worker, models.Worker.id == models.Attendance.worker_id)
+        .filter(models.Worker.owner_id == owner.id, models.Attendance.date == date)
+        .all()
+    )
+
+    # "Present today" = marked present in at least one slot -- a worker
+    # present only in the AM slot still counts, not just all-slots-present.
+    present_worker_ids = {
+        r.worker_id for r in records if r.status == "present" and r.worker_id in active_ids
+    }
+
+    slots = []
+    for slot in ATTENDANCE_SLOTS:
+        slot_present = sum(
+            1 for r in records if r.slot == slot and r.status == "present" and r.worker_id in active_ids
+        )
+        slots.append(SlotSummary(slot=slot, present=slot_present, total=total))
+
+    return DashboardOut(
+        date=date,
+        total_workers=total,
+        present_today=len(present_worker_ids),
+        slots=slots,
+    )
+
+
+@app.get("/reports/attendance")
+def download_report(
+    start_date: date_,
+    end_date: date_,
+    format: str = "excel",
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    if format not in ("excel", "pdf"):
+        raise HTTPException(status_code=422, detail="format must be 'excel' or 'pdf'")
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
+
+    content, media_type, filename = reports.build_report(db, owner, start_date, end_date, format)
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/reports/attendance/email", status_code=202)
+def email_report(
+    body: ReportEmailIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    if body.format not in ("excel", "pdf"):
+        raise HTTPException(status_code=422, detail="format must be 'excel' or 'pdf'")
+    if body.end_date < body.start_date:
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
+
+    content, _media_type, filename = reports.build_report(
+        db, owner, body.start_date, body.end_date, body.format
+    )
+    send_report_email(
+        to_email=body.recipient_email,
+        subject=f"{owner.factory_name} attendance report ({body.start_date} to {body.end_date})",
+        body_text=(
+            f"Attached: attendance report for {owner.factory_name}, "
+            f"{body.start_date} to {body.end_date}."
+        ),
+        attachment_bytes=content,
+        attachment_filename=filename,
+        format=body.format,
+    )
+    return {"status": "email sent"}

@@ -83,3 +83,39 @@ class SyncStatusOut(BaseModel):
     attempts: int
     last_attempted_at: datetime | None
     last_error: str | None
+
+
+class AttendanceMarkIn(BaseModel):
+    worker_id: int
+    date: date
+    slot: str  # "AM" | "PM" | "Evening"
+    status: str  # "present" | "absent"
+
+
+class AttendanceOut(BaseModel):
+    id: int
+    worker_id: int
+    date: date
+    slot: str
+    status: str
+    marked_at: datetime
+
+
+class SlotSummary(BaseModel):
+    slot: str
+    present: int
+    total: int
+
+
+class DashboardOut(BaseModel):
+    date: date
+    total_workers: int
+    present_today: int  # active workers marked present in at least one slot
+    slots: list[SlotSummary]
+
+
+class ReportEmailIn(BaseModel):
+    start_date: date
+    end_date: date
+    recipient_email: str
+    format: str  # "pdf" | "excel"

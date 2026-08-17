@@ -1,0 +1,5 @@
+# Test-only dependencies -- not needed to run the app, only to run
+# verify_reports.py, which spins up a real local SMTP server to confirm
+# email delivery actually works end-to-end (not mocked).
+-r requirements.txt
+aiosmtpd==1.4.6

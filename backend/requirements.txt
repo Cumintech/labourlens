@@ -20,3 +20,8 @@ easyocr==1.7.2
 # chromium` also needs to run once wherever this deploys (not just pip
 # install -- that only gets the Python bindings, not the browser binary).
 playwright==1.62.0
+
+# Day 4 reports (see reports.py) -- both pure-Python/pip-installable, no
+# system binary (same reasoning as EasyOCR over Tesseract elsewhere).
+openpyxl==3.1.5
+reportlab==4.2.5

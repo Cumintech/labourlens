@@ -246,3 +246,72 @@ device access)**
   thing `/workers/search` on the Test Portal stands in for) is still
   unconfirmed — same category of open question as Day 5's eventual
   cutover risk list.
+
+### Day 4 — done
+
+**Achieved**
+- **Dashboard mockup shown and approved before building** — matched to
+  `theme.ts`'s real mockup colors, combining the summary stat, per-slot
+  breakdown, search, per-worker attendance chips, and deactivate action
+  onto one screen (the approved design folded Worker List's old
+  functionality into Dashboard entirely, rather than keeping them
+  separate — see below).
+- **Backend**: `POST /attendance` (upsert by worker+date+slot, so
+  re-marking a slot updates in place instead of duplicating — the table's
+  own unique constraint from Day 1 backs this), `GET /attendance?date=`,
+  `GET /dashboard?date=` (present-today = present in at least one slot;
+  deactivated workers excluded from totals — confirmed via
+  `verify_attendance_dashboard.py`, including the cross-owner-scoping and
+  invalid-slot/status rejection cases).
+- **Reports** (`reports.py`): real Excel (openpyxl) and PDF (reportlab)
+  generation from attendance rows over a date range — both pure-Python,
+  pip-installable, no system binary (same reasoning as EasyOCR over
+  Tesseract). `GET /reports/attendance?start_date=&end_date=&format=`
+  for direct download.
+- **Report email delivery** (`email_service.py`): `POST
+  /reports/attendance/email` sends the generated file as a real SMTP
+  attachment. No real mail provider account exists yet, so this is
+  pointed at a local dev SMTP relay (`SMTP_HOST=127.0.0.1:1025` in
+  `.env`) for now — swapping in real SMTP credentials before Day 5/6 is
+  a config change only, same code path.
+- **Verified for real, not mocked**: `verify_attendance_dashboard.py`
+  (TestClient against the real backend/DB) and `verify_reports.py`,
+  which downloads the Excel/PDF and parses them back with openpyxl /
+  checks real PDF magic bytes (not just a 200 status), and spins up a
+  **real local SMTP server** (`aiosmtpd`) to receive an actual SMTP
+  session and confirm the attachment byte-for-byte, plus a genuine
+  failure path (unreachable SMTP server surfaces as a real error, not a
+  silent success). `verify_registration.py` re-run to confirm no
+  regressions from the `main.py` changes.
+- **Mobile**: real `DashboardScreen.tsx` replacing the Day 1 placeholder
+  — summary stat card, AM/PM/Evening breakdown, live search, tap-to-
+  toggle attendance chips per worker per slot, and a real Deactivate
+  action wired to Day 3's endpoint (with a confirmation prompt). New
+  `ReportScreen.tsx` — date range, Excel/PDF format toggle, recipient
+  email, "Send report" calling the real email endpoint.
+- **Scope decision, flagged not asked**: `WorkerListScreen.tsx` and the
+  `PlaceholderScreen.tsx` it and the old Dashboard stub used are deleted,
+  not left as dead code — Dashboard now fully replaces Worker List's old
+  functionality (list, status, and the "+ New Worker" link) plus
+  everything new today, so keeping both would have meant two screens
+  showing the same worker list. `Dashboard` is the app's entry point now.
+- **Scope decision, flagged not asked**: report dates are typed as plain
+  `YYYY-MM-DD` text fields, not a native date-picker component.
+  `@react-native-community/datetimepicker` isn't installed, and adding a
+  new native module this late without a real-device round to catch
+  issues felt like the wrong tradeoff — revisit if typing dates proves
+  too fiddly on a phone.
+- `tsc --noEmit` clean. Backend restarted on `0.0.0.0:8010` with all of
+  today's code active; confirmed healthy and your account still works.
+
+**Not done / open**
+- **Real-device verification of today's work has not happened yet** —
+  same caveat as every prior day. Attendance marking, the dashboard
+  numbers, search, deactivate, and the report screen are all new
+  end-to-end and none of it has been tapped on an actual phone yet.
+- **Report email delivery is only proven against a local dev SMTP
+  relay**, not a real mail provider — no SMTP account exists yet. Real
+  delivery to an actual inbox needs real SMTP credentials before this is
+  genuinely usable, not just architecturally correct.
+- Day 3's still-open items (no daily sync scheduler, real Portal
+  Aadhaar-search capability unconfirmed) remain open — untouched today.

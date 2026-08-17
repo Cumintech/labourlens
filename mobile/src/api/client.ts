@@ -146,4 +146,79 @@ export function listWorkers(token: string): Promise<Worker[]> {
   });
 }
 
+export function deactivateWorker(token: string, workerId: number): Promise<Worker> {
+  return request<Worker>(`/workers/${workerId}/deactivate`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type AttendanceSlot = "AM" | "PM" | "Evening";
+export type AttendanceStatus = "present" | "absent";
+
+export type Attendance = {
+  id: number;
+  worker_id: number;
+  date: string;
+  slot: AttendanceSlot;
+  status: AttendanceStatus;
+  marked_at: string;
+};
+
+export function markAttendance(
+  token: string,
+  workerId: number,
+  date: string,
+  slot: AttendanceSlot,
+  status: AttendanceStatus,
+): Promise<Attendance> {
+  return request<Attendance>("/attendance", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ worker_id: workerId, date, slot, status }),
+  });
+}
+
+export function listAttendance(token: string, date: string): Promise<Attendance[]> {
+  return request<Attendance[]>(`/attendance?date=${date}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type SlotSummary = { slot: AttendanceSlot; present: number; total: number };
+
+export type DashboardSummary = {
+  date: string;
+  total_workers: number;
+  present_today: number;
+  slots: SlotSummary[];
+};
+
+export function getDashboard(token: string, date: string): Promise<DashboardSummary> {
+  return request<DashboardSummary>(`/dashboard?date=${date}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type ReportFormat = "excel" | "pdf";
+
+export function emailReport(
+  token: string,
+  startDate: string,
+  endDate: string,
+  recipientEmail: string,
+  format: ReportFormat,
+): Promise<{ status: string }> {
+  return request<{ status: string }>("/reports/attendance/email", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      start_date: startDate,
+      end_date: endDate,
+      recipient_email: recipientEmail,
+      format,
+    }),
+  });
+}
+
 export { ApiError };

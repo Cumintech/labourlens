@@ -28,8 +28,8 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
   const [dob, setDob] = useState(ocrFields.dob ?? "");
   const [gender, setGender] = useState(ocrFields.gender ?? "");
   const [aadhaarNumber, setAadhaarNumber] = useState(ocrFields.aadhaar_number ?? "");
+  const [currentAddress, setCurrentAddress] = useState(ocrFields.current_address ?? "");
   const [mobile, setMobile] = useState("");
-  const [currentAddress, setCurrentAddress] = useState("");
   const [saving, setSaving] = useState(false);
 
   const ocrMissed = {
@@ -37,6 +37,7 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
     dob: !ocrFields.dob,
     gender: !ocrFields.gender,
     aadhaar_number: !ocrFields.aadhaar_number,
+    current_address: !ocrFields.current_address,
   };
 
   async function handleSave() {
@@ -88,10 +89,15 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
         needsReview={ocrMissed.aadhaar_number}
         keyboardType="number-pad"
       />
+      <Field
+        label="Current address"
+        value={currentAddress}
+        onChangeText={setCurrentAddress}
+        needsReview={ocrMissed.current_address}
+      />
 
       <Text style={styles.sectionLabelAmber}>Owner adds</Text>
       <Field label="Mobile" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
-      <Field label="Current address" value={currentAddress} onChangeText={setCurrentAddress} />
 
       <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
         {saving ? (

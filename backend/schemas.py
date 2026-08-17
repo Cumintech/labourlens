@@ -40,6 +40,7 @@ class OcrFieldsOut(BaseModel):
     dob: date | None = None
     gender: str | None = None
     aadhaar_number: str | None = None
+    current_address: str | None = None
 
 
 class WorkerCreateIn(BaseModel):

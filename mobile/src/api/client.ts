@@ -72,6 +72,7 @@ export type OcrFields = {
   dob: string | null; // YYYY-MM-DD
   gender: string | null;
   aadhaar_number: string | null;
+  current_address: string | null;
 };
 
 export type Worker = {

@@ -68,3 +68,18 @@ class WorkerOut(BaseModel):
     aadhaar_last4: str  # never the full number -- see models.py
     status: str
     created_at: datetime
+
+
+class PortalCredentialIn(BaseModel):
+    portal_username: str
+    portal_password: str
+
+
+class SyncStatusOut(BaseModel):
+    id: int
+    worker_id: int
+    action: str
+    state: str
+    attempts: int
+    last_attempted_at: datetime | None
+    last_error: str | None

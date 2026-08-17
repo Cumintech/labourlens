@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 import models
 import ocr
+import sync_worker
 from auth import create_token, get_current_owner, hash_password, verify_password
 from crypto import mask_aadhaar
 from database import Base, engine, get_db
@@ -17,6 +18,8 @@ from schemas import (
     OwnerLoginIn,
     OwnerOut,
     OwnerSignupIn,
+    PortalCredentialIn,
+    SyncStatusOut,
     TokenOut,
     WorkerCreateIn,
     WorkerOut,
@@ -131,6 +134,12 @@ def create_worker(
     db.add(worker)
     db.commit()
     db.refresh(worker)
+
+    # Written immediately, but nothing acts on it until the Sync Worker
+    # runs -- registration is never blocked on Portal success.
+    db.add(models.SyncStatus(worker_id=worker.id, action="create", state="pending"))
+    db.commit()
+
     return worker
 
 
@@ -165,7 +174,85 @@ def get_worker(
     return worker
 
 
-# Day 3: /workers/{id}/sync (manual retry), Sync Worker background job
-# Day 4: /attendance, /dashboard, /reports, /workers/{id}/deactivate
+@app.patch("/workers/{worker_id}/deactivate", response_model=WorkerOut)
+def deactivate_worker(
+    worker_id: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    # Minimal backend-only deactivate today -- no mobile UI for this yet
+    # (that's Day 4's Worker List work), but Day 3's Sync Worker needs a
+    # real deactivate path to actually test the full create+deactivate
+    # sync lifecycle, not just the create half.
+    worker = (
+        db.query(models.Worker)
+        .filter(models.Worker.id == worker_id, models.Worker.owner_id == owner.id)
+        .first()
+    )
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    worker.status = "deactivated"
+    worker.deactivated_at = datetime.now(timezone.utc)
+    db.add(models.AuditLog(owner_id=owner.id, worker_id=worker.id, action="deactivate"))
+    db.add(models.SyncStatus(worker_id=worker.id, action="deactivate", state="pending"))
+    db.commit()
+    db.refresh(worker)
+    return worker
+
+
+@app.post("/portal-credentials", status_code=204)
+def set_portal_credentials(
+    body: PortalCredentialIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    existing = (
+        db.query(models.PortalCredential)
+        .filter(models.PortalCredential.owner_id == owner.id)
+        .first()
+    )
+    if existing:
+        existing.portal_username = body.portal_username
+        existing.portal_password = body.portal_password
+    else:
+        db.add(
+            models.PortalCredential(
+                owner_id=owner.id,
+                portal_username=body.portal_username,
+                portal_password=body.portal_password,
+            )
+        )
+    db.commit()
+
+
+@app.post("/sync/run", status_code=202)
+def run_sync(
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Manual trigger -- Day 3 testing shouldn't have to wait for a real
+    daily schedule. Scoped to the authenticated owner only, matching the
+    multi-tenant boundary everywhere else -- no owner can trigger sync
+    for any other owner's workers."""
+    sync_worker.reconcile_today(db, owner.id)
+    return {"status": "sync run complete"}
+
+
+@app.get("/sync-status", response_model=list[SyncStatusOut])
+def list_sync_status(
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(models.SyncStatus)
+        .join(models.Worker, models.Worker.id == models.SyncStatus.worker_id)
+        .filter(models.Worker.owner_id == owner.id)
+        .order_by(models.SyncStatus.id.desc())
+        .all()
+    )
+
+
+# Day 4: /attendance, /dashboard, /reports
 # Routes intentionally not stubbed here -- an empty/fake endpoint would
 # claim functionality that doesn't exist yet.

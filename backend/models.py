@@ -86,6 +86,24 @@ class SyncStatus(Base):
     last_error: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class PortalCredential(Base):
+    """One row per owner -- confirmed each factory owner has their own
+    separate login on the real Portal, not one shared account. Password
+    encrypted the same way as Worker PII (EncryptedString); username
+    encrypted too for consistency even though it's less sensitive on its
+    own, since it's meaningless without the password anyway."""
+
+    __tablename__ = "portal_credentials"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False, unique=True)
+    portal_username: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    portal_password: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class AuditLog(Base):
     """Append-only. Every activate/deactivate action."""
 

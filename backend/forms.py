@@ -21,10 +21,10 @@ from datetime import date, timedelta
 
 from openpyxl import Workbook
 from reportlab.lib import colors as pdf_colors
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A3, A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 
 import models
@@ -355,6 +355,67 @@ def _style_table(table: Table) -> None:
     )
 
 
+# Landscape A3 -- an actual standard, printable paper size (unlike the
+# 50-85cm custom pages these registers used before, which no printer can
+# handle: the print driver either clips columns past its real paper
+# width or shrinks the whole page down until it's illegible). 38cm is
+# the safe usable width inside 1cm margins with a little headroom for
+# cell padding/borders.
+REGISTER_PAGESIZE = landscape(A3)
+REGISTER_PAGE_BUDGET_CM = 38.0
+
+
+def _paginated_register_elements(
+    header: list[str],
+    rows: list[list[str]],
+    col_widths_cm: list[float],
+    fixed_count: int,
+    page_budget_cm: float = REGISTER_PAGE_BUDGET_CM,
+) -> list:
+    """Splits a register with more columns than fit on one printable
+    page into column groups -- the same way the real paper registers
+    are split across a fold or facing pages, not something invented
+    here. The first `fixed_count` columns (serial number, name, ...)
+    repeat in every group so a printed page is self-identifying on its
+    own, and each group after the first starts on a new page."""
+    fixed_widths_cm = col_widths_cm[:fixed_count]
+    fixed_sum_cm = sum(fixed_widths_cm)
+    groups: list[list[int]] = []
+    current: list[int] = []
+    current_sum_cm = fixed_sum_cm
+    for i in range(fixed_count, len(col_widths_cm)):
+        w = col_widths_cm[i]
+        if current and current_sum_cm + w > page_budget_cm:
+            groups.append(current)
+            current = []
+            current_sum_cm = fixed_sum_cm
+        current.append(i)
+        current_sum_cm += w
+    if current:
+        groups.append(current)
+    if not groups:
+        groups = [[]]
+
+    elements: list = []
+    for group_index, group in enumerate(groups):
+        indices = list(range(fixed_count)) + group
+        group_header = [header[i] for i in indices]
+        group_widths = [col_widths_cm[i] * cm for i in indices]
+        group_rows = [[row[i] for i in indices] for row in rows]
+        table_data = [group_header] + group_rows
+        wrapped_data = [_wrap_row(table_data[0], header=True)] + [_wrap_row(r) for r in table_data[1:]]
+        table = Table(wrapped_data, colWidths=group_widths, repeatRows=1)
+        _style_table(table)
+        if group_index > 0:
+            elements.append(PageBreak())
+            elements.append(
+                Paragraph(f"(continued -- column group {group_index + 1} of {len(groups)})", getSampleStyleSheet()["Normal"])
+            )
+            elements.append(Spacer(1, 0.2 * cm))
+        elements.append(table)
+    return elements
+
+
 # --------------------------------------------------------------------------
 # Form 25 -- Muster Roll and Register (factory-wide, monthly)
 # --------------------------------------------------------------------------
@@ -455,28 +516,23 @@ def build_form25(db: Session, owner: models.Owner, month: int, year: int, format
             f"form25_{year}_{month:02d}.xlsx",
         )
 
-    # Explicit column widths -- without them reportlab auto-splits the
-    # page width evenly across all ~45 columns, so even "Name of the
-    # Worker" ends up a couple of centimetres wide and every word wraps
-    # onto its own line. Day columns only ever hold a couple of
-    # characters ("8.0", "-", "L"); the named/id/time columns need more.
+    # Column widths -- without them reportlab auto-splits the page width
+    # evenly across all ~45 columns, so even "Name of the Worker" ends up
+    # a couple of centimetres wide and every word wraps onto its own
+    # line. Day columns only ever hold a couple of characters ("8.0",
+    # "-", "L"); the named/id/time columns need more. There are too many
+    # columns to fit on one printable page, so they're split into groups
+    # below (_paginated_register_elements) rather than one custom
+    # oversized page a real printer can't handle.
     header_widths_cm = [1.0, 2.2, 2.8, 1.8, 1.8, 1.6, 1.8, 1.8]
     day_width_cm = 0.85
     trailer_widths_cm = [1.7, 1.7, 1.6, 2.1, 2.1, 1.7]
     days_in_month = end_date.day
-    col_widths = (
-        [w * cm for w in header_widths_cm]
-        + [day_width_cm * cm] * days_in_month
-        + [w * cm for w in trailer_widths_cm]
-    )
-    page_width = sum(col_widths, 2 * cm)
+    col_widths_cm = header_widths_cm + [day_width_cm] * days_in_month + trailer_widths_cm
 
     buf = io.BytesIO()
-    # Wide custom page -- this many columns doesn't fit standard A3/A4
-    # landscape without being unreadable; this is a record document, not
-    # something constrained to office paper stock.
     doc = SimpleDocTemplate(
-        buf, pagesize=(page_width, 26 * cm), topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
+        buf, pagesize=REGISTER_PAGESIZE, topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
     )
     styles = getSampleStyleSheet()
     elements = _header_elements(owner, styles, "Form 25 -- Muster Roll and Register", period_label)
@@ -488,10 +544,9 @@ def build_form25(db: Session, owner: models.Owner, month: int, year: int, format
         )
     )
     elements.append(Spacer(1, 0.3 * cm))
-    wrapped_data = [_wrap_row(table_data[0], header=True)] + [_wrap_row(row) for row in table_data[1:]]
-    table = Table(wrapped_data, colWidths=col_widths, repeatRows=1)
-    _style_table(table)
-    elements.append(table)
+    # Sl.No, Sl.No-in-Register, Name, Worker ID repeat on every printed
+    # page so each one still identifies whose row it is on its own.
+    elements.extend(_paginated_register_elements(table_data[0], table_data[1:], col_widths_cm, fixed_count=4))
     doc.build(elements)
     return buf.getvalue(), "application/pdf", f"form25_{year}_{month:02d}.pdf"
 
@@ -703,23 +758,19 @@ def build_form12(db: Session, owner: models.Owner, format: str, worker: models.W
         2.4, 2.0, 1.6, 1.8, 1.8, 2.0, 3.6, 1.4, 1.8, 2.2,
         2.4, 1.6, 2.2, 2.0,
     ]
-    col_widths = [w * cm for w in col_widths_cm]
-    page_width = sum(col_widths, 2 * cm)
 
     buf = io.BytesIO()
-    # 24 columns, several of them free-text addresses/bank details -- same
-    # oversized custom page as Form 25, for the same reason.
+    # 24 columns, several of them free-text addresses/bank details -- too
+    # many to fit one printable page, split into groups below.
     doc = SimpleDocTemplate(
-        buf, pagesize=(page_width, 26 * cm), topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
+        buf, pagesize=REGISTER_PAGESIZE, topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
     )
     styles = getSampleStyleSheet()
     elements = _header_elements(owner, styles, "Form 12 -- Register of Adult Workers and Young Persons")
     elements.append(Paragraph(f"Registration No.: {owner.factory_licence_no or '-'}", styles["Normal"]))
     elements.append(Spacer(1, 0.3 * cm))
-    wrapped_data = [_wrap_row(table_data[0], header=True)] + [_wrap_row(row) for row in table_data[1:]]
-    table = Table(wrapped_data, colWidths=col_widths, repeatRows=1)
-    _style_table(table)
-    elements.append(table)
+    # Serial Number + Name of the Worker repeat on every printed page.
+    elements.extend(_paginated_register_elements(table_data[0], table_data[1:], col_widths_cm, fixed_count=2))
     doc.build(elements)
     return buf.getvalue(), "application/pdf", f"form12{filename_suffix}.pdf"
 
@@ -844,13 +895,12 @@ def build_form15(db: Session, owner: models.Owner, month: int, year: int, format
         2.4, 1.6, 1.6, 1.8, 1.6, 1.6, 2.2, 1.6, 1.6, 2.2,
         2.2, 2.2, 1.6, 1.6, 1.6, 1.8, 2.4, 1.6, 2.2, 1.6,
     ]
-    col_widths = [w * cm for w in col_widths_cm]
-    page_width = sum(col_widths, 2 * cm)
 
     buf = io.BytesIO()
-    # Same oversized custom page as Form 25/12, for the same reason.
+    # Same standard printable page as Form 25/12, split into column
+    # groups below for the same reason.
     doc = SimpleDocTemplate(
-        buf, pagesize=(page_width, 26 * cm), topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
+        buf, pagesize=REGISTER_PAGESIZE, topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
     )
     styles = getSampleStyleSheet()
     elements = _header_elements(owner, styles, "Form 15 -- Register of Leave with Wages (Part II)", period_label)
@@ -872,10 +922,9 @@ def build_form15(db: Session, owner: models.Owner, month: int, year: int, format
     elements.append(Paragraph("Total Number of Persons Employed:", styles["Normal"]))
     elements.append(counts_table)
     elements.append(Spacer(1, 0.3 * cm))
-    wrapped_data = [_wrap_row(table_data[0], header=True)] + [_wrap_row(row) for row in table_data[1:]]
-    table = Table(wrapped_data, colWidths=col_widths, repeatRows=1)
-    _style_table(table)
-    elements.append(table)
+    # Serial Number, Sl.No-in-Register, Name, Worker ID repeat on every
+    # printed page.
+    elements.extend(_paginated_register_elements(table_data[0], table_data[1:], col_widths_cm, fixed_count=4))
     doc.build(elements)
     return buf.getvalue(), "application/pdf", f"form15_{year}_{month:02d}.pdf"
 

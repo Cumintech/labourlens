@@ -3,3 +3,9 @@
 # email delivery actually works end-to-end (not mocked).
 -r requirements.txt
 aiosmtpd==1.4.6
+
+# verify_forms.py (Phase 3 Day 3) -- extracts real text from generated
+# Form 25/25-B/12/15/Wage Slip PDFs to check actual content, not just
+# magic bytes + size, matching verify_reports.py's existing discipline.
+# Pure-Python, no system binary (same reasoning as reportlab/openpyxl).
+pypdf==5.1.0

@@ -46,8 +46,21 @@ class CapturingHandler:
 
 
 handler = CapturingHandler()
-controller = Controller(handler, hostname="127.0.0.1", port=1025)
+# Port 1026, not the dev-relay's usual 1025 -- this test's own SMTP
+# server must never fight a real dev_smtp_relay.py that's already
+# running for manual/real-device testing (a genuine port-bind conflict
+# hit while running the full verify suite alongside a live dev session).
+controller = Controller(handler, hostname="127.0.0.1", port=1026)
 controller.start()
+# Override every SMTP_* var explicitly rather than relying on whatever
+# .env currently has configured (a real provider like Gmail, with TLS
+# on) -- this test always talks to the local plain-SMTP controller above.
+prior_smtp_env = {k: os.environ.get(k) for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USE_TLS", "SMTP_USER", "SMTP_PASSWORD")}
+os.environ["SMTP_HOST"] = "127.0.0.1"
+os.environ["SMTP_PORT"] = "1026"
+os.environ["SMTP_USE_TLS"] = "false"
+os.environ.pop("SMTP_USER", None)
+os.environ.pop("SMTP_PASSWORD", None)
 
 try:
     signup = client.post(
@@ -114,10 +127,15 @@ try:
         json={"start_date": str(START), "end_date": str(TODAY), "recipient_email": "owner@example.com", "format": "pdf"},
     )
     assert resp.status_code == 500, f"unreachable SMTP server should surface as a real error, not silently succeed: {resp.status_code}"
-    os.environ["SMTP_PORT"] = "1025"
+    os.environ["SMTP_PORT"] = "1026"
     print("unreachable SMTP server surfaces as a real error, not silently swallowed: PASSED")
 
 finally:
+    for key, value in prior_smtp_env.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
     controller.stop()
 
 print("\nALL ASSERTIONS PASSED")

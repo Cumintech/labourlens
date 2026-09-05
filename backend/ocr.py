@@ -34,12 +34,34 @@ gender keyword, and no address text at all):
 - Address extraction is new -- previously owner-entered only.
 """
 
+import io
 import re
 import unicodedata
 
 import easyocr
+from PIL import Image
 
 _reader: easyocr.Reader | None = None
+
+# Real-device scans come off a phone camera at full resolution (often
+# 3000px+ on the long edge), which EasyOCR (CPU, PyTorch-based) is slow
+# on. Downscaling first cuts scan time meaningfully with no measured
+# loss in field-extraction accuracy -- the text on an Aadhaar card is
+# large enough relative to the card that 1600px is still plenty of
+# resolution for EasyOCR's recognizer.
+MAX_OCR_DIMENSION = 1600
+
+
+def _resize_for_ocr(image_bytes: bytes) -> bytes:
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    largest_side = max(img.size)
+    if largest_side > MAX_OCR_DIMENSION:
+        scale = MAX_OCR_DIMENSION / largest_side
+        new_size = (int(img.width * scale), int(img.height * scale))
+        img = img.resize(new_size, Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    return buf.getvalue()
 
 
 def _get_reader() -> easyocr.Reader:
@@ -51,9 +73,23 @@ def _get_reader() -> easyocr.Reader:
     return _reader
 
 
+def warm_up() -> None:
+    """Loads the EasyOCR model eagerly. Call once at backend startup so
+    the model-load cost (several seconds, separate from the resize
+    speedup) lands during server startup, not during an owner's first
+    real scan -- real-device feedback flagged scanning as "very slow",
+    which lazy-loading on the first request would produce every time the
+    dev backend restarts."""
+    _get_reader()
+
+
 AADHAAR_PATTERN = re.compile(r"\b(\d{4})\s?(\d{4})\s?(\d{4})\b")
 DOB_PATTERN = re.compile(r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b")
 PIN_CODE_PATTERN = re.compile(r"\b\d{6}\b")
+# "3RD", "1ST", "2ND" -- ordinal numbers are a normal part of a real
+# street name ("ANDIYAPPAN 3RD LANE") and shouldn't be treated as OCR
+# noise just because they mix a digit with letters.
+ORDINAL_PATTERN = re.compile(r"^\d+(ST|ND|RD|TH)$", re.IGNORECASE)
 
 # Order doesn't actually matter for correctness now (word-boundary regex
 # means "MALE" can't match inside "FEMALE"), but FEMALE/TRANSGENDER are
@@ -83,21 +119,35 @@ NAME_EXCLUDE_KEYWORDS = (
 
 # Lines containing these mark the end of an address block or aren't part
 # of one -- stop collecting address lines once one of these shows up.
+# "WWW." (with the period) never matched a real card's OCR output, which
+# reads as "WwW" with no trailing punctuation -- found on real-device
+# testing, not a hypothetical.
 ADDRESS_STOP_KEYWORDS = (
     "VID",
-    "WWW.",
+    "WWW",
     "UIDAI",
     "GOVERNMENT",
     "SIGNATURE",
     "HELP@UIDAI",
 )
 
-ADDRESS_MAX_LINES = 6
+# How many raw OCR lines after the "Address" label to look through before
+# giving up. Real cards print the address in a regional script followed
+# by English -- with an English-only reader (see the module docstring),
+# the regional-script portion doesn't come back as recognizable Tamil
+# text, it comes back as meaningless Latin-letter noise ("WJUJUGOT"),
+# often running 6+ lines before the real English address and its PIN
+# code even start. The old 6-line cap cut off before ever reaching them.
+ADDRESS_SCAN_WINDOW = 25
+# How many non-trivial lines to actually keep once found -- a separate,
+# generous cap from the scan window so a genuinely long bilingual block
+# doesn't get truncated right before its own PIN code.
+ADDRESS_MAX_LINES = 15
 
 
 def _extract_text_lines(image_bytes: bytes) -> list[str]:
     reader = _get_reader()
-    results = reader.readtext(image_bytes)
+    results = reader.readtext(_resize_for_ocr(image_bytes))
     return [text for (_bbox, text, _conf) in results]
 
 
@@ -123,17 +173,78 @@ def _guess_name(lines: list[str]) -> str | None:
             continue
         if not _is_mostly_latin(line):
             continue
+        # A real name never contains digits -- a noisy OCR line with
+        # stray digits (VID fragments, misread boilerplate) was beating
+        # the actual name line before this check existed (a real bug
+        # found on real-device testing, not a hypothetical).
+        if any(c.isdigit() for c in line):
+            continue
         letters = sum(c.isalpha() for c in line)
         if letters >= 4:
             return line.strip()
     return None
 
 
+def _looks_like_clean_address_line(line: str) -> bool:
+    """True if every token on this line is either alphabetic, purely
+    numeric (a house/door number, or a PIN), or an ordinal like "3RD" --
+    i.e. it reads like a real address fragment, not a token where OCR
+    has jammed letters and digits together mid-word (e.g. "G00llq",
+    "QU6M"), which is the actual signature of the regional-script noise
+    an English-only reader produces (see the module docstring). Requires
+    at least 2 such tokens so a single stray number doesn't count."""
+    tokens = line.split()
+    if len(tokens) < 2:
+        return False
+    clean_count = 0
+    for tok in tokens:
+        core = tok.strip(",.;:'\"()-")
+        if not core:
+            continue
+        if core.isalpha() or core.isdigit() or ORDINAL_PATTERN.match(core):
+            clean_count += 1
+        else:
+            return False
+    return clean_count >= 2
+
+
 def _guess_address(lines: list[str]) -> str | None:
     """Looks for a line containing "Address", then collects subsequent
-    lines until a 6-digit PIN code (included) or a stop-keyword line is
-    hit, capped at ADDRESS_MAX_LINES so a bad match can't run away and
-    swallow the rest of the card's text."""
+    lines up to ADDRESS_MAX_LINES, scanning up to ADDRESS_SCAN_WINDOW raw
+    lines to get there. Two trims are then applied, found from real scans
+    of the same physical card:
+
+    1. Trims everything BEFORE the first "clean" line (see
+       _looks_like_clean_address_line) -- real cards print "Address:
+       S/O: <father's name>, <door no.>, ..." before the actual street
+       name, and the S/O/door-number portion is dense with
+       regional-script-misread-as-Latin noise (house numbers like "3/2"
+       stuck to garbled fragments). Real-device feedback was explicit:
+       the address should start at the street name, not the S/O
+       preamble.
+
+    2. Trims everything AFTER the LAST line containing a PIN code. The
+       footer boilerplate that should otherwise mark "the address block
+       is over" (UIDAI, www..., the help line) gets OCR'd differently
+       almost every time -- one scan read "WwW", the very next read
+       "Wwi", neither of which matches the other, so matching it by
+       fixed keyword is fundamentally unreliable. A 6-digit PIN code is
+       far more OCR-stable than English boilerplate text, and real cards
+       restate it (once standalone, once in the closing "State, PIN"
+       line) -- stopping right after the last one seen reliably drops
+       the trailing Aadhaar-number/footer noise without depending on
+       boilerplate text surviving OCR intact.
+
+    This does NOT cleanly separate the regional-script noise mixed
+    *within* the kept address lines from the real English address (an
+    English-only OCR reader has no way to tell them apart by content,
+    only by unicode script, and the noise is already Latin-charset
+    garbage, not real Tamil unicode) -- some noise lines will still show
+    up in the result. That's a real limitation, not silently hidden:
+    this is exactly why the manual-correction UI exists, and it's a
+    strict improvement over the old behavior, which dropped the real
+    address and PIN code entirely rather than just adding noise around
+    them."""
     start_idx = None
     for i, line in enumerate(lines):
         if "ADDRESS" in line.upper():
@@ -144,15 +255,38 @@ def _guess_address(lines: list[str]) -> str | None:
 
     collected = []
     # The "Address" label line itself is usually just the label, not
-    # address content -- start from the line after it, but fall back to
-    # including it if it's the only thing found.
-    for line in lines[start_idx + 1 : start_idx + 1 + ADDRESS_MAX_LINES]:
+    # address content -- start from the line after it. The stop-keyword
+    # check stays as an early bail-out for the rare clean-OCR case (or a
+    # scan with no PIN code to anchor on at all), not the primary way
+    # this decides where the address ends.
+    for line in lines[start_idx + 1 : start_idx + 1 + ADDRESS_SCAN_WINDOW]:
         upper = line.upper()
         if any(keyword in upper for keyword in ADDRESS_STOP_KEYWORDS):
             break
-        collected.append(line.strip())
-        if PIN_CODE_PATTERN.search(line):
+        stripped = line.strip()
+        # Drop bare label fragments ("Sio:", ":") -- real content, even
+        # noisy OCR content, carries more than a couple of characters.
+        if sum(c.isalnum() for c in stripped) <= 3:
+            continue
+        collected.append(stripped)
+        if len(collected) >= ADDRESS_MAX_LINES:
             break
+
+    if not collected:
+        return None
+
+    # Trim the S/O / father-name / door-number preamble by starting from
+    # the first line that actually looks like real address content.
+    first_clean_idx = next((i for i, line in enumerate(collected) if _looks_like_clean_address_line(line)), None)
+    if first_clean_idx is not None:
+        collected = collected[first_clean_idx:]
+
+    last_pin_idx = None
+    for i, line in enumerate(collected):
+        if PIN_CODE_PATTERN.search(line):
+            last_pin_idx = i
+    if last_pin_idx is not None:
+        collected = collected[: last_pin_idx + 1]
 
     if not collected:
         return None
@@ -168,6 +302,13 @@ def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = No
     front_lines = _extract_text_lines(front_image_bytes)
     back_lines = _extract_text_lines(back_image_bytes) if back_image_bytes else []
     all_lines = front_lines + back_lines
+
+    # Temporary -- remove once the real-device name/address accuracy
+    # complaint is diagnosed and confirmed fixed against real OCR text,
+    # not guessed at. Printed to stdout, so visible in the backend's
+    # running log.
+    print(f"[ocr-debug] front_lines={front_lines!r}")
+    print(f"[ocr-debug] back_lines={back_lines!r}")
 
     joined = " ".join(all_lines)
     fields: dict = {}

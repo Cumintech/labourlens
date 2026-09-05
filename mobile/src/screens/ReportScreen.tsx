@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ReportFormat, emailReport } from "../api/client";
+import KeyboardScreen from "../components/KeyboardScreen";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -60,7 +61,7 @@ export default function ReportScreen({}: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardScreen contentContainerStyle={styles.container}>
       <Text style={styles.label}>Start date</Text>
       <TextInput
         style={styles.input}
@@ -112,7 +113,7 @@ export default function ReportScreen({}: Props) {
       <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={sending}>
         {sending ? <ActivityIndicator color={colors.white} /> : <Text style={styles.sendButtonText}>Send report</Text>}
       </TouchableOpacity>
-    </View>
+    </KeyboardScreen>
   );
 }
 

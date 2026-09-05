@@ -12,6 +12,12 @@ export const colors = {
   danger: "#D9534F", // destructive actions, Absent status
   dangerLight: "#FBEAEA", // destructive-confirmation panel background
   white: "#FFFFFF",
+  // Home screen tile accents -- outside the original mockup palette, used
+  // only to tell the three Home tiles apart at a glance.
+  skyBlue: "#2E86DE",
+  skyBlueLight: "#E8F1FC",
+  violet: "#7C5CBF",
+  violetLight: "#F1ECFA",
 } as const;
 
 export const spacing = {

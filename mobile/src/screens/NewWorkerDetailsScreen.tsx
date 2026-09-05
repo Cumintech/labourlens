@@ -3,7 +3,6 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { ApiError, createWorker } from "../api/client";
+import KeyboardScreen from "../components/KeyboardScreen";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -49,7 +49,7 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
 
     setSaving(true);
     try {
-      await createWorker(token, {
+      const created = await createWorker(token, {
         name: name.trim(),
         aadhaar_number: aadhaarNumber.replace(/\s/g, ""),
         dob: dob.trim() || undefined,
@@ -57,8 +57,14 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
         mobile: mobile.trim() || undefined,
         current_address: currentAddress.trim() || undefined,
       });
-      Alert.alert("Saved", `${name} has been registered.`);
-      navigation.navigate("Dashboard");
+      // Worker record exists now -- Form 12 details are a separate step
+      // (WorkerCompliance needs the worker_id to already exist), not the
+      // end of the flow yet.
+      navigation.navigate("WorkerCompliance", {
+        workerId: created.id,
+        workerName: created.name,
+        workerDob: created.dob,
+      });
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
       Alert.alert("Save failed", message);
@@ -68,7 +74,7 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardScreen contentContainerStyle={styles.container}>
       <Text style={styles.title}>Worker Details</Text>
       <Text style={styles.subtitle}>Review what was scanned and fix anything that's wrong.</Text>
 
@@ -106,7 +112,7 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
           <Text style={styles.buttonText}>Save Worker</Text>
         )}
       </TouchableOpacity>
-    </ScrollView>
+    </KeyboardScreen>
   );
 }
 

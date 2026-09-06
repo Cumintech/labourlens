@@ -112,7 +112,7 @@ TOTAL_DEDUCTIONS = PF + ESI + LWF  # 315.8
 NET = GROSS - TOTAL_DEDUCTIONS  # 3264.2
 
 # --- Form 15 (factory-wide) ---
-form15_pdf = client.get("/forms/form15", headers=headers_a, params={"month": 8, "year": 2026})
+form15_pdf = client.get("/forms/form15", headers=headers_a, params={"start_date": "2026-08-01", "end_date": "2026-08-31"})
 assert form15_pdf.status_code == 200 and form15_pdf.content[:4] == b"%PDF", form15_pdf.status_code
 text15 = pdf_text(form15_pdf.content)
 assert "Forms Factory A" in text15, "factory name missing from Form 15"
@@ -126,7 +126,9 @@ for expected in (f"{GROSS:.2f}", f"{PF:.2f}", f"{ESI:.2f}", f"{NET:.2f}"):
 print("Form 15 PDF: real content, wage arithmetic matches hand-computed expected values: PASSED")
 
 # --- Wage Slip (per worker) ---
-wageslip_pdf = client.get("/forms/wageslip", headers=headers_a, params={"worker_id": worker["id"], "month": 8, "year": 2026})
+wageslip_pdf = client.get(
+    "/forms/wageslip", headers=headers_a, params={"worker_id": worker["id"], "start_date": "2026-08-01", "end_date": "2026-08-31"}
+)
 assert wageslip_pdf.status_code == 200 and wageslip_pdf.content[:4] == b"%PDF", wageslip_pdf.status_code
 text_slip = pdf_text(wageslip_pdf.content)
 assert "Machine Operator" in text_slip, "designation missing from wage slip"
@@ -134,14 +136,16 @@ assert f"{NET:.2f}" in text_slip, "net wages missing/wrong on wage slip"
 print("Wage Slip PDF: real content, net wages matches hand-computed expected value: PASSED")
 
 # --- Form 25 (factory-wide muster roll) ---
-form25_pdf = client.get("/forms/form25", headers=headers_a, params={"month": 8, "year": 2026})
+form25_pdf = client.get("/forms/form25", headers=headers_a, params={"start_date": "2026-08-01", "end_date": "2026-08-31"})
 assert form25_pdf.status_code == 200 and form25_pdf.content[:4] == b"%PDF", form25_pdf.status_code
 text25 = pdf_text(form25_pdf.content)
 assert "Forms Worker" in text25 and "T-001" in text25, "worker row missing from Form 25"
 print("Form 25 PDF: real content, includes the worker's row: PASSED")
 
 # --- Form 25-B (per worker time card) ---
-form25b_pdf = client.get("/forms/form25b", headers=headers_a, params={"worker_id": worker["id"], "month": 8, "year": 2026})
+form25b_pdf = client.get(
+    "/forms/form25b", headers=headers_a, params={"worker_id": worker["id"], "start_date": "2026-08-01", "end_date": "2026-08-31"}
+)
 assert form25b_pdf.status_code == 200 and form25b_pdf.content[:4] == b"%PDF", form25b_pdf.status_code
 text25b = pdf_text(form25b_pdf.content)
 # The real Form 25-B's Date column is just the day-of-month number
@@ -213,7 +217,7 @@ try:
         "/forms/wageslip/email",
         headers=headers_a,
         json={
-            "worker_id": worker["id"], "month": 8, "year": 2026,
+            "worker_id": worker["id"], "start_date": "2026-08-01", "end_date": "2026-08-31",
             "recipient_email": "ganeshprabu844@gmail.com",
         },
     )
@@ -235,7 +239,7 @@ try:
     client_no_raise.headers.update(headers_a)
     unreachable = client_no_raise.post(
         "/forms/wageslip/email",
-        json={"worker_id": worker["id"], "month": 8, "year": 2026, "recipient_email": "owner@example.com"},
+        json={"worker_id": worker["id"], "start_date": "2026-08-01", "end_date": "2026-08-31", "recipient_email": "owner@example.com"},
     )
     assert unreachable.status_code == 500, f"unreachable SMTP server should surface as a real error: {unreachable.status_code}"
     print("form email with an unreachable SMTP server surfaces as a real error, not silently swallowed: PASSED")
@@ -253,7 +257,7 @@ no_rate_worker = client.post(
     "/workers", headers=headers_a, json={"name": "No Rate Worker", "aadhaar_number": "222233334444"}
 ).json()
 
-form15_no_rate = client.get("/forms/form15", headers=headers_a, params={"month": 8, "year": 2026})
+form15_no_rate = client.get("/forms/form15", headers=headers_a, params={"start_date": "2026-08-01", "end_date": "2026-08-31"})
 assert form15_no_rate.status_code == 200, form15_no_rate.text
 text15_no_rate = pdf_text(form15_no_rate.content)
 assert "No Rate Worker" in text15_no_rate and "no wage rate set" in text15_no_rate, (
@@ -262,7 +266,7 @@ assert "No Rate Worker" in text15_no_rate and "no wage rate set" in text15_no_ra
 print("Form 15 with a worker missing a wage profile: falls back cleanly, doesn't crash: PASSED")
 
 wageslip_no_rate = client.get(
-    "/forms/wageslip", headers=headers_a, params={"worker_id": no_rate_worker["id"], "month": 8, "year": 2026}
+    "/forms/wageslip", headers=headers_a, params={"worker_id": no_rate_worker["id"], "start_date": "2026-08-01", "end_date": "2026-08-31"}
 )
 assert wageslip_no_rate.status_code == 200, wageslip_no_rate.text
 assert "No wage rate has been set" in pdf_text(wageslip_no_rate.content)
@@ -288,7 +292,7 @@ mark_bad_shift = client.post(
 assert mark_bad_shift.status_code == 200, mark_bad_shift.text
 
 form25b_with_bad_shift = client.get(
-    "/forms/form25b", headers=headers_a, params={"worker_id": worker["id"], "month": 8, "year": 2026}
+    "/forms/form25b", headers=headers_a, params={"worker_id": worker["id"], "start_date": "2026-08-01", "end_date": "2026-08-31"}
 )
 assert form25b_with_bad_shift.status_code == 200, (
     f"a malformed shift time crashed form generation -- this exact bug reached a real device: {form25b_with_bad_shift.status_code}"
@@ -311,7 +315,7 @@ token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}
 worker_b = client.post("/workers", headers=headers_b, json={"name": "Owner B Worker", "aadhaar_number": "111111119999"}).json()
 
-form15_b = client.get("/forms/form15", headers=headers_b, params={"month": 8, "year": 2026})
+form15_b = client.get("/forms/form15", headers=headers_b, params={"start_date": "2026-08-01", "end_date": "2026-08-31"})
 text15_b = pdf_text(form15_b.content)
 assert "Forms Worker" not in text15_b, "owner B's Form 15 leaked owner A's worker"
 assert "Owner B Worker" in text15_b, "owner B's own worker missing from their own Form 15"
@@ -319,9 +323,13 @@ print("Form 15 factory-wide scoping: owner B never sees owner A's workers: PASSE
 
 form12_cross = client.get(f"/forms/form12/{worker['id']}", headers=headers_b)
 assert form12_cross.status_code == 404, form12_cross.text
-form25b_cross = client.get("/forms/form25b", headers=headers_b, params={"worker_id": worker["id"], "month": 8, "year": 2026})
+form25b_cross = client.get(
+    "/forms/form25b", headers=headers_b, params={"worker_id": worker["id"], "start_date": "2026-08-01", "end_date": "2026-08-31"}
+)
 assert form25b_cross.status_code == 404, form25b_cross.text
-wageslip_cross = client.get("/forms/wageslip", headers=headers_b, params={"worker_id": worker["id"], "month": 8, "year": 2026})
+wageslip_cross = client.get(
+    "/forms/wageslip", headers=headers_b, params={"worker_id": worker["id"], "start_date": "2026-08-01", "end_date": "2026-08-31"}
+)
 assert wageslip_cross.status_code == 404, wageslip_cross.text
 print("cross-owner scoping on per-worker forms (form12, form25b, wageslip): PASSED")
 

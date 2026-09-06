@@ -479,6 +479,19 @@ export function createWageProfile(token: string, workerId: number, input: WagePr
   });
 }
 
+// The one currently-effective rate (as_of defaults to today server-side)
+// -- a worker's own latest WageProfile row if they have one, which
+// already reflects their WorkerType's default the moment it was
+// assigned (see WorkerTypesScreen), so there's no separate override-vs-
+// default merge needed here. Throws a 404 ApiError when nothing has
+// ever been set for this worker.
+export function getWageProfile(token: string, workerId: number, asOf?: string): Promise<WageProfile> {
+  const qs = asOf ? `?as_of=${asOf}` : "";
+  return request<WageProfile>(`/workers/${workerId}/wage-profile${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export function getWageProfileHistory(token: string, workerId: number): Promise<WageProfile[]> {
   return request<WageProfile[]>(`/workers/${workerId}/wage-profile/history`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -636,25 +649,38 @@ export function getDailyWageSummary(token: string, date: string): Promise<DailyW
   });
 }
 
-export type FormCode = "form25" | "form25b" | "form12" | "form15" | "wageslip";
+export type FormCode = "attendance" | "form25" | "form25b" | "form12" | "form15" | "wageslip";
 
 // Generic download picker (any employee, any form) -- backs
-// StatutoryFormsScreen. Form 25, Form 15, and Form 12 are factory-wide
-// registers (no worker_id needed -- Form 12 is a running register of
-// every worker, matching the real government form, not a per-worker
-// sheet); Form 25-B and Wage Slip are per-worker. Form 12 carries no
-// month/year, it isn't period-scoped. PDF only -- Excel export was
-// removed from every form per explicit request.
+// StatutoryFormsScreen, which also folds the Attendance Report in as
+// just another Form Type rather than a separate screen. Form 25,
+// Form 15, and the Attendance Report are factory-wide (no worker_id);
+// Form 12 is a running register of every worker but can optionally be
+// narrowed to one worker's own row via /forms/form12/{worker_id}; Form
+// 25-B and Wage Slip are always per-worker. Every period-scoped form
+// takes a real start/end date range, not a single month -- the backend
+// generates one complete statutory section per calendar month the
+// range touches, combined into one PDF (see backend/forms.py). Form 12
+// carries no period at all. PDF only -- Excel export was removed from
+// every form per explicit request.
 export function getFormDownloadUrl(
   formCode: FormCode,
-  params: { workerId?: number; month?: number; year?: number },
+  params: { workerId?: number; startDate?: string; endDate?: string },
 ): string {
-  const qs = new URLSearchParams();
-  if (params.month) qs.set("month", String(params.month));
-  if (params.year) qs.set("year", String(params.year));
+  if (formCode === "attendance") {
+    return getReportDownloadUrl(params.startDate!, params.endDate!);
+  }
+  if (formCode === "form12") {
+    return params.workerId
+      ? `${API_BASE_URL}/forms/form12/${params.workerId}`
+      : `${API_BASE_URL}/forms/form12`;
+  }
 
-  if (formCode === "form25b" || formCode === "wageslip") {
-    if (params.workerId) qs.set("worker_id", String(params.workerId));
+  const qs = new URLSearchParams();
+  if (params.startDate) qs.set("start_date", params.startDate);
+  if (params.endDate) qs.set("end_date", params.endDate);
+  if ((formCode === "form25b" || formCode === "wageslip") && params.workerId) {
+    qs.set("worker_id", String(params.workerId));
   }
   return `${API_BASE_URL}/forms/${formCode}?${qs.toString()}`;
 }
@@ -662,12 +688,20 @@ export function getFormDownloadUrl(
 export function emailForm(
   token: string,
   formCode: FormCode,
-  input: { worker_id?: number; month?: number; year?: number; recipient_email: string },
+  input: { worker_id?: number; startDate?: string; endDate?: string; recipient_email: string },
 ): Promise<{ status: string }> {
+  if (formCode === "attendance") {
+    return emailReport(token, input.startDate!, input.endDate!, input.recipient_email);
+  }
   return request<{ status: string }>(`/forms/${formCode}/email`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      worker_id: input.worker_id,
+      start_date: formCode === "form12" ? undefined : input.startDate,
+      end_date: formCode === "form12" ? undefined : input.endDate,
+      recipient_email: input.recipient_email,
+    }),
   });
 }
 

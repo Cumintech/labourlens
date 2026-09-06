@@ -11,7 +11,6 @@ import LoginScreen from "../screens/LoginScreen";
 import NewWorkerDetailsScreen from "../screens/NewWorkerDetailsScreen";
 import NewWorkerScanScreen from "../screens/NewWorkerScanScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
-import ReportScreen from "../screens/ReportScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
@@ -39,7 +38,6 @@ export type RootStackParamList = {
   WorkerTypes: undefined;
   ShiftSettings: undefined;
   StatutoryForms: undefined;
-  Report: undefined;
   PrivacyPolicy: undefined;
   HelpSupport: undefined;
 };
@@ -93,7 +91,6 @@ export default function RootNavigator() {
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="StatutoryForms" component={StatutoryFormsScreen} options={{ title: "Forms & Reports" }} />
-        <Stack.Screen name="Report" component={ReportScreen} options={{ title: "Attendance Report" }} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} options={{ title: "Help & Support" }} />
       </Stack.Navigator>

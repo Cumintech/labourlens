@@ -53,6 +53,24 @@ def _month_date_range(month: int, year: int) -> tuple[date, date]:
     return date(year, month, 1), date(year, month, last_day)
 
 
+def _months_in_range(start_date: date, end_date: date) -> list[tuple[int, int]]:
+    """Every calendar month touched by [start_date, end_date], oldest
+    first. Each one gets its own full statutory monthly section in the
+    combined PDF -- Form 25/25-B/15/Wage Slip are inherently monthly
+    documents by real government design (see module docstring), so a
+    multi-month period produces several complete monthly sections
+    stacked together rather than one non-standard merged table."""
+    months: list[tuple[int, int]] = []
+    y, m = start_date.year, start_date.month
+    while (y, m) <= (end_date.year, end_date.month):
+        months.append((y, m))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return months
+
+
 def _shift_map(db: Session, owner_id: int) -> dict[str, models.ShiftConfig]:
     shifts = db.query(models.ShiftConfig).filter(models.ShiftConfig.owner_id == owner_id).all()
     return {s.slot_key: s for s in shifts}
@@ -238,7 +256,10 @@ def _wage_rate_as_of(db: Session, worker_id: int, as_of: date) -> models.WagePro
     return (
         db.query(models.WageProfile)
         .filter(models.WageProfile.worker_id == worker_id, models.WageProfile.effective_from <= as_of)
-        .order_by(models.WageProfile.effective_from.desc())
+        # Tie-break on id when two rows share the same effective_from
+        # (e.g. a WorkerType-seeded default and a same-day manual
+        # override) so the more-recently-added row always wins.
+        .order_by(models.WageProfile.effective_from.desc(), models.WageProfile.id.desc())
         .first()
     )
 
@@ -529,7 +550,7 @@ def _form25_table_data(db: Session, owner: models.Owner, month: int, year: int) 
     return table_data, start_date, end_date
 
 
-def build_form25(db: Session, owner: models.Owner, month: int, year: int) -> tuple[bytes, str, str]:
+def _form25_month_elements(db: Session, owner: models.Owner, styles, month: int, year: int) -> list:
     table_data, start_date, end_date = _form25_table_data(db, owner, month, year)
     period_label = f"{start_date.isoformat()} to {end_date.isoformat()}"
 
@@ -547,11 +568,6 @@ def build_form25(db: Session, owner: models.Owner, month: int, year: int) -> tup
     days_in_month = end_date.day
     col_widths_cm = header_widths_cm + [day_width_cm] * days_in_month + trailer_widths_cm
 
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=REGISTER_PAGESIZE, topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
-    )
-    styles = getSampleStyleSheet()
     elements = _header_elements(owner, styles, "Form 25 -- Muster Roll and Register", period_label)
     elements.append(
         Paragraph(
@@ -564,8 +580,27 @@ def build_form25(db: Session, owner: models.Owner, month: int, year: int) -> tup
     # Sl.No, Sl.No-in-Register, Name, Worker ID repeat on every printed
     # page so each one still identifies whose row it is on its own.
     elements.extend(_paginated_register_elements(table_data[0], table_data[1:], col_widths_cm, fixed_count=4))
+    return elements
+
+
+def build_form25(db: Session, owner: models.Owner, start_date: date, end_date: date) -> tuple[bytes, str, str]:
+    """One PDF covering every calendar month the selected period
+    touches -- each month gets its own complete Muster Roll (the real
+    form is inherently a monthly document), stacked with a page break
+    between months rather than merged into one non-standard table."""
+    months = _months_in_range(start_date, end_date)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=REGISTER_PAGESIZE, topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
+    )
+    styles = getSampleStyleSheet()
+    elements: list = []
+    for i, (year, month) in enumerate(months):
+        if i > 0:
+            elements.append(PageBreak())
+        elements.extend(_form25_month_elements(db, owner, styles, month, year))
     doc.build(elements)
-    return buf.getvalue(), "application/pdf", f"form25_{year}_{month:02d}.pdf"
+    return buf.getvalue(), "application/pdf", f"form25_{start_date.isoformat()}_to_{end_date.isoformat()}.pdf"
 
 
 # --------------------------------------------------------------------------
@@ -599,7 +634,9 @@ def _form25b_day_block(rows: list[dict], shifts: dict[str, models.ShiftConfig]) 
     return block
 
 
-def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month: int, year: int) -> tuple[bytes, str, str]:
+def _form25b_month_elements(
+    db: Session, owner: models.Owner, styles, worker: models.Worker, month: int, year: int
+) -> list:
     """Matches the real scanned Form 25-B exactly: page 1 is the day-wise
     time grid (Date / Time of Arrival AM+PM / OT Hrs worked / Total
     Worked Hours / INL), split into two 16-day blocks side by side, the
@@ -627,10 +664,6 @@ def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month
         ("No. of days of leave granted with wages", str(sum(1 for r in rows if r["paid_leave"]))),
         ("No. of days Counted for wages Inc. weekly Holidays", str(summary["counted_for_wages"])),
     ]
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm, leftMargin=1 * cm, rightMargin=1 * cm)
-    styles = getSampleStyleSheet()
 
     # Page 1 -- the day grid, exactly as the real form has it: two
     # 16-day blocks side by side, not one long column.
@@ -672,8 +705,27 @@ def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month
         elements.append(Paragraph(f"{label}: {value}", styles["Normal"]))
     elements.append(Spacer(1, 0.8 * cm))
     elements.append(Paragraph("Date & Signature of the Manager: ____________________", styles["Normal"]))
+    return elements
+
+
+def build_form25b(
+    db: Session, owner: models.Owner, worker: models.Worker, start_date: date, end_date: date
+) -> tuple[bytes, str, str]:
+    """One PDF covering every calendar month the selected period
+    touches -- each month gets its own complete Time Card (page 1 day
+    grid + page 2 particulars), stacked with a page break between
+    months."""
+    months = _months_in_range(start_date, end_date)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm, leftMargin=1 * cm, rightMargin=1 * cm)
+    styles = getSampleStyleSheet()
+    elements: list = []
+    for i, (year, month) in enumerate(months):
+        if i > 0:
+            elements.append(PageBreak())
+        elements.extend(_form25b_month_elements(db, owner, styles, worker, month, year))
     doc.build(elements)
-    return buf.getvalue(), "application/pdf", f"form25b_{worker.id}_{year}_{month:02d}.pdf"
+    return buf.getvalue(), "application/pdf", f"form25b_{worker.id}_{start_date.isoformat()}_to_{end_date.isoformat()}.pdf"
 
 
 # --------------------------------------------------------------------------
@@ -832,7 +884,7 @@ FORM15_HEADER = [
 ]
 
 
-def build_form15(db: Session, owner: models.Owner, month: int, year: int) -> tuple[bytes, str, str]:
+def _form15_month_elements(db: Session, owner: models.Owner, styles, month: int, year: int) -> list:
     """Full 30-column layout per the real Form 15 -- Register of Leave
     with Wages (Part II). Advances and damages/fines ledgers aren't
     tracked anywhere in this app (see Non-goals) so those columns are
@@ -900,13 +952,6 @@ def build_form15(db: Session, owner: models.Owner, month: int, year: int) -> tup
         2.2, 2.2, 1.6, 1.6, 1.6, 1.8, 2.4, 1.6, 2.2, 1.6,
     ]
 
-    buf = io.BytesIO()
-    # Same standard printable page as Form 25/12, split into column
-    # groups below for the same reason.
-    doc = SimpleDocTemplate(
-        buf, pagesize=REGISTER_PAGESIZE, topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
-    )
-    styles = getSampleStyleSheet()
     elements = _header_elements(owner, styles, "Form 15 -- Register of Leave with Wages (Part II)", period_label)
     counts_table = Table(
         [["Men", "Women", "Male Adolescent", "Female Adolescent"], [counts["men"], counts["women"], counts["male_adolescent"], counts["female_adolescent"]]],
@@ -929,8 +974,28 @@ def build_form15(db: Session, owner: models.Owner, month: int, year: int) -> tup
     # Serial Number, Sl.No-in-Register, Name, Worker ID repeat on every
     # printed page.
     elements.extend(_paginated_register_elements(table_data[0], table_data[1:], col_widths_cm, fixed_count=4))
+    return elements
+
+
+def build_form15(db: Session, owner: models.Owner, start_date: date, end_date: date) -> tuple[bytes, str, str]:
+    """One PDF covering every calendar month the selected period
+    touches -- each month gets its own complete Wage Register, stacked
+    with a page break between months."""
+    months = _months_in_range(start_date, end_date)
+    buf = io.BytesIO()
+    # Same standard printable page as Form 25/12, split into column
+    # groups below for the same reason.
+    doc = SimpleDocTemplate(
+        buf, pagesize=REGISTER_PAGESIZE, topMargin=1 * cm, bottomMargin=1 * cm, leftMargin=1 * cm, rightMargin=1 * cm
+    )
+    styles = getSampleStyleSheet()
+    elements: list = []
+    for i, (year, month) in enumerate(months):
+        if i > 0:
+            elements.append(PageBreak())
+        elements.extend(_form15_month_elements(db, owner, styles, month, year))
     doc.build(elements)
-    return buf.getvalue(), "application/pdf", f"form15_{year}_{month:02d}.pdf"
+    return buf.getvalue(), "application/pdf", f"form15_{start_date.isoformat()}_to_{end_date.isoformat()}.pdf"
 
 
 # --------------------------------------------------------------------------
@@ -938,7 +1003,7 @@ def build_form15(db: Session, owner: models.Owner, month: int, year: int) -> tup
 # --------------------------------------------------------------------------
 
 
-def build_wageslip(db: Session, owner: models.Owner, worker: models.Worker, month: int, year: int) -> tuple[bytes, str, str]:
+def _wageslip_month_elements(db: Session, owner: models.Owner, styles, worker: models.Worker, month: int, year: int) -> list:
     """Field order/labels follow the "Fields of Wage Slip" list exactly
     (the Tamil chit-style sample sent alongside it is a different,
     unrelated form and is intentionally not used as a reference here,
@@ -972,9 +1037,6 @@ def build_wageslip(db: Session, owner: models.Owner, worker: models.Worker, mont
             ],
         ]
 
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
-    styles = getSampleStyleSheet()
     elements = _header_elements(owner, styles, "Wage Slip", period_label)
     table = Table(rows, colWidths=[7 * cm, 9 * cm])
     _style_table(table)
@@ -982,5 +1044,21 @@ def build_wageslip(db: Session, owner: models.Owner, worker: models.Worker, mont
     elements.append(Spacer(1, 0.6 * cm))
     elements.append(Paragraph("Signature / Thumb Impression of the Worker: ____________________", styles["Normal"]))
     elements.append(Paragraph("Manager's Signature: ____________________", styles["Normal"]))
+    return elements
+
+
+def build_wageslip(db: Session, owner: models.Owner, worker: models.Worker, start_date: date, end_date: date) -> tuple[bytes, str, str]:
+    """One PDF covering every calendar month the selected period
+    touches -- each month gets its own complete Wage Slip, stacked with
+    a page break between months."""
+    months = _months_in_range(start_date, end_date)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    styles = getSampleStyleSheet()
+    elements: list = []
+    for i, (year, month) in enumerate(months):
+        if i > 0:
+            elements.append(PageBreak())
+        elements.extend(_wageslip_month_elements(db, owner, styles, worker, month, year))
     doc.build(elements)
-    return buf.getvalue(), "application/pdf", f"wageslip_{worker.id}_{year}_{month:02d}.pdf"
+    return buf.getvalue(), "application/pdf", f"wageslip_{worker.id}_{start_date.isoformat()}_to_{end_date.isoformat()}.pdf"

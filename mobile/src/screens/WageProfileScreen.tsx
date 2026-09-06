@@ -11,8 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ApiError, WageProfile, WageRateType, createWageProfile, getWageProfileHistory } from "../api/client";
-import DateField from "../components/DateField";
+import { ApiError, WageProfile, WageRateType, createWageProfile, getWageProfile, getWageProfileHistory } from "../api/client";
+import DateField, { isoDate } from "../components/DateField";
 import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
 import { ListSkeleton } from "../components/Skeleton";
@@ -22,14 +22,21 @@ import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WageProfile">;
 
-// Append-only, deliberately: this screen only ever adds a new rate
-// version, never edits an existing one. A wage slip for a past month
-// must keep reflecting that month's rate even after a later correction
-// -- see PHASE3_STATUTORY_FORMS_PLAN.md's Day 2 section.
+// The backend stays append-only, deliberately: a new rate is always a
+// new versioned row, never an edit of an existing one, so a wage slip
+// for a past month keeps reflecting that month's rate even after a
+// later correction -- see PHASE3_STATUTORY_FORMS_PLAN.md's Day 2
+// section. This screen's UX still behaves like a normal edit form on
+// top of that: it opens pre-filled with the worker's current effective
+// rate (their own latest WageProfile, which already reflects any
+// WorkerType default it was seeded from), and saving without changing
+// any of those values is a no-op -- no redundant duplicate version is
+// created, and nothing gets accidentally blanked out.
 export default function WageProfileScreen({ route, navigation }: Props) {
   const { workerId, workerName, fromRegistration } = route.params;
   const { token } = useAuth();
   const [history, setHistory] = useState<WageProfile[]>([]);
+  const [currentRate, setCurrentRate] = useState<WageProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,9 +52,33 @@ export default function WageProfileScreen({ route, navigation }: Props) {
   const [lwfAmount, setLwfAmount] = useState("");
   const [effectiveFrom, setEffectiveFrom] = useState("");
 
+  function prefillFrom(rate: WageProfile | null) {
+    setRateType(rate?.rate_type ?? "daily");
+    setBasic(rate ? String(rate.basic) : "");
+    setHra(rate ? String(rate.hra) : "");
+    setDa(rate ? String(rate.da) : "");
+    setOtherAllowances(rate ? String(rate.other_allowances) : "");
+    setPfRate(rate ? String(rate.pf_rate) : "");
+    setEsiRate(rate ? String(rate.esi_rate) : "");
+    setLwfAmount(rate ? String(rate.lwf_amount) : "");
+    // A correction takes effect from today, not the old row's date --
+    // reusing the old effective_from would misrepresent when the new
+    // rate actually starts applying.
+    setEffectiveFrom(isoDate(new Date()));
+  }
+
   const load = useCallback(async () => {
     if (!token) return;
-    setHistory(await getWageProfileHistory(token, workerId));
+    const [fullHistory, current] = await Promise.all([
+      getWageProfileHistory(token, workerId),
+      getWageProfile(token, workerId).catch((e) => {
+        if (e instanceof ApiError && e.status === 404) return null; // no rate set yet -- not an error
+        throw e;
+      }),
+    ]);
+    setHistory(fullHistory);
+    setCurrentRate(current);
+    prefillFrom(current);
   }, [token, workerId]);
 
   useFocusEffect(
@@ -77,10 +108,30 @@ export default function WageProfileScreen({ route, navigation }: Props) {
     return isNaN(n) ? 0 : n;
   }
 
+  function matchesCurrentRate(): boolean {
+    if (!currentRate) return false;
+    return (
+      rateType === currentRate.rate_type &&
+      toNumber(basic) === currentRate.basic &&
+      toNumber(hra) === currentRate.hra &&
+      toNumber(da) === currentRate.da &&
+      toNumber(otherAllowances) === currentRate.other_allowances &&
+      toNumber(pfRate) === currentRate.pf_rate &&
+      toNumber(esiRate) === currentRate.esi_rate &&
+      toNumber(lwfAmount) === currentRate.lwf_amount
+    );
+  }
+
   async function handleSave() {
     if (!token) return;
     if (!basic.trim() || !effectiveFrom.trim()) {
       Alert.alert("Missing fields", "Basic wage and effective-from date are required.");
+      return;
+    }
+    // Nothing was actually changed from the pre-filled current rate --
+    // a no-op, not a redundant duplicate version.
+    if (matchesCurrentRate()) {
+      Alert.alert("No changes", "These values match the current rate already -- nothing to save.");
       return;
     }
     setSaving(true);

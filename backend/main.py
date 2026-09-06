@@ -469,7 +469,11 @@ def get_wage_profile(
     profile = (
         db.query(models.WageProfile)
         .filter(models.WageProfile.worker_id == worker_id, models.WageProfile.effective_from <= as_of)
-        .order_by(models.WageProfile.effective_from.desc())
+        # Tie-break on id when two rows share the same effective_from
+        # (e.g. a WorkerType-seeded default and a same-day manual
+        # override) so the more-recently-added row always wins, not
+        # whatever order SQL happens to return ties in.
+        .order_by(models.WageProfile.effective_from.desc(), models.WageProfile.id.desc())
         .first()
     )
     if not profile:
@@ -487,7 +491,7 @@ def get_wage_profile_history(
     return (
         db.query(models.WageProfile)
         .filter(models.WageProfile.worker_id == worker_id)
-        .order_by(models.WageProfile.effective_from.desc())
+        .order_by(models.WageProfile.effective_from.desc(), models.WageProfile.id.desc())
         .all()
     )
 
@@ -1088,9 +1092,9 @@ def get_dashboard(
 
 
 def _log_form_generation(
-    db: Session, owner: models.Owner, form_code: str, worker_id: int | None, month: int | None, year: int | None, action: str
+    db: Session, owner: models.Owner, form_code: str, worker_id: int | None, start_date: date_ | None, end_date: date_ | None, action: str
 ) -> None:
-    period_label = f"{year}-{month:02d}" if month and year else None
+    period_label = f"{start_date.isoformat()} to {end_date.isoformat()}" if start_date and end_date else None
     db.add(
         models.FormGenerationLog(
             owner_id=owner.id,
@@ -1109,50 +1113,57 @@ def _generate_form_content(
     owner: models.Owner,
     form_code: str,
     worker_id: int | None,
-    month: int | None,
-    year: int | None,
+    start_date: date_ | None,
+    end_date: date_ | None,
 ) -> tuple[bytes, str, str]:
     """Every form is PDF only -- Excel export was removed entirely per
     explicit request, so there's no format parameter to validate here
-    anymore (there used to be)."""
+    anymore (there used to be). form25/form25b/form15/wageslip accept a
+    real date range, not a single month -- each calendar month the range
+    touches gets its own complete statutory section inside one combined
+    PDF (see forms.py's _months_in_range)."""
     if form_code == "form25":
-        return forms.build_form25(db, owner, month, year)
+        return forms.build_form25(db, owner, start_date, end_date)
     if form_code == "form15":
-        return forms.build_form15(db, owner, month, year)
+        return forms.build_form15(db, owner, start_date, end_date)
     if form_code == "form12":
         worker = _get_owned_worker(worker_id, owner, db) if worker_id is not None else None
         return forms.build_form12(db, owner, worker=worker)
     if form_code == "form25b":
         worker = _get_owned_worker(worker_id, owner, db)
-        return forms.build_form25b(db, owner, worker, month, year)
+        return forms.build_form25b(db, owner, worker, start_date, end_date)
     if form_code == "wageslip":
         worker = _get_owned_worker(worker_id, owner, db)
-        return forms.build_wageslip(db, owner, worker, month, year)
+        return forms.build_wageslip(db, owner, worker, start_date, end_date)
     raise HTTPException(status_code=404, detail=f"Unknown form_code {form_code!r}")
 
 
 @app.get("/forms/form25")
 def get_form25(
-    month: int,
-    year: int,
+    start_date: date_,
+    end_date: date_,
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, media_type, filename = _generate_form_content(db, owner, "form25", None, month, year)
-    _log_form_generation(db, owner, "form25", None, month, year, "generated")
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
+    content, media_type, filename = _generate_form_content(db, owner, "form25", None, start_date, end_date)
+    _log_form_generation(db, owner, "form25", None, start_date, end_date, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.get("/forms/form25b")
 def get_form25b(
     worker_id: int,
-    month: int,
-    year: int,
+    start_date: date_,
+    end_date: date_,
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, media_type, filename = _generate_form_content(db, owner, "form25b", worker_id, month, year)
-    _log_form_generation(db, owner, "form25b", worker_id, month, year, "generated")
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
+    content, media_type, filename = _generate_form_content(db, owner, "form25b", worker_id, start_date, end_date)
+    _log_form_generation(db, owner, "form25b", worker_id, start_date, end_date, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
@@ -1184,26 +1195,30 @@ def get_form12(
 
 @app.get("/forms/form15")
 def get_form15(
-    month: int,
-    year: int,
+    start_date: date_,
+    end_date: date_,
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, media_type, filename = _generate_form_content(db, owner, "form15", None, month, year)
-    _log_form_generation(db, owner, "form15", None, month, year, "generated")
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
+    content, media_type, filename = _generate_form_content(db, owner, "form15", None, start_date, end_date)
+    _log_form_generation(db, owner, "form15", None, start_date, end_date, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.get("/forms/wageslip")
 def get_wageslip(
     worker_id: int,
-    month: int,
-    year: int,
+    start_date: date_,
+    end_date: date_,
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, media_type, filename = _generate_form_content(db, owner, "wageslip", worker_id, month, year)
-    _log_form_generation(db, owner, "wageslip", worker_id, month, year, "generated")
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
+    content, media_type, filename = _generate_form_content(db, owner, "wageslip", worker_id, start_date, end_date)
+    _log_form_generation(db, owner, "wageslip", worker_id, start_date, end_date, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
@@ -1214,7 +1229,9 @@ def email_form(
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, _media_type, filename = _generate_form_content(db, owner, form_code, body.worker_id, body.month, body.year)
+    if body.start_date and body.end_date and body.end_date < body.start_date:
+        raise HTTPException(status_code=422, detail="end_date must not be before start_date")
+    content, _media_type, filename = _generate_form_content(db, owner, form_code, body.worker_id, body.start_date, body.end_date)
     send_report_email(
         to_email=body.recipient_email,
         subject=f"{owner.factory_name} -- {form_code}",
@@ -1223,7 +1240,7 @@ def email_form(
         attachment_filename=filename,
         format="pdf",
     )
-    _log_form_generation(db, owner, form_code, body.worker_id, body.month, body.year, "emailed")
+    _log_form_generation(db, owner, form_code, body.worker_id, body.start_date, body.end_date, "emailed")
     return {"status": "email sent"}
 
 

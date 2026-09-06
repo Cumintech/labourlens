@@ -273,8 +273,8 @@ class WagePaymentIn(BaseModel):
 
 class FormEmailIn(BaseModel):
     worker_id: int | None = None  # omit for factory-wide forms (form25, form15)
-    month: int | None = None  # omit for form12 (one-time, no period)
-    year: int | None = None
+    start_date: date | None = None  # omit for form12 (one-time, no period)
+    end_date: date | None = None
     recipient_email: str
 
 

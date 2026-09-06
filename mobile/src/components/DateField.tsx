@@ -1,4 +1,4 @@
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import DateTimePicker, { DateTimePickerChangeEvent } from "@react-native-community/datetimepicker";
 import React, { useState } from "react";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";
@@ -30,13 +30,20 @@ export default function DateField({
 }) {
   const [showPicker, setShowPicker] = useState(false);
 
-  function handleChange(_event: DateTimePickerEvent, selected?: Date) {
+  // `onChange` is deprecated in the installed library version in favor
+  // of `onValueChange`/`onDismiss`/`onNeutralButtonPress` -- confirmed
+  // against the installed package's own type definitions, not assumed.
+  function handleValueChange(_event: DateTimePickerChangeEvent, selected: Date) {
     // Android's picker is a modal dialog that closes itself; iOS's is an
     // inline spinner that stays open until the field is tapped again --
     // hiding unconditionally after any change only closes it where that
     // dismissal is expected.
     if (Platform.OS === "android") setShowPicker(false);
-    if (selected) onChange(isoDate(selected));
+    onChange(isoDate(selected));
+  }
+
+  function handleDismiss() {
+    if (Platform.OS === "android") setShowPicker(false);
   }
 
   return (
@@ -54,7 +61,8 @@ export default function DateField({
           value={value ? new Date(value) : new Date()}
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={handleChange}
+          onValueChange={handleValueChange}
+          onDismiss={handleDismiss}
         />
       )}
     </View>

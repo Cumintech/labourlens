@@ -24,7 +24,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "WageProfile">;
 // must keep reflecting that month's rate even after a later correction
 // -- see PHASE3_STATUTORY_FORMS_PLAN.md's Day 2 section.
 export default function WageProfileScreen({ route, navigation }: Props) {
-  const { workerId, workerName } = route.params;
+  const { workerId, workerName, fromRegistration } = route.params;
   const { token } = useAuth();
   const [history, setHistory] = useState<WageProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,9 +86,11 @@ export default function WageProfileScreen({ route, navigation }: Props) {
       setEsiRate("");
       setLwfAmount("");
       setEffectiveFrom("");
-      Alert.alert("Saved", "New wage rate added.", [
-        { text: "OK", onPress: () => navigation.navigate("Home") },
-      ]);
+      Alert.alert(
+        "Saved",
+        fromRegistration ? `${workerName} has been registered with this wage rate.` : "New wage rate added.",
+        [{ text: "OK", onPress: () => navigation.navigate("Home") }],
+      );
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
       Alert.alert("Save failed", message);
@@ -107,8 +109,19 @@ export default function WageProfileScreen({ route, navigation }: Props) {
 
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{workerName}</Text>
-      <Text style={styles.subtitle}>Wage rate history</Text>
+      <View style={styles.titleRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>{workerName}</Text>
+          <Text style={styles.subtitle}>
+            {fromRegistration ? "Set a wage rate to finish registration" : "Wage rate history"}
+          </Text>
+        </View>
+        {fromRegistration && (
+          <TouchableOpacity onPress={() => navigation.navigate("Home")}>
+            <Text style={styles.skipLink}>Skip for now →</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {history.length === 0 ? (
         <Text style={styles.empty}>No wage rate set yet.</Text>
@@ -192,6 +205,8 @@ function Field({
 
 const styles = StyleSheet.create({
   container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
+  titleRow: { flexDirection: "row", alignItems: "flex-start" },
+  skipLink: { color: colors.teal, fontSize: 13, fontWeight: "700", marginTop: spacing.xs },
   title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
   empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },

@@ -1,4 +1,4 @@
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import DateTimePicker, { DateTimePickerChangeEvent } from "@react-native-community/datetimepicker";
 import React, { useState } from "react";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";
@@ -32,9 +32,16 @@ export default function TimeField({
 }) {
   const [showPicker, setShowPicker] = useState(false);
 
-  function handleChange(_event: DateTimePickerEvent, selected?: Date) {
+  // `onChange` is deprecated in the installed library version -- use
+  // `onValueChange`/`onDismiss` instead (confirmed against the
+  // installed package's own type definitions).
+  function handleValueChange(_event: DateTimePickerChangeEvent, selected: Date) {
     if (Platform.OS === "android") setShowPicker(false);
-    if (selected) onChange(toHHMM(selected));
+    onChange(toHHMM(selected));
+  }
+
+  function handleDismiss() {
+    if (Platform.OS === "android") setShowPicker(false);
   }
 
   return (
@@ -49,7 +56,8 @@ export default function TimeField({
           mode="time"
           is24Hour
           display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={handleChange}
+          onValueChange={handleValueChange}
+          onDismiss={handleDismiss}
         />
       )}
     </View>

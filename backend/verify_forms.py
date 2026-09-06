@@ -159,7 +159,11 @@ print("Form 25 Excel: total days worked matches hand-computed value: PASSED")
 form25b_pdf = client.get("/forms/form25b", headers=headers_a, params={"worker_id": worker["id"], "month": 8, "year": 2026, "format": "pdf"})
 assert form25b_pdf.status_code == 200 and form25b_pdf.content[:4] == b"%PDF", form25b_pdf.status_code
 text25b = pdf_text(form25b_pdf.content)
-assert "2026-08-07" in text25b, "the overtime day is missing from Form 25-B"
+# The real Form 25-B's Date column is just the day-of-month number
+# (matching the actual scanned form), not a full ISO date -- so the
+# overtime day is checked via its total hours (8 regular + 4 OT = 12.0),
+# a value unique to that one day's row.
+assert "12.0" in text25b, "the overtime day's total hours are missing from Form 25-B"
 print("Form 25-B PDF: real content, day-by-day rows present: PASSED")
 
 # --- Form 12 (Register of Adult Workers -- factory-wide, one row per

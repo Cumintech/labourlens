@@ -18,6 +18,8 @@ from email_service import send_report_email
 from schemas import (
     AttendanceMarkIn,
     AttendanceOut,
+    DailyWageSummaryOut,
+    DailyWorkerWageOut,
     DashboardOut,
     FactoryProfileIn,
     FormEmailIn,
@@ -39,10 +41,12 @@ from schemas import (
     WageProfileOut,
     WagePaymentIn,
     WagePaymentOut,
+    WageSummaryOut,
     WorkerComplianceIn,
     WorkerComplianceOut,
     WorkerCreateIn,
     WorkerOut,
+    WorkerWageOut,
 )
 
 ATTENDANCE_STATUSES = ("present", "absent", "leave")
@@ -146,6 +150,11 @@ def update_factory_profile(
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
+    # factory_name is NOT NULL on Owner (it's set at signup) -- only
+    # overwrite it when a real value is sent, unlike address/licence
+    # which are nullable and fine to clear.
+    if body.factory_name and body.factory_name.strip():
+        owner.factory_name = body.factory_name.strip()
     owner.factory_address = body.factory_address
     owner.factory_licence_no = body.factory_licence_no
     db.commit()
@@ -588,6 +597,104 @@ def upsert_wage_payment(
     return payment
 
 
+def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:
+    """The same figures Form 15/Wage Slip print, as JSON -- shared by the
+    per-worker wage-computation endpoint and the factory-wide summary so
+    both always agree on the same breakdown."""
+    if wage is None:
+        return WorkerWageOut(worker_id=worker.id, worker_name=worker.name, has_rate=False, days_worked=0, gross_wage=0, net_wage=0, paid=False)
+    return WorkerWageOut(
+        worker_id=worker.id,
+        worker_name=worker.name,
+        has_rate=True,
+        days_worked=wage["summary"]["days_worked"],
+        gross_wage=wage["gross"],
+        net_wage=wage["net"],
+        paid=wage["payment"] is not None and wage["payment"].date_of_payment is not None,
+        rate_amount=wage["rate"].basic,
+        rate_type=wage["rate"].rate_type,
+        basic_wage=wage["basic_wage"],
+        da=wage["rate"].da,
+        hra=wage["rate"].hra,
+        other_allowances=wage["rate"].other_allowances,
+        ot_wages=wage["ot_wages"],
+        leave_wages=wage["leave_wages"],
+        pf=wage["pf"],
+        esi=wage["esi"],
+        lwf=wage["lwf"],
+        total_deductions=wage["total_deductions"],
+    )
+
+
+@app.get("/workers/{worker_id}/wage-computation", response_model=WorkerWageOut)
+def get_worker_wage_computation(
+    worker_id: int,
+    month: int,
+    year: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """The same figures Form 15/Wage Slip print, as JSON -- backs the
+    "Total Wages" summary on the worker's monthly attendance screen and
+    the wage detail breakdown on the Wage Calculation tab."""
+    worker = _get_owned_worker(worker_id, owner, db)
+    wage = forms.compute_wage(db, owner.id, worker_id, month, year)
+    return _worker_wage_out(worker, wage)
+
+
+@app.get("/wage-summary", response_model=WageSummaryOut)
+def get_wage_summary(
+    month: int,
+    year: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Factory-wide monthly wage bill -- every active worker's
+    contribution to the total, for the Wage Calculation tab."""
+    workers = [w for w in forms._all_workers(db, owner.id) if w.status == "active"]
+    results = []
+    total_gross = 0.0
+    total_net = 0.0
+    for worker in workers:
+        wage = forms.compute_wage(db, owner.id, worker.id, month, year)
+        if wage is not None:
+            total_gross += wage["gross"]
+            total_net += wage["net"]
+        results.append(_worker_wage_out(worker, wage))
+    return WageSummaryOut(
+        period_label=f"{year}-{month:02d}", total_workers=len(workers), total_gross=total_gross, total_net=total_net, workers=results
+    )
+
+
+@app.get("/wage-summary/daily", response_model=DailyWageSummaryOut)
+def get_daily_wage_summary(
+    date: date_,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Factory-wide labour cost for one specific day -- a quick
+    cash-flow figure, not the statutory monthly wage register."""
+    workers = [w for w in forms._all_workers(db, owner.id) if w.status == "active"]
+    results = []
+    total_cost = 0.0
+    present_count = 0
+    for worker in workers:
+        daily = forms.compute_daily_wage(db, worker.id, date)
+        if daily["present"]:
+            present_count += 1
+            total_cost += daily["daily_cost"]
+        results.append(
+            DailyWorkerWageOut(
+                worker_id=worker.id,
+                worker_name=worker.name,
+                has_rate=daily["has_rate"],
+                present=daily["present"],
+                daily_cost=daily["daily_cost"],
+            )
+        )
+    return DailyWageSummaryOut(date=date, total_workers_present=present_count, total_daily_cost=total_cost, workers=results)
+
+
 @app.post("/portal-credentials", status_code=204)
 def set_portal_credentials(
     body: PortalCredentialIn,
@@ -789,6 +896,31 @@ def list_attendance(
         db.query(models.Attendance)
         .join(models.Worker, models.Worker.id == models.Attendance.worker_id)
         .filter(models.Worker.owner_id == owner.id, models.Attendance.date == date)
+        .all()
+    )
+
+
+@app.get("/workers/{worker_id}/attendance-month", response_model=list[AttendanceOut])
+def list_worker_attendance_month(
+    worker_id: int,
+    month: int,
+    year: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Backs the per-worker whole-month attendance view -- one call for
+    every day of the month, instead of the owner-wide /attendance
+    endpoint called once per day (30 requests, each returning every
+    other worker's rows too, just to filter down to one)."""
+    _get_owned_worker(worker_id, owner, db)
+    start_date, end_date = forms._month_date_range(month, year)
+    return (
+        db.query(models.Attendance)
+        .filter(
+            models.Attendance.worker_id == worker_id,
+            models.Attendance.date >= start_date,
+            models.Attendance.date <= end_date,
+        )
         .all()
     )
 

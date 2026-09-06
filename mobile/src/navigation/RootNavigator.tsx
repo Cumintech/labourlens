@@ -6,7 +6,6 @@ import { OcrFields } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import AttendanceRangeScreen from "../screens/AttendanceRangeScreen";
 import DashboardScreen from "../screens/DashboardScreen";
-import HomeScreen from "../screens/HomeScreen";
 import LoginScreen from "../screens/LoginScreen";
 import NewWorkerDetailsScreen from "../screens/NewWorkerDetailsScreen";
 import NewWorkerScanScreen from "../screens/NewWorkerScanScreen";
@@ -14,9 +13,11 @@ import ReportScreen from "../screens/ReportScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
+import WorkerAttendanceScreen from "../screens/WorkerAttendanceScreen";
 import WorkerComplianceScreen from "../screens/WorkerComplianceScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
 import { colors } from "../theme";
+import MainTabs from "./MainTabs";
 
 export type RootStackParamList = {
   Home: undefined;
@@ -25,8 +26,9 @@ export type RootStackParamList = {
   NewWorkerScan: undefined;
   NewWorkerDetails: { ocrFields: OcrFields };
   WorkerCompliance: { workerId: number; workerName: string; workerDob: string | null };
+  WorkerAttendance: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
   WorkerEdit: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
-  WageProfile: { workerId: number; workerName: string };
+  WageProfile: { workerId: number; workerName: string; fromRegistration?: boolean };
   ShiftSettings: undefined;
   StatutoryForms: undefined;
   Report: undefined;
@@ -59,7 +61,7 @@ export default function RootNavigator() {
           headerTintColor: colors.teal,
         }}
       >
-        <Stack.Screen name="Home" component={HomeScreen} options={{ title: "Labour Lens" }} />
+        <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Labour Attendance" }} />
         <Stack.Screen name="AttendanceRange" component={AttendanceRangeScreen} options={{ title: "Edit Multiple Days" }} />
         <Stack.Screen name="NewWorkerScan" component={NewWorkerScanScreen} options={{ title: "New Worker" }} />
@@ -73,7 +75,8 @@ export default function RootNavigator() {
           component={WorkerComplianceScreen}
           options={{ title: "Form 12 Details" }}
         />
-        <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ title: "Worker" }} />
+        <Stack.Screen name="WorkerAttendance" component={WorkerAttendanceScreen} options={{ title: "Worker" }} />
+        <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ title: "Edit Worker" }} />
         <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ title: "Wage Rate" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="StatutoryForms" component={StatutoryFormsScreen} options={{ title: "Forms & Reports" }} />

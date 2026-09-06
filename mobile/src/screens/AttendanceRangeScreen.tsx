@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   Attendance,
   AttendanceSlot,
@@ -18,21 +18,12 @@ import {
   markAttendance,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
+import ShiftAttendanceRow from "../components/ShiftAttendanceRow";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AttendanceRange">;
-
-// Same three-way cycle as the Dashboard's single-day chips (present ->
-// leave -> absent), duplicated rather than shared so this screen can't
-// accidentally destabilize the single-day Dashboard, which has already
-// been through several rounds of real-device testing.
-const NEXT_STATUS: Record<AttendanceStatus, AttendanceStatus> = {
-  present: "leave",
-  leave: "absent",
-  absent: "present",
-};
 
 const MAX_RANGE_DAYS = 31;
 
@@ -120,19 +111,27 @@ function DayBlock({ token, date, workers, shifts }: { token: string; date: strin
     }
   }
 
-  async function handleToggle(worker: Worker, slot: AttendanceSlot) {
+  async function handleSetStatus(worker: Worker, slot: AttendanceSlot, status: AttendanceStatus) {
     const key = `${worker.id}:${slot}`;
     const current = attendanceByWorkerSlot.get(key);
-    const nextStatus = current ? NEXT_STATUS[current.status] : "present";
     try {
-      const updated = await markAttendance(token, worker.id, date, slot, nextStatus, current?.overtime_hours ?? 0);
+      const updated = await markAttendance(token, worker.id, date, slot, status, current?.overtime_hours ?? 0);
       const attendanceAfter = [...attendance.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated];
       setAttendance(attendanceAfter);
-      if (nextStatus === "leave" || current?.status === "leave") {
+      if (status === "leave" || current?.status === "leave") {
         await syncDayLeave(worker, attendanceAfter.filter((a) => a.worker_id === worker.id));
       }
     } catch {
       Alert.alert("Could not update attendance", `Please try again (${formatDateLabel(date)}).`);
+    }
+  }
+
+  async function handleSetOtHours(worker: Worker, slot: AttendanceSlot, hours: number) {
+    try {
+      const updated = await markAttendance(token, worker.id, date, slot, "present", hours);
+      setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated]);
+    } catch {
+      Alert.alert("Could not update overtime", `Please try again (${formatDateLabel(date)}).`);
     }
   }
 
@@ -145,40 +144,13 @@ function DayBlock({ token, date, workers, shifts }: { token: string; date: strin
         workers.map((worker) => (
           <View key={worker.id} style={styles.workerRow}>
             <Text style={styles.workerName}>{worker.name}</Text>
-            <View style={styles.chipRow}>
-              {shifts.map((shift) => {
-                const rec = attendanceByWorkerSlot.get(`${worker.id}:${shift.slot_key}`);
-                const status = rec?.status;
-                const chipStyle =
-                  status === "present"
-                    ? styles.chipPresent
-                    : status === "leave"
-                    ? styles.chipLeave
-                    : status === "absent"
-                    ? styles.chipAbsent
-                    : styles.chipUnmarked;
-                const chipTextStyle =
-                  status === "present"
-                    ? styles.chipTextPresent
-                    : status === "leave"
-                    ? styles.chipTextLeave
-                    : status === "absent"
-                    ? styles.chipTextAbsent
-                    : styles.chipTextUnmarked;
-                const mark = status === "present" ? "P" : status === "leave" ? "L" : status === "absent" ? "A" : "–";
-                return (
-                  <TouchableOpacity
-                    key={shift.slot_key}
-                    style={[styles.chip, chipStyle]}
-                    onPress={() => handleToggle(worker, shift.slot_key)}
-                  >
-                    <Text style={[styles.chipText, chipTextStyle]}>
-                      {shift.label} · {mark}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <ShiftAttendanceRow
+              shifts={shifts}
+              getStatus={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.status}
+              getOtHours={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.overtime_hours ?? 0}
+              onSetStatus={(slotKey, status) => handleSetStatus(worker, slotKey, status)}
+              onSetOtHours={(slotKey, hours) => handleSetOtHours(worker, slotKey, hours)}
+            />
           </View>
         ))
       )}
@@ -271,15 +243,4 @@ const styles = StyleSheet.create({
   dayTitle: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
   workerRow: { marginBottom: spacing.sm },
   workerName: { fontSize: 13, fontWeight: "600", color: colors.navy, marginBottom: 4 },
-  chipRow: { flexDirection: "row", gap: spacing.xs, flexWrap: "wrap" },
-  chip: { flexGrow: 1, flexBasis: "30%", borderRadius: 6, paddingVertical: spacing.xs + 2, alignItems: "center", backgroundColor: colors.white },
-  chipUnmarked: { backgroundColor: colors.white },
-  chipPresent: { backgroundColor: colors.tealLight },
-  chipAbsent: { backgroundColor: colors.dangerLight },
-  chipLeave: { backgroundColor: "#FFF8EC" },
-  chipText: { fontSize: 11, fontWeight: "700" },
-  chipTextUnmarked: { color: colors.muted },
-  chipTextPresent: { color: "#0F6E56" },
-  chipTextAbsent: { color: "#993C1D" },
-  chipTextLeave: { color: "#8A5A14" },
 });

@@ -30,14 +30,16 @@ type Props = NativeStackScreenProps<RootStackParamList, "ShiftSettings">;
 // screen doubles as the factory-profile editor too, rather than adding a
 // second new screen just for two fields.
 export default function ShiftSettingsScreen({}: Props) {
-  const { token, owner } = useAuth();
+  const { token, owner, updateOwner } = useAuth();
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [factoryName, setFactoryName] = useState(owner?.factory_name ?? "");
   const [factoryAddress, setFactoryAddress] = useState(owner?.factory_address ?? "");
   const [factoryLicenceNo, setFactoryLicenceNo] = useState(owner?.factory_licence_no ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
 
+  const [showAddForm, setShowAddForm] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newStart, setNewStart] = useState("");
   const [newEnd, setNewEnd] = useState("");
@@ -59,9 +61,19 @@ export default function ShiftSettingsScreen({}: Props) {
 
   async function handleSaveProfile() {
     if (!token) return;
+    if (!factoryName.trim()) {
+      Alert.alert("Factory name required", "This is the name shown on your Home screen and every statutory form.");
+      return;
+    }
     setSavingProfile(true);
     try {
-      await updateFactoryProfile(token, factoryAddress.trim() || undefined, factoryLicenceNo.trim() || undefined);
+      const updated = await updateFactoryProfile(
+        token,
+        factoryName.trim(),
+        factoryAddress.trim() || undefined,
+        factoryLicenceNo.trim() || undefined,
+      );
+      await updateOwner(updated);
       Alert.alert("Saved", "Factory profile updated.");
     } catch (e: any) {
       Alert.alert("Could not save", e?.message ?? "Please try again.");
@@ -94,6 +106,7 @@ export default function ShiftSettingsScreen({}: Props) {
       setNewStart("");
       setNewEnd("");
       setNewRestInterval("");
+      setShowAddForm(false);
       await load();
     } catch (e: any) {
       Alert.alert("Could not add shift", e?.message ?? "Please try again.");
@@ -135,6 +148,14 @@ export default function ShiftSettingsScreen({}: Props) {
   return (
     <KeyboardScreen style={styles.container} contentContainerStyle={{ padding: spacing.md }}>
       <Text style={styles.sectionLabel}>Factory profile</Text>
+      <Text style={styles.label}>Factory name</Text>
+      <TextInput
+        style={styles.input}
+        value={factoryName}
+        onChangeText={setFactoryName}
+        placeholder="Your factory's name"
+        placeholderTextColor={colors.muted}
+      />
       <Text style={styles.label}>Factory address</Text>
       <TextInput
         style={styles.input}
@@ -183,28 +204,54 @@ export default function ShiftSettingsScreen({}: Props) {
         </View>
       ))}
 
-      <Text style={[styles.label, { marginTop: spacing.md }]}>Add a shift</Text>
-      <TextInput
-        style={styles.input}
-        value={newLabel}
-        onChangeText={setNewLabel}
-        placeholder="Shift name, e.g. Night"
-        placeholderTextColor={colors.muted}
-      />
-      <View style={styles.timeRow}>
-        <TimeField label="Start time" value={newStart} onChange={setNewStart} />
-        <TimeField label="End time" value={newEnd} onChange={setNewEnd} />
-      </View>
-      <TextInput
-        style={styles.input}
-        value={newRestInterval}
-        onChangeText={setNewRestInterval}
-        placeholder="Rest interval, e.g. 1:00 PM - 1:30 PM"
-        placeholderTextColor={colors.muted}
-      />
-      <TouchableOpacity style={[styles.button, adding && styles.buttonDisabled]} onPress={handleAddShift} disabled={adding}>
-        {adding ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Add shift</Text>}
-      </TouchableOpacity>
+      {showAddForm ? (
+        <>
+          <Text style={[styles.label, { marginTop: spacing.md }]}>Add a shift</Text>
+          <TextInput
+            style={styles.input}
+            value={newLabel}
+            onChangeText={setNewLabel}
+            placeholder="Shift name, e.g. Night"
+            placeholderTextColor={colors.muted}
+          />
+          <View style={styles.timeRow}>
+            <TimeField label="Start time" value={newStart} onChange={setNewStart} />
+            <TimeField label="End time" value={newEnd} onChange={setNewEnd} />
+          </View>
+          <TextInput
+            style={styles.input}
+            value={newRestInterval}
+            onChangeText={setNewRestInterval}
+            placeholder="Rest interval, e.g. 1:00 PM - 1:30 PM"
+            placeholderTextColor={colors.muted}
+          />
+          <View style={styles.addFormButtonRow}>
+            <TouchableOpacity
+              style={styles.cancelAddButton}
+              onPress={() => {
+                setShowAddForm(false);
+                setNewLabel("");
+                setNewStart("");
+                setNewEnd("");
+                setNewRestInterval("");
+              }}
+            >
+              <Text style={styles.cancelAddButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.addFormButton, adding && styles.buttonDisabled]}
+              onPress={handleAddShift}
+              disabled={adding}
+            >
+              {adding ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Add shift</Text>}
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <TouchableOpacity style={[styles.button, { marginTop: spacing.md }]} onPress={() => setShowAddForm(true)}>
+          <Text style={styles.buttonText}>+ Add Shift</Text>
+        </TouchableOpacity>
+      )}
     </KeyboardScreen>
   );
 }
@@ -233,6 +280,10 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+  addFormButtonRow: { flexDirection: "row", gap: spacing.sm },
+  addFormButton: { flex: 1 },
+  cancelAddButton: { flex: 1, paddingVertical: spacing.sm + 4, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg, marginTop: spacing.md },
+  cancelAddButtonText: { color: colors.muted, fontSize: 14, fontWeight: "700" },
   shiftRow: {
     flexDirection: "row",
     alignItems: "center",

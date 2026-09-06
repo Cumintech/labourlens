@@ -12,6 +12,7 @@ type AuthContextValue = {
   login: (mobile: string, password: string) => Promise<void>;
   signup: (name: string, mobile: string, password: string, factoryName: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateOwner: (updated: Owner) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -56,6 +57,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setOwner(res.owner);
   }
 
+  // The factory-profile screen returns the updated Owner directly from
+  // the API response -- this just puts it back into the cached session
+  // so the Home screen's factory name updates immediately instead of
+  // needing a logout/login to pick up the change.
+  async function updateOwner(updated: Owner) {
+    await AsyncStorage.setItem(OWNER_KEY, JSON.stringify(updated));
+    setOwner(updated);
+  }
+
   async function logout() {
     await AsyncStorage.multiRemove([TOKEN_KEY, OWNER_KEY]);
     setToken(null);
@@ -72,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, owner, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ token, owner, loading, login, signup, logout, updateOwner }}>
       {children}
     </AuthContext.Provider>
   );

@@ -314,6 +314,37 @@ def compute_wage(db: Session, owner_id: int, worker_id: int, month: int, year: i
     }
 
 
+def compute_daily_wage(db: Session, worker_id: int, target_date: date) -> dict:
+    """Cost of one worker for one specific day -- the daily-equivalent
+    rate (looked up as of that date) plus that day's own OT wages. Not
+    a slice of compute_wage()'s monthly figure: PF/ESI/LWF are monthly
+    deductions with no meaningful per-day equivalent, so this is a
+    simpler, day-scoped cost for a quick cash-flow glance, not a
+    substitute for the statutory monthly wage register."""
+    rate = _wage_rate_as_of(db, worker_id, target_date)
+    if rate is None:
+        return {"present": False, "has_rate": False, "daily_cost": 0.0}
+
+    present_today = (
+        db.query(models.Attendance)
+        .filter(
+            models.Attendance.worker_id == worker_id,
+            models.Attendance.date == target_date,
+            models.Attendance.status == "present",
+        )
+        .all()
+    )
+    if not present_today:
+        return {"present": False, "has_rate": True, "daily_cost": 0.0}
+
+    days_in_month = calendar.monthrange(target_date.year, target_date.month)[1]
+    daily_rate = rate.basic if rate.rate_type == "daily" else rate.basic / days_in_month
+    hourly_rate = daily_rate / STANDARD_DAILY_HOURS
+    ot_hours = sum(r.overtime_hours or 0 for r in present_today)
+    ot_wages = ot_hours * hourly_rate * OT_MULTIPLIER
+    return {"present": True, "has_rate": True, "daily_cost": daily_rate + ot_wages}
+
+
 def _header_elements(owner: models.Owner, styles, form_title: str, period_label: str | None = None) -> list:
     elements = [Paragraph(form_title, styles["Title"])]
     elements.append(Paragraph(owner.factory_name, styles["Normal"]))
@@ -556,14 +587,44 @@ def build_form25(db: Session, owner: models.Owner, month: int, year: int, format
 # --------------------------------------------------------------------------
 
 
+def _form25b_day_block(rows: list[dict], shifts: dict[str, models.ShiftConfig]) -> list[list[str]]:
+    """One half of the real form's day grid: Date, Time of Arrival
+    (AM/PM), OT Hrs worked, Total Worked Hours, INL (Interval). AM/PM
+    here means the two halves of a single day's arrival time, matching
+    the scanned form's own header -- filled from whichever shift(s) the
+    worker was actually marked present in that day, not a fixed literal
+    shift name (this app's shifts are owner-configurable)."""
+    block = [["Date", "AM", "PM", "OT Hrs<br/>worked", "Total<br/>Worked<br/>Hours", "INL"]]
+    for r in rows:
+        used = [shifts[s] for s in r["slots_present"] if s in shifts]
+        am_times = [s.start_time for s in used if s.start_time and s.start_time < "12:00"]
+        pm_times = [s.start_time for s in used if s.start_time and s.start_time >= "12:00"]
+        interval = ", ".join(s.rest_interval for s in used if s.rest_interval) or "-"
+        block.append(
+            [
+                str(r["date"].day),
+                ", ".join(am_times) or "-",
+                ", ".join(pm_times) or "-",
+                f"{r['ot_hours']:.1f}" if r["ot_hours"] else "-",
+                f"{r['total_hours']:.1f}" if r["present"] else "-",
+                interval,
+            ]
+        )
+    return block
+
+
 def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month: int, year: int, format: str) -> tuple[bytes, str, str]:
-    """Field order follows Form 25-B's own field list: the header block
-    (factory, licence, worker, father's name, ticket/token no.,
-    designation, date of entry), a day-wise table (date, in/out time,
-    rest interval, OT hours, total hours), then the four monthly
-    summary counts and the manager's signature line. No scanned copy of
-    this form was provided (only Form 12/25/15/Wage Slip were), so this
-    matches the field list rather than a pixel-exact layout."""
+    """Matches the real scanned Form 25-B exactly: page 1 is the day-wise
+    time grid (Date / Time of Arrival AM+PM / OT Hrs worked / Total
+    Worked Hours / INL), split into two 16-day blocks side by side, the
+    same layout as the real form; page 2 is the header block (factory,
+    licence, worker, father's name, ticket/token no., designation, date
+    of entry, days attendance) plus "Additional Particulars" (days
+    absent, days of leave granted with wages, days counted for wages
+    incl. weekly holidays) and the manager's signature line -- in that
+    order, because that's the order the real form's two pages are in,
+    not the reverse (identity-first) order this used before a real
+    scanned copy was available."""
     start_date, end_date = _month_date_range(month, year)
     shifts = _shift_map(db, owner.id)
     compliance = db.query(models.WorkerCompliance).filter(models.WorkerCompliance.worker_id == worker.id).first()
@@ -571,46 +632,37 @@ def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month
     summary = _summarize_month(rows)
     period_label = f"{start_date.isoformat()} to {end_date.isoformat()}"
 
-    table_data = [["Date", "In Time", "Out Time", "Interval", "OT Hours Worked", "Total Hours Worked"]]
-    for r in rows:
-        used = [shifts[s] for s in r["slots_present"] if s in shifts]
-        table_data.append(
-            [
-                r["date"].isoformat(),
-                ", ".join(s.start_time for s in used if s.start_time) or "-",
-                ", ".join(s.end_time for s in used if s.end_time) or "-",
-                ", ".join(s.rest_interval for s in used if s.rest_interval) or "-",
-                f"{r['ot_hours']:.1f}",
-                f"{r['total_hours']:.1f}",
-            ]
-        )
+    midpoint = (len(rows) + 1) // 2
+    left_block = _form25b_day_block(rows[:midpoint], shifts)
+    right_block = _form25b_day_block(rows[midpoint:], shifts)
 
     summary_rows = [
-        ("No. of Days Attendance During the Month", str(summary["days_worked"])),
-        ("No. of Days Absent", str(summary["days_absent"])),
-        ("No. of Days of Leave Granted with Wages", str(sum(1 for r in rows if r["paid_leave"]))),
-        ("No. of Days Counted for Wages Including Weekly Holidays", str(summary["counted_for_wages"])),
+        ("No. of days absent", str(summary["days_absent"])),
+        ("No. of days of leave granted with wages", str(sum(1 for r in rows if r["paid_leave"]))),
+        ("No. of days Counted for wages Inc. weekly Holidays", str(summary["counted_for_wages"])),
     ]
 
     if format == "excel":
         wb = Workbook()
         ws = wb.active
         ws.title = "Form 25-B"
-        ws.append([owner.factory_name, owner.factory_licence_no or "-", period_label])
+        ws.append([f"Time Card for the Month of {period_label}"])
+        ws.append([owner.factory_name, "Licence No.", owner.factory_licence_no or "-"])
+        ws.append(["Name of the Worker", worker.name])
+        ws.append(["Father's Name", compliance.father_or_spouse_name if compliance else "-"])
+        ws.append(["Ticket No or Token No.", compliance.worker_code if compliance else "-"])
+        ws.append(["Designation or Occupation", compliance.designation_or_nature_of_work if compliance else "-"])
         ws.append(
-            [
-                worker.name,
-                compliance.father_or_spouse_name if compliance else "-",
-                compliance.worker_code if compliance else "-",
-                compliance.designation_or_nature_of_work if compliance else "-",
-                compliance.date_of_joining.isoformat() if compliance and compliance.date_of_joining else "-",
-            ]
+            ["Date of Entry into Service", compliance.date_of_joining.isoformat() if compliance and compliance.date_of_joining else "-"]
         )
-        for row in table_data:
-            ws.append(row)
+        ws.append(["No. of days attendance during the month", str(summary["days_worked"])])
         ws.append([])
+        ws.append(["ADDITIONAL PARTICULARS"])
         for label, value in summary_rows:
             ws.append([label, value])
+        ws.append([])
+        for row in left_block + right_block:
+            ws.append(row)
         buf = io.BytesIO()
         wb.save(buf)
         return (
@@ -620,12 +672,31 @@ def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month
         )
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm, leftMargin=1 * cm, rightMargin=1 * cm)
     styles = getSampleStyleSheet()
-    elements = _header_elements(owner, styles, "Form 25-B -- Time Card", period_label)
+
+    # Page 1 -- the day grid, exactly as the real form has it: two
+    # 16-day blocks side by side, not one long column.
+    day_col_widths = [1.1 * cm, 1.6 * cm, 1.6 * cm, 1.4 * cm, 1.6 * cm, 1.3 * cm]
+    left_table = Table([_wrap_row(left_block[0], header=True)] + [_wrap_row(r) for r in left_block[1:]], colWidths=day_col_widths)
+    right_table = Table([_wrap_row(right_block[0], header=True)] + [_wrap_row(r) for r in right_block[1:]], colWidths=day_col_widths)
+    _style_table(left_table)
+    _style_table(right_table)
+    elements = [
+        Paragraph("Form No. 25-B (Additional Particulars)", styles["Title"]),
+        Paragraph(f"Time Card for the Month of {period_label}", styles["Normal"]),
+        Spacer(1, 0.3 * cm),
+    ]
+    side_by_side = Table([[left_table, right_table]], colWidths=[sum(day_col_widths) + 0.3 * cm] * 2)
+    side_by_side.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    elements.append(side_by_side)
+    elements.append(PageBreak())
+
+    # Page 2 -- identity block + Additional Particulars + signature.
+    elements.extend(_header_elements(owner, styles, "Form 25-B -- Time Card", period_label))
     elements.append(Paragraph(f"Name of the Worker: {worker.name}", styles["Normal"]))
     elements.append(Paragraph(f"Father's Name: {compliance.father_or_spouse_name if compliance else '-'}", styles["Normal"]))
-    elements.append(Paragraph(f"Ticket No. / Token No.: {compliance.worker_code if compliance else '-'}", styles["Normal"]))
+    elements.append(Paragraph(f"Ticket No. or Token No.: {compliance.worker_code if compliance else '-'}", styles["Normal"]))
     elements.append(
         Paragraph(f"Designation or Occupation: {compliance.designation_or_nature_of_work if compliance else '-'}", styles["Normal"])
     )
@@ -635,14 +706,14 @@ def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month
             styles["Normal"],
         )
     )
-    elements.append(Spacer(1, 0.3 * cm))
-    table = Table(table_data, repeatRows=1)
-    _style_table(table)
-    elements.append(table)
+    elements.append(
+        Paragraph(f"No. of days attendance during the month: {summary['days_worked']}", styles["Normal"])
+    )
     elements.append(Spacer(1, 0.4 * cm))
+    elements.append(Paragraph("ADDITIONAL PARTICULARS", styles["Heading3"]))
     for label, value in summary_rows:
         elements.append(Paragraph(f"{label}: {value}", styles["Normal"]))
-    elements.append(Spacer(1, 0.6 * cm))
+    elements.append(Spacer(1, 0.8 * cm))
     elements.append(Paragraph("Date & Signature of the Manager: ____________________", styles["Normal"]))
     doc.build(elements)
     return buf.getvalue(), "application/pdf", f"form25b_{worker.id}_{year}_{month:02d}.pdf"

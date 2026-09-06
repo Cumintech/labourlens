@@ -31,7 +31,9 @@
           "cameraPermission": "Labour Lens uses the camera to scan Aadhaar cards for worker registration."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-sharing",
+      "expo-status-bar"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 // expo-file-system's SDK 54 API is class-based (File/Directory/Paths) --
 // the old top-level FileSystem.downloadAsync()/cacheDirectory functions
 // were removed, not just renamed. Confirmed against the installed
@@ -23,7 +23,11 @@ import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 
-type Props = NativeStackScreenProps<RootStackParamList, "StatutoryForms">;
+// Registered both as a flat screen on the root stack ("StatutoryForms")
+// and as the Forms & Reports tab's content inside MainTabs -- it only
+// ever calls `navigation.navigate(...)`/`.goBack()` with no `route`
+// access, so a plain root-stack nav prop type covers both mount points.
+type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
 const FORM_OPTIONS: { code: FormCode; label: string; perWorker: boolean; hasPeriod: boolean }[] = [
   { code: "form25", label: "Form 25 — Muster Roll (all workers)", perWorker: false, hasPeriod: true },

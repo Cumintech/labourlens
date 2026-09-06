@@ -1,16 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import {
   Attendance,
   AttendanceSlot,
@@ -31,11 +22,23 @@ import {
   markAttendance,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
+import ShiftStatusLine from "../components/ShiftStatusLine";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Dashboard">;
+
+// A different accent per shift box, cycling if there are more shifts
+// than colors -- purely visual, so the summary row reads at a glance
+// instead of every shift looking identical.
+const SLOT_ACCENTS = [
+  { bg: colors.tealLight, fg: "#0F6E56" },
+  { bg: colors.skyBlueLight, fg: colors.skyBlue },
+  { bg: colors.amberLight, fg: "#8A5A14" },
+  { bg: colors.violetLight, fg: colors.violet },
+  { bg: colors.coralLight, fg: colors.coral },
+];
 
 // Local device date, not UTC -- "today" for attendance means the day the
 // owner is standing in, not the server's timezone.
@@ -62,7 +65,8 @@ export default function DashboardScreen({ navigation }: Props) {
   const [firstMissingWorker, setFirstMissingWorker] = useState<Worker | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [otDrafts, setOtDrafts] = useState<Record<string, string>>({});
+  const [statusTab, setStatusTab] = useState<"active" | "deactivated">("active");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -107,16 +111,6 @@ export default function DashboardScreen({ navigation }: Props) {
     return map;
   }, [leave]);
 
-  // Cycle order per shift: unmarked/absent -> present -> leave -> absent.
-  // Leave now lives on the shift chip itself (one state per shift) rather
-  // than a separate whole-day toggle, so it's impossible to have a shift
-  // both present and on-leave at once -- they're the same field.
-  const NEXT_STATUS: Record<AttendanceStatus, AttendanceStatus> = {
-    present: "leave",
-    leave: "absent",
-    absent: "present",
-  };
-
   // The statutory forms (Form 15/25/25-B) compute paid leave from the
   // day-level LeaveEntry table, not from Attendance rows directly -- so
   // every time a shift's leave state changes, the day's LeaveEntry is
@@ -144,16 +138,15 @@ export default function DashboardScreen({ navigation }: Props) {
     }
   }
 
-  async function handleToggle(worker: Worker, slot: AttendanceSlot) {
+  async function handleSetStatus(worker: Worker, slot: AttendanceSlot, status: AttendanceStatus) {
     if (!token) return;
     const key = `${worker.id}:${slot}`;
     const current = attendanceByWorkerSlot.get(key);
-    const nextStatus = current ? NEXT_STATUS[current.status] : "present";
     try {
-      const updated = await markAttendance(token, worker.id, selectedDate, slot, nextStatus, current?.overtime_hours ?? 0);
+      const updated = await markAttendance(token, worker.id, selectedDate, slot, status, current?.overtime_hours ?? 0);
       const attendanceAfter = [...attendance.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated];
       setAttendance(attendanceAfter);
-      if (nextStatus === "leave" || current?.status === "leave") {
+      if (status === "leave" || current?.status === "leave") {
         await syncDayLeave(
           worker,
           attendanceAfter.filter((a) => a.worker_id === worker.id),
@@ -165,18 +158,14 @@ export default function DashboardScreen({ navigation }: Props) {
     }
   }
 
-  async function handleOvertimeSubmit(worker: Worker, slot: AttendanceSlot) {
+  // Entering OT hours also marks the shift present -- there's no useful
+  // reading of "4 hours overtime, but otherwise not present that day".
+  async function handleSetOtHours(worker: Worker, slot: AttendanceSlot, hours: number) {
     if (!token) return;
-    const key = `${worker.id}:${slot}`;
-    const draft = otDrafts[key];
-    if (draft === undefined) return;
-    const hours = parseFloat(draft);
-    if (isNaN(hours) || hours < 0) return;
-    const current = attendanceByWorkerSlot.get(key);
-    if (!current || current.status !== "present") return;
     try {
       const updated = await markAttendance(token, worker.id, selectedDate, slot, "present", hours);
       setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated]);
+      setSummary(await getDashboard(token, selectedDate));
     } catch {
       Alert.alert("Could not update overtime", "Please try again.");
     }
@@ -205,6 +194,82 @@ export default function DashboardScreen({ navigation }: Props) {
     );
   }
 
+  // Sunday is treated as a default paid holiday -- the backend already
+  // counts every Sunday toward wages regardless of whether anyone marks
+  // attendance (see forms.py's _summarize_month), so this is purely
+  // about not making the owner tap through every worker on a day that's
+  // already correct by default.
+  const isSunday = new Date(selectedDate).getDay() === 0;
+
+  function handleBulkPresent() {
+    const activeCount = workers.filter((w) => w.status === "active").length;
+    const message = isSunday
+      ? "Today is Sunday, a default holiday -- wages are already counted for everyone without marking attendance. Mark all active workers present anyway?"
+      : `Mark all ${activeCount} active workers present, in every one of their shifts, for this day?`;
+    Alert.alert(isSunday ? "Sunday is a default holiday" : "Mark everyone present?", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Mark Present", onPress: doBulkPresent },
+    ]);
+  }
+
+  async function doBulkPresent() {
+    if (!token) return;
+    setBulkBusy(true);
+    try {
+      const activeWorkersNow = workers.filter((w) => w.status === "active");
+      await Promise.all(
+        activeWorkersNow.flatMap((worker) =>
+          shifts.map(async (shift) => {
+            const current = attendanceByWorkerSlot.get(`${worker.id}:${shift.slot_key}`);
+            if (current?.status === "present") return;
+            await markAttendance(token, worker.id, selectedDate, shift.slot_key, "present", current?.overtime_hours ?? 0);
+          }),
+        ),
+      );
+      await load();
+    } catch {
+      Alert.alert("Could not mark everyone present", "Some workers may not have been updated. Please check and try again.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function handleCopyYesterday() {
+    Alert.alert(
+      "Copy yesterday's attendance?",
+      "Copies every worker's shift status and overtime hours from yesterday to this day, overwriting anything already marked here.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Copy", onPress: doCopyYesterday },
+      ],
+    );
+  }
+
+  async function doCopyYesterday() {
+    if (!token) return;
+    setBulkBusy(true);
+    try {
+      const yesterday = addDays(selectedDate, -1);
+      const yesterdayAttendance = await listAttendance(token, yesterday);
+      const updated = await Promise.all(
+        yesterdayAttendance.map((a) => markAttendance(token, a.worker_id, selectedDate, a.slot, a.status, a.overtime_hours)),
+      );
+      const byWorker = new Map<number, Attendance[]>();
+      for (const a of updated) {
+        byWorker.set(a.worker_id, [...(byWorker.get(a.worker_id) ?? []), a]);
+      }
+      for (const [workerId, records] of byWorker) {
+        const worker = workers.find((w) => w.id === workerId);
+        if (worker) await syncDayLeave(worker, records);
+      }
+      await load();
+    } catch {
+      Alert.alert("Could not copy yesterday's attendance", "Please try again.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   function handleMissingCompliancePress() {
     if (!firstMissingWorker) return;
     navigation.navigate("WorkerEdit", {
@@ -215,16 +280,11 @@ export default function DashboardScreen({ navigation }: Props) {
     });
   }
 
-  // Active workers first, deactivated ones pushed to the bottom -- a
-  // deactivated worker is rarely who the owner is looking for day to
-  // day, and shouldn't compete for attention above the active list.
-  // Array.prototype.sort is stable (guaranteed since ES2019, and Hermes
-  // -- RN's JS engine -- follows that), so within each group the
-  // original order (newest-registered first) is preserved.
-  const filtered = workers
-    .filter((w) => w.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => Number(a.status !== "active") - Number(b.status !== "active"));
-  const activeCount = workers.filter((w) => w.status === "active").length;
+  const activeWorkers = workers.filter((w) => w.status === "active");
+  const deactivatedWorkers = workers.filter((w) => w.status !== "active");
+  const filtered = (statusTab === "active" ? activeWorkers : deactivatedWorkers).filter((w) =>
+    w.name.toLowerCase().includes(search.toLowerCase()),
+  );
   const isToday = selectedDate === today;
 
   if (loading) {
@@ -244,12 +304,7 @@ export default function DashboardScreen({ navigation }: Props) {
       ListHeaderComponent={
         <View>
           <View style={styles.headerCard}>
-            <View style={styles.headerTopRow}>
-              <Text style={styles.factoryName}>{owner?.factory_name ?? "Dashboard"}</Text>
-              <TouchableOpacity onPress={() => navigation.navigate("ShiftSettings")}>
-                <Text style={styles.settingsLink}>Shifts & Profile</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.factoryName}>{owner?.factory_name ?? "Dashboard"}</Text>
 
             <View style={styles.dateNavRow}>
               <TouchableOpacity style={styles.dateNavButton} onPress={() => setSelectedDate((d) => addDays(d, -1))}>
@@ -275,6 +330,28 @@ export default function DashboardScreen({ navigation }: Props) {
               <Text style={styles.rangeLink}>Edit multiple days →</Text>
             </TouchableOpacity>
 
+            {isSunday && (
+              <View style={styles.sundayBanner}>
+                <Text style={styles.sundayBannerText}>
+                  🎉 Sunday is a default holiday -- wages are already counted for everyone. Mark a shift only if
+                  someone actually worked.
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.bulkRow}>
+              <TouchableOpacity style={styles.bulkButton} onPress={handleBulkPresent} disabled={bulkBusy}>
+                {bulkBusy ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Text style={styles.bulkButtonText}>✓ Mark All Present</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.bulkButtonGhost} onPress={handleCopyYesterday} disabled={bulkBusy}>
+                <Text style={styles.bulkButtonGhostText}>📋 Copy Yesterday</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.summaryCard}>
               <View style={styles.summaryTopRow}>
                 <Text style={styles.summaryNumber}>
@@ -283,14 +360,17 @@ export default function DashboardScreen({ navigation }: Props) {
                 <Text style={styles.summaryLabel}>present {isToday ? "today" : "this day"}</Text>
               </View>
               <View style={styles.slotRow}>
-                {(summary?.slots ?? []).map((s) => (
-                  <View key={s.slot} style={styles.slotBox}>
-                    <Text style={styles.slotBoxLabel}>{s.slot}</Text>
-                    <Text style={styles.slotBoxValue}>
-                      {s.present} / {s.total}
-                    </Text>
-                  </View>
-                ))}
+                {(summary?.slots ?? []).map((s, i) => {
+                  const accent = SLOT_ACCENTS[i % SLOT_ACCENTS.length];
+                  return (
+                    <View key={s.slot} style={[styles.slotBox, { backgroundColor: accent.bg }]}>
+                      <Text style={[styles.slotBoxLabel, { color: accent.fg }]}>{s.slot}</Text>
+                      <Text style={[styles.slotBoxValue, { color: accent.fg }]}>
+                        {s.present} / {s.total}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
           </View>
@@ -318,35 +398,39 @@ export default function DashboardScreen({ navigation }: Props) {
             />
           </View>
 
-          <View style={styles.sectionLabelWrap}>
-            <Text style={styles.sectionLabel}>Active Workers · {activeCount}</Text>
-            <View style={styles.headerLinks}>
-              <TouchableOpacity onPress={() => navigation.navigate("StatutoryForms")}>
-                <Text style={styles.reportLink}>Forms</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate("Report")}>
-                <Text style={styles.reportLink}>6-month report</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.statusTabRow}>
+            <TouchableOpacity
+              style={[styles.statusTab, statusTab === "active" && styles.statusTabActive]}
+              onPress={() => setStatusTab("active")}
+            >
+              <Text style={[styles.statusTabText, statusTab === "active" && styles.statusTabTextActive]}>
+                Active · {activeWorkers.length}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.statusTab, statusTab === "deactivated" && styles.statusTabActiveMuted]}
+              onPress={() => setStatusTab("deactivated")}
+            >
+              <Text style={[styles.statusTabText, statusTab === "deactivated" && styles.statusTabTextActiveMuted]}>
+                Deactivated · {deactivatedWorkers.length}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No workers match your search.</Text>}
-      renderItem={({ item, index }) => {
+      ListEmptyComponent={
+        <Text style={styles.empty}>
+          {statusTab === "active" ? "No active workers match your search." : "No deactivated workers."}
+        </Text>
+      }
+      renderItem={({ item }) => {
         const isActive = item.status === "active";
-        const isFirstDeactivated = !isActive && (index === 0 || filtered[index - 1].status === "active");
         return (
-          <View>
-          {isFirstDeactivated && (
-            <View style={styles.deactivatedDivider}>
-              <Text style={styles.deactivatedDividerText}>Deactivated</Text>
-            </View>
-          )}
           <View style={styles.row}>
             <View style={styles.rowTop}>
               <TouchableOpacity
                 onPress={() =>
-                  navigation.navigate("WorkerEdit", {
+                  navigation.navigate("WorkerAttendance", {
                     workerId: item.id,
                     workerName: item.name,
                     workerStatus: item.status,
@@ -370,65 +454,15 @@ export default function DashboardScreen({ navigation }: Props) {
               )}
             </View>
             {isActive && (
-              <View>
-                <View style={styles.chipRow}>
-                  {shifts.map((shift) => {
-                    const slot = shift.slot_key;
-                    const rec = attendanceByWorkerSlot.get(`${item.id}:${slot}`);
-                    const status = rec?.status;
-                    const chipStyle =
-                      status === "present"
-                        ? styles.chipPresent
-                        : status === "leave"
-                        ? styles.chipLeave
-                        : status === "absent"
-                        ? styles.chipAbsent
-                        : styles.chipUnmarked;
-                    const chipTextStyle =
-                      status === "present"
-                        ? styles.chipTextPresent
-                        : status === "leave"
-                        ? styles.chipTextLeave
-                        : status === "absent"
-                        ? styles.chipTextAbsent
-                        : styles.chipTextUnmarked;
-                    const mark = status === "present" ? "P" : status === "leave" ? "L" : status === "absent" ? "A" : "–";
-                    return (
-                      <TouchableOpacity key={slot} style={[styles.chip, chipStyle]} onPress={() => handleToggle(item, slot)}>
-                        <Text style={[styles.chipText, chipTextStyle]}>
-                          {shift.label} · {mark}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <View style={styles.otRow}>
-                  {shifts
-                    .filter((shift) => attendanceByWorkerSlot.get(`${item.id}:${shift.slot_key}`)?.status === "present")
-                    .map((shift) => {
-                      const slot = shift.slot_key;
-                      const key = `${item.id}:${slot}`;
-                      const rec = attendanceByWorkerSlot.get(key);
-                      const value = otDrafts[key] ?? (rec?.overtime_hours ? String(rec.overtime_hours) : "");
-                      return (
-                        <View key={slot} style={styles.otField}>
-                          <Text style={styles.otLabel}>{shift.label} OT hrs</Text>
-                          <TextInput
-                            style={styles.otInput}
-                            value={value}
-                            onChangeText={(text) => setOtDrafts((prev) => ({ ...prev, [key]: text }))}
-                            onEndEditing={() => handleOvertimeSubmit(item, slot)}
-                            keyboardType="numeric"
-                            placeholder="0"
-                            placeholderTextColor={colors.muted}
-                          />
-                        </View>
-                      );
-                    })}
-                </View>
-              </View>
+              <ShiftStatusLine
+                shifts={shifts}
+                isSunday={isSunday}
+                getStatus={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.status}
+                getOtHours={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.overtime_hours ?? 0}
+                onSetStatus={(slotKey, status) => handleSetStatus(item, slotKey, status)}
+                onSetOtHours={(slotKey, hours) => handleSetOtHours(item, slotKey, hours)}
+              />
             )}
-          </View>
           </View>
         );
       }}
@@ -439,9 +473,7 @@ export default function DashboardScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   headerCard: { backgroundColor: colors.navy, padding: spacing.md, paddingBottom: spacing.lg },
-  headerTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   factoryName: { color: colors.white, fontSize: 18, fontWeight: "700" },
-  settingsLink: { color: colors.tealPale, fontSize: 12, fontWeight: "700" },
   dateNavRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm },
   dateNavButton: {
     width: 32,
@@ -457,14 +489,47 @@ const styles = StyleSheet.create({
   todayLink: { paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.teal, borderRadius: radius.sm },
   todayLinkText: { color: colors.white, fontSize: 11, fontWeight: "700" },
   rangeLink: { color: colors.tealPale, fontSize: 12, fontWeight: "700", marginTop: spacing.sm },
+  sundayBanner: {
+    backgroundColor: "rgba(124,92,191,0.18)",
+    borderRadius: radius.sm,
+    padding: spacing.sm + 2,
+    marginTop: spacing.sm,
+  },
+  sundayBannerText: { color: colors.white, fontSize: 12, fontWeight: "600" },
+  bulkRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  bulkButton: {
+    flex: 1,
+    backgroundColor: colors.teal,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm + 4,
+    alignItems: "center",
+  },
+  bulkButtonText: { color: colors.white, fontSize: 13, fontWeight: "700" },
+  bulkButtonGhost: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm + 4,
+    alignItems: "center",
+  },
+  bulkButtonGhostText: { color: colors.white, fontSize: 13, fontWeight: "700" },
   summaryCard: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.sm + 6, marginTop: spacing.md },
   summaryTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   summaryNumber: { color: colors.navy, fontSize: 26, fontWeight: "700" },
   summaryLabel: { color: "#0F6E56", fontSize: 12, fontWeight: "700" },
   slotRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.sm, flexWrap: "wrap" },
-  slotBox: { flexGrow: 1, flexBasis: "30%", backgroundColor: colors.white, borderRadius: radius.sm, padding: spacing.xs + 4 },
-  slotBoxLabel: { color: colors.muted, fontSize: 11 },
-  slotBoxValue: { color: colors.navy, fontSize: 14, fontWeight: "700", marginTop: 2 },
+  slotBox: { flexGrow: 1, flexBasis: "30%", borderRadius: radius.sm, padding: spacing.xs + 4 },
+  slotBoxLabel: { fontSize: 11 },
+  slotBoxValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
+  addWorkerButton: {
+    backgroundColor: colors.teal,
+    borderRadius: radius.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm + 8,
+    alignItems: "center",
+  },
+  addWorkerButtonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
   complianceBanner: {
     backgroundColor: "#FFF8EC",
     borderColor: colors.amber,
@@ -484,64 +549,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.navy,
   },
-  sectionLabelWrap: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm + 4,
-    paddingBottom: spacing.xs,
-  },
-  sectionLabel: { color: colors.navy, fontSize: 13, fontWeight: "700" },
-  headerLinks: { flexDirection: "row", gap: spacing.md },
-  reportLink: { color: colors.teal, fontSize: 12, fontWeight: "700" },
-  addWorkerButton: {
-    backgroundColor: colors.teal,
-    borderRadius: radius.md,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    paddingVertical: spacing.sm + 6,
-    alignItems: "center",
-  },
-  addWorkerButtonText: { color: colors.white, fontSize: 15, fontWeight: "700" },
-  deactivatedDivider: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.xs },
-  deactivatedDividerText: { color: colors.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  statusTabRow: { flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.md },
+  statusTab: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: spacing.sm + 2, alignItems: "center" },
+  statusTabActive: { backgroundColor: colors.teal },
+  statusTabActiveMuted: { backgroundColor: colors.navy },
+  statusTabText: { fontSize: 13, fontWeight: "700", color: colors.muted },
+  statusTabTextActive: { color: colors.white },
+  statusTabTextActiveMuted: { color: colors.white },
   empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
   row: {
     backgroundColor: colors.fieldBg,
-    borderRadius: radius.sm,
-    padding: spacing.sm + 2,
+    borderRadius: radius.md,
+    padding: spacing.sm + 4,
     marginHorizontal: spacing.md,
-    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
   },
-  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  name: { fontSize: 14, fontWeight: "700", color: colors.navy },
+  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
+  name: { fontSize: 15, fontWeight: "700", color: colors.navy },
   meta: { fontSize: 11, color: colors.muted, marginTop: 1 },
   deactivateLink: { color: colors.danger, fontSize: 11, fontWeight: "700" },
   badge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
   badgeInactive: { backgroundColor: colors.muted },
   badgeText: { color: colors.white, fontSize: 10, fontWeight: "700" },
-  chipRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.sm, flexWrap: "wrap" },
-  chip: { flexGrow: 1, flexBasis: "30%", borderRadius: 6, paddingVertical: spacing.xs + 2, alignItems: "center" },
-  chipUnmarked: { backgroundColor: colors.white },
-  chipPresent: { backgroundColor: colors.tealLight },
-  chipAbsent: { backgroundColor: colors.dangerLight },
-  chipLeave: { backgroundColor: "#FFF8EC" },
-  chipText: { fontSize: 11, fontWeight: "700" },
-  chipTextUnmarked: { color: colors.muted },
-  chipTextPresent: { color: "#0F6E56" },
-  chipTextAbsent: { color: "#993C1D" },
-  chipTextLeave: { color: "#8A5A14" },
-  otRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.xs, flexWrap: "wrap" },
-  otField: { flexDirection: "row", alignItems: "center", gap: 4 },
-  otLabel: { fontSize: 10, color: colors.muted },
-  otInput: {
-    backgroundColor: colors.white,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    fontSize: 11,
-    color: colors.navy,
-    minWidth: 32,
-  },
 });

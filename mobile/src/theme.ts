@@ -18,6 +18,9 @@ export const colors = {
   skyBlueLight: "#E8F1FC",
   violet: "#7C5CBF",
   violetLight: "#F1ECFA",
+  amberLight: "#FFF3DC",
+  coral: "#E8664F",
+  coralLight: "#FCEAE6",
 } as const;
 
 export const spacing = {

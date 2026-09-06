@@ -19,13 +19,14 @@ export type Owner = {
 
 export function updateFactoryProfile(
   token: string,
+  factoryName: string | undefined,
   factoryAddress: string | undefined,
   factoryLicenceNo: string | undefined,
 ): Promise<Owner> {
   return request<Owner>("/owners/me/factory-profile", {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ factory_address: factoryAddress, factory_licence_no: factoryLicenceNo }),
+    body: JSON.stringify({ factory_name: factoryName, factory_address: factoryAddress, factory_licence_no: factoryLicenceNo }),
   });
 }
 
@@ -465,6 +466,18 @@ export function listLeaveForDate(token: string, date: string): Promise<LeaveEntr
   });
 }
 
+export function listWorkerLeaveRange(token: string, workerId: number, startDate: string, endDate: string): Promise<LeaveEntry[]> {
+  return request<LeaveEntry[]>(`/workers/${workerId}/leave?start_date=${startDate}&end_date=${endDate}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function listWorkerAttendanceMonth(token: string, workerId: number, month: number, year: number): Promise<Attendance[]> {
+  return request<Attendance[]>(`/workers/${workerId}/attendance-month?month=${month}&year=${year}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function deleteLeaveEntry(token: string, leaveId: number): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/leave/${leaveId}`, {
     method: "DELETE",
@@ -497,6 +510,69 @@ export function recordWagePayment(token: string, workerId: number, input: WagePa
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(input),
+  });
+}
+
+export type WorkerWage = {
+  worker_id: number;
+  worker_name: string;
+  has_rate: boolean;
+  days_worked: number;
+  gross_wage: number;
+  net_wage: number;
+  paid: boolean;
+  rate_amount: number;
+  rate_type: string;
+  basic_wage: number;
+  da: number;
+  hra: number;
+  other_allowances: number;
+  ot_wages: number;
+  leave_wages: number;
+  pf: number;
+  esi: number;
+  lwf: number;
+  total_deductions: number;
+};
+
+export type WageSummary = {
+  period_label: string;
+  total_workers: number;
+  total_gross: number;
+  total_net: number;
+  workers: WorkerWage[];
+};
+
+export function getWorkerWageComputation(token: string, workerId: number, month: number, year: number): Promise<WorkerWage> {
+  return request<WorkerWage>(`/workers/${workerId}/wage-computation?month=${month}&year=${year}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function getWageSummary(token: string, month: number, year: number): Promise<WageSummary> {
+  return request<WageSummary>(`/wage-summary?month=${month}&year=${year}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type DailyWorkerWage = {
+  worker_id: number;
+  worker_name: string;
+  has_rate: boolean;
+  present: boolean;
+  daily_cost: number;
+};
+
+export type DailyWageSummary = {
+  date: string;
+  total_workers_present: number;
+  total_daily_cost: number;
+  workers: DailyWorkerWage[];
+};
+
+export function getDailyWageSummary(token: string, date: string): Promise<DailyWageSummary> {
+  return request<DailyWageSummary>(`/wage-summary/daily?date=${date}`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
 }
 

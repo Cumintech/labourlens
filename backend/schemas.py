@@ -27,6 +27,7 @@ class OwnerOut(BaseModel):
 
 
 class FactoryProfileIn(BaseModel):
+    factory_name: str | None = None
     factory_address: str | None = None
     factory_licence_no: str | None = None
 
@@ -269,3 +270,50 @@ class WagePaymentOut(BaseModel):
     date_of_payment: date | None
     payment_reference: str | None
     created_at: datetime
+
+
+class WorkerWageOut(BaseModel):
+    worker_id: int
+    worker_name: str
+    has_rate: bool  # False = no WageProfile set yet, every figure below is 0
+    days_worked: float
+    gross_wage: float
+    net_wage: float
+    paid: bool
+    # Full breakdown -- same figures Form 15 prints, for the wage detail
+    # view. Zero (not omitted) when has_rate is False.
+    rate_amount: float = 0
+    rate_type: str = ""
+    basic_wage: float = 0
+    da: float = 0
+    hra: float = 0
+    other_allowances: float = 0
+    ot_wages: float = 0
+    leave_wages: float = 0
+    pf: float = 0
+    esi: float = 0
+    lwf: float = 0
+    total_deductions: float = 0
+
+
+class WageSummaryOut(BaseModel):
+    period_label: str
+    total_workers: int
+    total_gross: float
+    total_net: float
+    workers: list[WorkerWageOut]
+
+
+class DailyWorkerWageOut(BaseModel):
+    worker_id: int
+    worker_name: str
+    has_rate: bool
+    present: bool
+    daily_cost: float
+
+
+class DailyWageSummaryOut(BaseModel):
+    date: date
+    total_workers_present: int
+    total_daily_cost: float
+    workers: list[DailyWorkerWageOut]

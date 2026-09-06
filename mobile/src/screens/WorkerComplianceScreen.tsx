@@ -59,8 +59,11 @@ export default function WorkerComplianceScreen({ route, navigation }: Props) {
         fitness_cert_no: fitnessCertNo.trim() || undefined,
         fitness_cert_valid_till: fitnessCertValidTill.trim() || undefined,
       });
-      Alert.alert("Saved", `${workerName} has been registered.`);
-      navigation.popToTop();
+      // Wage rate used to be something the owner had to remember to go
+      // add later from the worker's own screen -- now it's the next
+      // step of registration itself (still skippable there if the rate
+      // isn't decided yet).
+      navigation.navigate("WageProfile", { workerId, workerName, fromRegistration: true });
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
       Alert.alert("Save failed", message);

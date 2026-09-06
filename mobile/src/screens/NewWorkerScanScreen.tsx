@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +21,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "NewWorkerScan">;
 
 export default function NewWorkerScanScreen({ navigation }: Props) {
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
   const [frontUri, setFrontUri] = useState<string | null>(null);
   const [backUri, setBackUri] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -59,7 +61,7 @@ export default function NewWorkerScanScreen({ navigation }: Props) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, { paddingBottom: spacing.xl + insets.bottom }]}>
       <Text style={styles.title}>New Worker</Text>
 
       <TouchableOpacity style={styles.scanBox} onPress={() => captureImage(setFrontUri)}>

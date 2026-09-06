@@ -1,5 +1,6 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useAppLock } from "../context/AppLockContext";
 import { useAuth } from "../context/AuthContext";
@@ -15,6 +16,7 @@ const PIN_PATTERN = /^\d{4}$/;
 export default function SettingsScreen({ navigation }: Props) {
   const { owner, logout } = useAuth();
   const { isPinSet, setPin, clearPin, verifyPin } = useAppLock();
+  const insets = useSafeAreaInsets();
 
   const [setPinModal, setSetPinModal] = useState(false);
   const [newPin, setNewPin] = useState("");
@@ -65,7 +67,7 @@ export default function SettingsScreen({ navigation }: Props) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}>
       <Text style={styles.title}>Settings</Text>
 
       <Text style={styles.sectionLabel}>Profile Info</Text>

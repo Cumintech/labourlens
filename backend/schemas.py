@@ -79,7 +79,25 @@ class WorkerOut(BaseModel):
     status: str
     deactivated_at: datetime | None
     deactivated_reason: str | None
+    worker_type_id: int | None
     created_at: datetime
+
+
+class WorkerTypeIn(BaseModel):
+    name: str
+    default_rate_type: str = "daily"  # "daily" | "monthly"
+    default_rate: float
+
+
+class WorkerTypeOut(BaseModel):
+    id: int
+    name: str
+    default_rate_type: str
+    default_rate: float
+
+
+class WorkerTypeAssignIn(BaseModel):
+    worker_type_id: int | None  # null clears the assignment
 
 
 class PortalCredentialIn(BaseModel):
@@ -257,7 +275,6 @@ class FormEmailIn(BaseModel):
     worker_id: int | None = None  # omit for factory-wide forms (form25, form15)
     month: int | None = None  # omit for form12 (one-time, no period)
     year: int | None = None
-    format: Literal["pdf", "excel"] = "pdf"
     recipient_email: str
 
 

@@ -3,22 +3,15 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 // the old top-level FileSystem.downloadAsync()/cacheDirectory functions
 // were removed, not just renamed. Confirmed against the installed
 // package's own type definitions rather than assumed from memory.
-import { Directory, File, Paths } from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { FormCode, FormFormat, Worker, emailForm, getFormDownloadUrl, listWorkers } from "../api/client";
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FormCode, Worker, emailForm, getFormDownloadUrl, listWorkers } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
+import SelectField from "../components/SelectField";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -37,17 +30,16 @@ const FORM_OPTIONS: { code: FormCode; label: string; perWorker: boolean; hasPeri
   { code: "wageslip", label: "Wage Slip", perWorker: true, hasPeriod: true },
 ];
 
-// Generic by design, per the owner's own request: pick any form, pick
-// any worker (when the form needs one), download or email it. Form 25
-// and Form 15 are factory-wide and never ask for a worker; Form 12 is
-// one-time and never asks for a period.
+// Generic by design, per the owner's own request: pick a period, pick a
+// form (dropdown, not a button list), pick a worker if the form needs
+// one, download or email it. PDF only -- Excel export was removed from
+// every form per explicit request.
 export default function StatutoryFormsScreen({ navigation }: Props) {
   const { token } = useAuth();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [formCode, setFormCode] = useState<FormCode>("form25");
   const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
   const [periodDate, setPeriodDate] = useState(isoDate(new Date()));
-  const [format, setFormat] = useState<FormFormat>("pdf");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [emailing, setEmailing] = useState(false);
@@ -80,18 +72,16 @@ export default function StatutoryFormsScreen({ navigation }: Props) {
         workerId: selectedWorkerId ?? undefined,
         month: formOption.hasPeriod ? month : undefined,
         year: formOption.hasPeriod ? year : undefined,
-        format,
       });
-      const extension = format === "pdf" ? "pdf" : "xlsx";
-      const destination = new File(Paths.cache, `${formCode}_${Date.now()}.${extension}`);
+      const destination = new File(Paths.cache, `${formCode}_${Date.now()}.pdf`);
       const downloaded = await File.downloadFileAsync(url, destination, {
         headers: { Authorization: `Bearer ${token}` },
         idempotent: true,
       });
       // downloadFileAsync doesn't surface an HTTP status code -- every
       // failure this backend can return is a small JSON body starting
-      // with "{", while a real PDF/Excel file never does, so that's the
-      // signal used to tell a failed download from a real one.
+      // with "{", while a real PDF never does, so that's the signal
+      // used to tell a failed download from a real one.
       const text = await downloaded.text().catch(() => "");
       if (text.trimStart().startsWith("{")) {
         let detail = "Download failed.";
@@ -128,7 +118,6 @@ export default function StatutoryFormsScreen({ navigation }: Props) {
         worker_id: selectedWorkerId ?? undefined,
         month: formOption.hasPeriod ? month : undefined,
         year: formOption.hasPeriod ? year : undefined,
-        format,
         recipient_email: recipientEmail.trim(),
       });
       Alert.alert("Sent", `${formOption.label} sent to ${recipientEmail.trim()}.`);
@@ -145,22 +134,20 @@ export default function StatutoryFormsScreen({ navigation }: Props) {
       <Text style={styles.subtitle}>Download or email any statutory form, for any worker, whenever it's needed.</Text>
 
       <Text style={styles.sectionLabel}>Report</Text>
-      <TouchableOpacity style={styles.formOption} onPress={() => navigation.navigate("Report")}>
-        <Text style={styles.formOptionText}>📊 Attendance Report — choose any period</Text>
+      <TouchableOpacity style={styles.reportLink} onPress={() => navigation.navigate("Report")}>
+        <Text style={styles.reportLinkText}>📊 Attendance Report — choose any period</Text>
       </TouchableOpacity>
 
+      <Text style={styles.sectionLabel}>Period</Text>
+      <DateField label="Any date in the target month" value={periodDate} onChange={setPeriodDate} disabled={!formOption.hasPeriod} />
+
       <Text style={styles.sectionLabel}>Form</Text>
-      {FORM_OPTIONS.map((option) => (
-        <TouchableOpacity
-          key={option.code}
-          style={[styles.formOption, formCode === option.code && styles.formOptionSelected]}
-          onPress={() => setFormCode(option.code)}
-        >
-          <Text style={[styles.formOptionText, formCode === option.code && styles.formOptionTextSelected]}>
-            {option.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
+      <SelectField
+        label=""
+        value={formCode}
+        options={FORM_OPTIONS.map((o) => ({ label: o.label, value: o.code }))}
+        onChange={(v) => setFormCode(v as FormCode)}
+      />
 
       {formOption.perWorker && (
         <>
@@ -168,44 +155,19 @@ export default function StatutoryFormsScreen({ navigation }: Props) {
           {workers.length === 0 ? (
             <Text style={styles.empty}>No workers yet.</Text>
           ) : (
-            workers.map((w) => (
-              <TouchableOpacity
-                key={w.id}
-                style={[styles.workerOption, selectedWorkerId === w.id && styles.workerOptionSelected]}
-                onPress={() => setSelectedWorkerId(w.id)}
-              >
-                <Text style={[styles.workerOptionText, selectedWorkerId === w.id && styles.workerOptionTextSelected]}>
-                  {w.name}
-                </Text>
-                <Text style={styles.workerOptionMeta}>•••• {w.aadhaar_last4}</Text>
-              </TouchableOpacity>
-            ))
+            <SelectField
+              label=""
+              value={selectedWorkerId !== null ? String(selectedWorkerId) : null}
+              options={workers.map((w) => ({ label: `${w.name} (•••• ${w.aadhaar_last4})`, value: String(w.id) }))}
+              onChange={(v) => setSelectedWorkerId(parseInt(v, 10))}
+              placeholder="Choose a worker"
+            />
           )}
         </>
       )}
 
-      {formOption.hasPeriod && (
-        <>
-          <Text style={styles.sectionLabel}>Period</Text>
-          <DateField label="Any date in the target month" value={periodDate} onChange={setPeriodDate} />
-        </>
-      )}
-
-      <Text style={styles.sectionLabel}>Format</Text>
-      <View style={styles.formatRow}>
-        {(["pdf", "excel"] as const).map((f) => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.formatOption, format === f && styles.formatOptionSelected]}
-            onPress={() => setFormat(f)}
-          >
-            <Text style={[styles.formatText, format === f && styles.formatTextSelected]}>{f.toUpperCase()}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       <TouchableOpacity style={[styles.button, downloading && styles.buttonDisabled]} onPress={handleDownload} disabled={downloading}>
-        {downloading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Download</Text>}
+        {downloading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Download PDF</Text>}
       </TouchableOpacity>
 
       <Text style={styles.sectionLabel}>Or email it</Text>
@@ -227,33 +189,13 @@ export default function StatutoryFormsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
+  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1, paddingBottom: spacing.xl * 2 },
   title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
   sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs, textTransform: "uppercase" },
   empty: { fontSize: 13, color: colors.muted },
-  formOption: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, marginBottom: spacing.xs },
-  formOptionSelected: { backgroundColor: colors.teal },
-  formOptionText: { fontSize: 14, fontWeight: "600", color: colors.navy },
-  formOptionTextSelected: { color: colors.white },
-  workerOption: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: colors.fieldBg,
-    borderRadius: radius.sm,
-    padding: 12,
-    marginBottom: spacing.xs,
-  },
-  workerOptionSelected: { backgroundColor: colors.tealLight },
-  workerOptionText: { fontSize: 14, fontWeight: "600", color: colors.navy },
-  workerOptionTextSelected: { color: "#0F6E56" },
-  workerOptionMeta: { fontSize: 11, color: colors.muted },
-  formatRow: { flexDirection: "row", gap: spacing.sm },
-  formatOption: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: 10, alignItems: "center" },
-  formatOptionSelected: { backgroundColor: colors.teal },
-  formatText: { fontSize: 13, fontWeight: "700", color: colors.navy },
-  formatTextSelected: { color: colors.white },
+  reportLink: { backgroundColor: colors.violetLight, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.sm },
+  reportLinkText: { color: colors.violet, fontSize: 13, fontWeight: "700" },
   input: {
     backgroundColor: colors.fieldBg,
     borderRadius: radius.sm,

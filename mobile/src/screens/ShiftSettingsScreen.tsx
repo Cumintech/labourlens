@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -18,7 +19,9 @@ import {
   updateFactoryProfile,
   updateShiftConfig,
 } from "../api/client";
+import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
+import { ListSkeleton } from "../components/Skeleton";
 import TimeField from "../components/TimeField";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -33,6 +36,8 @@ export default function ShiftSettingsScreen({}: Props) {
   const { token, owner, updateOwner } = useAuth();
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [factoryName, setFactoryName] = useState(owner?.factory_name ?? "");
   const [factoryAddress, setFactoryAddress] = useState(owner?.factory_address ?? "");
@@ -54,10 +59,23 @@ export default function ShiftSettingsScreen({}: Props) {
   useFocusEffect(
     useCallback(() => {
       load()
-        .catch(() => {})
+        .then(() => setLoadError(false))
+        .catch(() => setLoadError(true))
         .finally(() => setLoading(false));
     }, [load]),
   );
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+      setLoadError(false);
+    } catch {
+      // Keep whatever's already on screen -- see Dashboard's identical note.
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function handleSaveProfile() {
     if (!token) return;
@@ -140,13 +158,25 @@ export default function ShiftSettingsScreen({}: Props) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.teal} />
+        <ListSkeleton rows={3} variant="simple" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
       </View>
     );
   }
 
   return (
-    <KeyboardScreen style={styles.container} contentContainerStyle={{ padding: spacing.md }}>
+    <KeyboardScreen
+      style={styles.container}
+      contentContainerStyle={{ padding: spacing.md }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+    >
       <Text style={styles.sectionLabel}>Factory profile</Text>
       <Text style={styles.label}>Factory name</Text>
       <TextInput

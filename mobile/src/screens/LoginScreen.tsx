@@ -1,16 +1,8 @@
 import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import KeyboardScreen from "../components/KeyboardScreen";
 import { colors, radius, spacing } from "../theme";
 
 // Signing up was previously only possible via a raw API call -- every
@@ -49,10 +41,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <KeyboardScreen contentContainerStyle={styles.container}>
       <Text style={styles.title}>LABOUR LENS</Text>
 
       <View style={styles.modeRow}>
@@ -128,12 +117,12 @@ export default function LoginScreen() {
           <Text style={styles.buttonText}>{mode === "login" ? "Log In" : "Create Account"}</Text>
         )}
       </TouchableOpacity>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: spacing.lg, backgroundColor: colors.white },
+  container: { flexGrow: 1, justifyContent: "center", padding: spacing.lg, paddingBottom: spacing.xl * 2, backgroundColor: colors.white },
   title: {
     fontSize: 28,
     fontWeight: "700",

@@ -1,4 +1,5 @@
 import React from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView, StyleSheet, Text } from "react-native";
 import { colors, spacing } from "../theme";
 
@@ -8,8 +9,9 @@ import { colors, spacing } from "../theme";
 // everything else lives only on the owner's own backend, and nothing
 // is shared with any third party by this app.
 export default function PrivacyPolicyScreen() {
+  const insets = useSafeAreaInsets();
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}>
       <Text style={styles.title}>Privacy Policy</Text>
       <Text style={styles.updated}>Last updated: 2026</Text>
 

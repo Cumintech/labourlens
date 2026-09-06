@@ -119,8 +119,56 @@ export type Worker = {
   status: string;
   deactivated_at: string | null;
   deactivated_reason: string | null;
+  worker_type_id: number | null;
   created_at: string;
 };
+
+export type WorkerType = {
+  id: number;
+  name: string;
+  default_rate_type: "daily" | "monthly";
+  default_rate: number;
+};
+
+export function listWorkerTypes(token: string): Promise<WorkerType[]> {
+  return request<WorkerType[]>("/worker-types", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function createWorkerType(token: string, input: { name: string; default_rate_type: "daily" | "monthly"; default_rate: number }): Promise<WorkerType> {
+  return request<WorkerType>("/worker-types", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateWorkerType(
+  token: string,
+  id: number,
+  input: { name: string; default_rate_type: "daily" | "monthly"; default_rate: number },
+): Promise<WorkerType> {
+  return request<WorkerType>(`/worker-types/${id}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteWorkerType(token: string, id: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/worker-types/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) await throwForErrorResponse(res, "Request failed");
+}
+
+export function assignWorkerType(token: string, workerId: number, workerTypeId: number | null): Promise<Worker> {
+  return request<Worker>(`/workers/${workerId}/worker-type`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ worker_type_id: workerTypeId }),
+  });
+}
 
 export type WorkerCreateInput = {
   name: string;
@@ -176,6 +224,12 @@ export function createWorker(token: string, input: WorkerCreateInput): Promise<W
 
 export function listWorkers(token: string): Promise<Worker[]> {
   return request<Worker[]>("/workers", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function getWorker(token: string, workerId: number): Promise<Worker> {
+  return request<Worker>(`/workers/${workerId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -583,20 +637,19 @@ export function getDailyWageSummary(token: string, date: string): Promise<DailyW
 }
 
 export type FormCode = "form25" | "form25b" | "form12" | "form15" | "wageslip";
-export type FormFormat = "pdf" | "excel";
 
 // Generic download picker (any employee, any form) -- backs
 // StatutoryFormsScreen. Form 25, Form 15, and Form 12 are factory-wide
 // registers (no worker_id needed -- Form 12 is a running register of
 // every worker, matching the real government form, not a per-worker
 // sheet); Form 25-B and Wage Slip are per-worker. Form 12 carries no
-// month/year, it isn't period-scoped.
+// month/year, it isn't period-scoped. PDF only -- Excel export was
+// removed from every form per explicit request.
 export function getFormDownloadUrl(
   formCode: FormCode,
-  params: { workerId?: number; month?: number; year?: number; format: FormFormat },
+  params: { workerId?: number; month?: number; year?: number },
 ): string {
   const qs = new URLSearchParams();
-  qs.set("format", params.format);
   if (params.month) qs.set("month", String(params.month));
   if (params.year) qs.set("year", String(params.year));
 
@@ -609,7 +662,7 @@ export function getFormDownloadUrl(
 export function emailForm(
   token: string,
   formCode: FormCode,
-  input: { worker_id?: number; month?: number; year?: number; format: FormFormat; recipient_email: string },
+  input: { worker_id?: number; month?: number; year?: number; recipient_email: string },
 ): Promise<{ status: string }> {
   return request<{ status: string }>(`/forms/${formCode}/email`, {
     method: "POST",

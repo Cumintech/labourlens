@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import {
   DailyWageSummary,
   WageSummary,
@@ -11,6 +12,8 @@ import {
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import DonutChart from "../components/DonutChart";
+import ErrorState from "../components/ErrorState";
+import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { colors, radius, spacing } from "../theme";
 
@@ -40,6 +43,7 @@ type Row = { workerId: number; workerName: string; amount: number; hasRate: bool
 // screens individually.
 export default function WageCalculationScreen() {
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
   const today = useMemo(() => new Date(), []);
   const [mode, setMode] = useState<Mode>("monthly");
   const [date, setDate] = useState(todayString());
@@ -48,6 +52,8 @@ export default function WageCalculationScreen() {
   const [monthlySummary, setMonthlySummary] = useState<WageSummary | null>(null);
   const [dailySummary, setDailySummary] = useState<DailyWageSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [paymentTarget, setPaymentTarget] = useState<{ workerId: number; workerName: string } | null>(null);
   const [paymentDate, setPaymentDate] = useState(todayString());
@@ -69,10 +75,23 @@ export default function WageCalculationScreen() {
     useCallback(() => {
       setLoading(true);
       load()
-        .catch(() => {})
+        .then(() => setLoadError(false))
+        .catch(() => setLoadError(true))
         .finally(() => setLoading(false));
     }, [load]),
   );
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+      setLoadError(false);
+    } catch {
+      // Keep whatever's already on screen -- see Dashboard's identical note.
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   function changeMonth(delta: number) {
     let m = month + delta;
@@ -144,7 +163,15 @@ export default function WageCalculationScreen() {
   if (loading || !token) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.teal} />
+        <ListSkeleton rows={4} variant="simple" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
       </View>
     );
   }
@@ -155,7 +182,8 @@ export default function WageCalculationScreen() {
       style={styles.container}
       data={rows}
       keyExtractor={(r) => String(r.workerId)}
-      contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
+      contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl + insets.bottom }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
       ListHeaderComponent={
         <View>
           <Text style={styles.title}>Wage Calculation</Text>

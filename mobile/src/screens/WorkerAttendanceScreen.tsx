@@ -1,19 +1,27 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
   Attendance,
   AttendanceStatus,
+  LeaveEntry,
   ShiftConfig,
   WorkerWage,
+  createLeaveEntry,
   deactivateWorker,
+  deleteLeaveEntry,
   getWorkerWageComputation,
   listShiftConfigs,
   listWorkerAttendanceMonth,
+  listWorkerLeaveRange,
   markAttendance,
 } from "../api/client";
-import ShiftPresentAbsentRow from "../components/ShiftPresentAbsentRow";
+import DayAttendanceRow from "../components/DayAttendanceRow";
+import ErrorState from "../components/ErrorState";
+import OtHoursModal from "../components/OtHoursModal";
+import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -43,40 +51,77 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
   const { workerId, workerName, workerStatus, deactivatedAt } = route.params;
   const isActive = workerStatus === "active";
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear] = useState(today.getFullYear());
   const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [leave, setLeave] = useState<LeaveEntry[]>([]);
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
   const [wage, setWage] = useState<WorkerWage | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [otModalDate, setOtModalDate] = useState<string | null>(null);
+
+  const monthStart = `${year}-${pad(month)}-01`;
+  const monthEnd = `${year}-${pad(month)}-${pad(daysInMonth(month, year))}`;
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [a, s, w] = await Promise.all([
+    const [a, l, s, w] = await Promise.all([
       listWorkerAttendanceMonth(token, workerId, month, year),
+      listWorkerLeaveRange(token, workerId, monthStart, monthEnd),
       listShiftConfigs(token),
       getWorkerWageComputation(token, workerId, month, year),
     ]);
     setAttendance(a);
+    setLeave(l);
     setShifts(s);
     setWage(w);
-  }, [token, workerId, month, year]);
+  }, [token, workerId, month, year, monthStart, monthEnd]);
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
       load()
-        .catch(() => {})
+        .then(() => setLoadError(false))
+        .catch(() => setLoadError(true))
         .finally(() => setLoading(false));
     }, [load]),
   );
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+      setLoadError(false);
+    } catch {
+      // Keep whatever's already on screen -- see Dashboard's identical note.
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const attendanceByDateSlot = useMemo(() => {
     const map = new Map<string, Attendance>();
     for (const a of attendance) map.set(`${a.date}:${a.slot}`, a);
     return map;
   }, [attendance]);
+
+  function isDateOnLeave(dateStr: string): boolean {
+    return leave.some((l) => l.date_from <= dateStr && l.date_to >= dateStr);
+  }
+
+  function leaveEntryForDate(dateStr: string): LeaveEntry | undefined {
+    return leave.find((l) => l.date_from === dateStr && l.date_to === dateStr);
+  }
+
+  const canonicalOtShift = shifts[shifts.length - 1];
+
+  function getDayOtHours(dateStr: string): number {
+    return shifts.reduce((sum, s) => sum + (attendanceByDateSlot.get(`${dateStr}:${s.slot_key}`)?.overtime_hours ?? 0), 0);
+  }
 
   async function refreshWage() {
     if (!token) return;
@@ -94,17 +139,55 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
     try {
       const updated = await markAttendance(token, workerId, dateStr, slotKey, status, current?.overtime_hours ?? 0);
       setAttendance((prev) => [...prev.filter((a) => !(a.date === dateStr && a.slot === slotKey)), updated]);
+      if (status === "present") {
+        const existingLeave = leaveEntryForDate(dateStr);
+        if (existingLeave) {
+          await deleteLeaveEntry(token, existingLeave.id);
+          setLeave((prev) => prev.filter((l) => l.id !== existingLeave.id));
+        }
+      }
       await refreshWage();
     } catch {
       Alert.alert("Could not update attendance", "Please try again.");
     }
   }
 
-  async function handleSetOtHours(dateStr: string, slotKey: string, hours: number) {
+  async function handleToggleLeave(dateStr: string) {
     if (!token) return;
+    const existing = leaveEntryForDate(dateStr);
     try {
-      const updated = await markAttendance(token, workerId, dateStr, slotKey, "present", hours);
-      setAttendance((prev) => [...prev.filter((a) => !(a.date === dateStr && a.slot === slotKey)), updated]);
+      if (existing) {
+        await deleteLeaveEntry(token, existing.id);
+        setLeave((prev) => prev.filter((l) => l.id !== existing.id));
+      } else {
+        const presentShifts = shifts.filter((s) => attendanceByDateSlot.get(`${dateStr}:${s.slot_key}`)?.status === "present");
+        for (const shift of presentShifts) {
+          const cleared = await markAttendance(token, workerId, dateStr, shift.slot_key, "absent", 0);
+          setAttendance((prev) => [...prev.filter((a) => !(a.date === dateStr && a.slot === shift.slot_key)), cleared]);
+        }
+        const created = await createLeaveEntry(token, workerId, { leave_type: "earned", date_from: dateStr, date_to: dateStr, days: 1 });
+        setLeave((prev) => [...prev, created]);
+      }
+      await refreshWage();
+    } catch {
+      Alert.alert("Could not update leave", "Please try again.");
+    }
+  }
+
+  async function handleSetDayOt(dateStr: string, hours: number) {
+    if (!token || !canonicalOtShift) return;
+    try {
+      for (const shift of shifts) {
+        if (shift.slot_key === canonicalOtShift.slot_key) continue;
+        const current = attendanceByDateSlot.get(`${dateStr}:${shift.slot_key}`);
+        if (current && current.overtime_hours) {
+          const cleared = await markAttendance(token, workerId, dateStr, shift.slot_key, current.status, 0);
+          setAttendance((prev) => [...prev.filter((a) => !(a.date === dateStr && a.slot === shift.slot_key)), cleared]);
+        }
+      }
+      const currentCanonical = attendanceByDateSlot.get(`${dateStr}:${canonicalOtShift.slot_key}`);
+      const updated = await markAttendance(token, workerId, dateStr, canonicalOtShift.slot_key, currentCanonical?.status ?? "absent", hours);
+      setAttendance((prev) => [...prev.filter((a) => !(a.date === dateStr && a.slot === canonicalOtShift.slot_key)), updated]);
       await refreshWage();
     } catch {
       Alert.alert("Could not update overtime", "Please try again.");
@@ -161,132 +244,161 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
   const summary = useMemo(() => {
     let present = 0;
     let absent = 0;
+    let leaveDays = 0;
     let otHours = 0;
     for (const { dateStr } of days) {
       const dayRecords = attendance.filter((a) => a.date === dateStr);
       const isPresent = dayRecords.some((a) => a.status === "present");
+      const onLeave = isDateOnLeave(dateStr);
       if (isPresent) present += 1;
-      else absent += 1;
+      else if (onLeave) leaveDays += 1;
+      else if (dayRecords.length > 0) absent += 1;
       otHours += dayRecords.filter((a) => a.status === "present").reduce((sum, a) => sum + (a.overtime_hours || 0), 0);
     }
-    return { present, absent, otHours };
-  }, [days, attendance]);
+    return { present, absent, leaveDays, otHours };
+  }, [days, attendance, leave]);
 
   if (loading || !token) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.teal} />
+        <ListSkeleton rows={5} variant="simple" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
       </View>
     );
   }
 
   return (
-    <FlatList
-      style={styles.container}
-      data={days}
-      keyExtractor={(d) => d.dateStr}
-      contentContainerStyle={{ paddingBottom: spacing.xl }}
-      ListHeaderComponent={
-        <View>
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.workerName}>{workerName}</Text>
-              {!isActive && (
-                <Text style={styles.deactivatedText}>
-                  Deactivated{deactivatedAt ? ` · ${deactivatedAt.slice(0, 10)}` : ""}
-                </Text>
+    <>
+      <FlatList
+        style={styles.container}
+        data={days}
+        keyExtractor={(d) => d.dateStr}
+        contentContainerStyle={{ paddingBottom: spacing.xl * 2 + insets.bottom }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+        ListHeaderComponent={
+          <View>
+            <View style={styles.headerRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.workerName}>{workerName}</Text>
+                {!isActive && (
+                  <Text style={styles.deactivatedText}>
+                    Deactivated{deactivatedAt ? ` · ${deactivatedAt.slice(0, 10)}` : ""}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() =>
+                  navigation.navigate("WorkerEdit", { workerId, workerName, workerStatus, deactivatedAt })
+                }
+              >
+                <Text style={styles.editButtonText}>✎ Edit</Text>
+              </TouchableOpacity>
+              {isActive && (
+                <TouchableOpacity style={styles.deactivateButton} onPress={handleDeactivate}>
+                  <Text style={styles.deactivateButtonText}>Deactivate</Text>
+                </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() =>
-                navigation.navigate("WorkerEdit", { workerId, workerName, workerStatus, deactivatedAt })
-              }
-            >
-              <Text style={styles.editButtonText}>✎ Edit</Text>
-            </TouchableOpacity>
-            {isActive && (
-              <TouchableOpacity style={styles.deactivateButton} onPress={handleDeactivate}>
-                <Text style={styles.deactivateButtonText}>Deactivate</Text>
+
+            <View style={styles.monthRow}>
+              <TouchableOpacity style={styles.monthArrow} onPress={() => changeMonth(-1)}>
+                <Text style={styles.monthArrowText}>‹</Text>
               </TouchableOpacity>
-            )}
-          </View>
+              <Text style={styles.monthLabel}>
+                📅 {MONTH_NAMES[month - 1]} {year}
+              </Text>
+              <TouchableOpacity style={styles.monthArrow} onPress={() => changeMonth(1)}>
+                <Text style={styles.monthArrowText}>›</Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.monthRow}>
-            <TouchableOpacity style={styles.monthArrow} onPress={() => changeMonth(-1)}>
-              <Text style={styles.monthArrowText}>‹</Text>
-            </TouchableOpacity>
-            <Text style={styles.monthLabel}>
-              📅 {MONTH_NAMES[month - 1]} {year}
-            </Text>
-            <TouchableOpacity style={styles.monthArrow} onPress={() => changeMonth(1)}>
-              <Text style={styles.monthArrowText}>›</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.summaryRow}>
+              <View style={[styles.statCard, { backgroundColor: colors.tealLight }]}>
+                <Text style={[styles.statValue, { color: "#0F6E56" }]}>{summary.present}</Text>
+                <Text style={styles.statLabel}>Present</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.dangerLight }]}>
+                <Text style={[styles.statValue, { color: colors.danger }]}>{summary.absent}</Text>
+                <Text style={styles.statLabel}>Absent</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.amberLight }]}>
+                <Text style={[styles.statValue, { color: "#8A5A14" }]}>{summary.leaveDays}</Text>
+                <Text style={styles.statLabel}>Leave</Text>
+              </View>
+              <View style={[styles.statCard, { backgroundColor: colors.violetLight }]}>
+                <Text style={[styles.statValue, { color: colors.violet }]}>{summary.otHours}h</Text>
+                <Text style={styles.statLabel}>Overtime</Text>
+              </View>
+            </View>
 
-          <View style={styles.summaryRow}>
-            <View style={[styles.statCard, { backgroundColor: colors.tealLight }]}>
-              <Text style={[styles.statValue, { color: "#0F6E56" }]}>{summary.present}</Text>
-              <Text style={styles.statLabel}>Present</Text>
+            <View style={styles.wageCard}>
+              {wage && wage.has_rate ? (
+                <>
+                  <View style={styles.wageTopRow}>
+                    <Text style={styles.wageLabel}>Total Wages this month</Text>
+                    {wage.paid && (
+                      <View style={styles.paidBadge}>
+                        <Text style={styles.paidBadgeText}>Paid</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.wageValue}>₹{wage.net_wage.toFixed(2)}</Text>
+                  <Text style={styles.wageDetail}>
+                    Gross ₹{wage.gross_wage.toFixed(2)} · {wage.days_worked} day{wage.days_worked === 1 ? "" : "s"} worked
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.wageEmpty}>No wage rate set yet -- add one from Edit to see wages here.</Text>
+              )}
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.dangerLight }]}>
-              <Text style={[styles.statValue, { color: colors.danger }]}>{summary.absent}</Text>
-              <Text style={styles.statLabel}>Absent</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: colors.violetLight }]}>
-              <Text style={[styles.statValue, { color: colors.violet }]}>{summary.otHours}h</Text>
-              <Text style={styles.statLabel}>Overtime</Text>
-            </View>
-          </View>
 
-          <View style={styles.wageCard}>
-            {wage && wage.has_rate ? (
-              <>
-                <View style={styles.wageTopRow}>
-                  <Text style={styles.wageLabel}>Total Wages this month</Text>
-                  {wage.paid && (
-                    <View style={styles.paidBadge}>
-                      <Text style={styles.paidBadgeText}>Paid</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.wageValue}>₹{wage.net_wage.toFixed(2)}</Text>
-                <Text style={styles.wageDetail}>
-                  Gross ₹{wage.gross_wage.toFixed(2)} · {wage.days_worked} day{wage.days_worked === 1 ? "" : "s"} worked
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.wageEmpty}>No wage rate set yet -- add one from Edit to see wages here.</Text>
-            )}
-          </View>
-
-          <View style={styles.tableHeaderRow}>
-            <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
-            <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Attendance</Text>
-          </View>
-        </View>
-      }
-      renderItem={({ item }) => {
-        const isToday = item.dateStr === `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
-        return (
-          <View style={[styles.dayRow, isToday && styles.dayRowToday]}>
-            <View style={styles.dateCol}>
-              <Text style={styles.dateNumber}>{pad(item.day)}</Text>
-              <Text style={styles.dateWeekday}>{item.weekday}</Text>
-            </View>
-            <View style={styles.chipsCol}>
-              <ShiftPresentAbsentRow
-                shifts={shifts}
-                getStatus={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.status}
-                getOtHours={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.overtime_hours ?? 0}
-                onSetStatus={(slotKey, status) => handleSetStatus(item.dateStr, slotKey, status)}
-                onSetOtHours={(slotKey, hours) => handleSetOtHours(item.dateStr, slotKey, hours)}
-              />
+            <View style={styles.tableHeaderRow}>
+              <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
+              <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Attendance</Text>
             </View>
           </View>
-        );
-      }}
-    />
+        }
+        renderItem={({ item }) => {
+          const isToday = item.dateStr === `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+          return (
+            <View style={[styles.dayRow, isToday && styles.dayRowToday]}>
+              <View style={styles.dateCol}>
+                <Text style={styles.dateNumber}>{pad(item.day)}</Text>
+                <Text style={styles.dateWeekday}>{item.weekday}</Text>
+              </View>
+              <View style={styles.chipsCol}>
+                <DayAttendanceRow
+                  shifts={shifts}
+                  getShiftStatus={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.status}
+                  onSetShiftStatus={(slotKey, status) => handleSetStatus(item.dateStr, slotKey, status)}
+                  isOnLeave={isDateOnLeave(item.dateStr)}
+                  onToggleLeave={() => handleToggleLeave(item.dateStr)}
+                  otHours={getDayOtHours(item.dateStr)}
+                  onOpenOt={() => setOtModalDate(item.dateStr)}
+                />
+              </View>
+            </View>
+          );
+        }}
+      />
+      <OtHoursModal
+        visible={otModalDate !== null}
+        initialHours={otModalDate ? getDayOtHours(otModalDate) : 0}
+        onConfirm={async (hours) => {
+          if (otModalDate) await handleSetDayOt(otModalDate, hours);
+          setOtModalDate(null);
+        }}
+        onCancel={() => setOtModalDate(null)}
+      />
+    </>
   );
 }
 

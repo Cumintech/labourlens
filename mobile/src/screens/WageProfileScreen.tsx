@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -12,7 +13,9 @@ import {
 } from "react-native";
 import { ApiError, WageProfile, WageRateType, createWageProfile, getWageProfileHistory } from "../api/client";
 import DateField from "../components/DateField";
+import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
+import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -28,6 +31,8 @@ export default function WageProfileScreen({ route, navigation }: Props) {
   const { token } = useAuth();
   const [history, setHistory] = useState<WageProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [rateType, setRateType] = useState<WageRateType>("daily");
@@ -49,10 +54,23 @@ export default function WageProfileScreen({ route, navigation }: Props) {
     useCallback(() => {
       setLoading(true);
       load()
-        .catch(() => {})
+        .then(() => setLoadError(false))
+        .catch(() => setLoadError(true))
         .finally(() => setLoading(false));
     }, [load]),
   );
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+      setLoadError(false);
+    } catch {
+      // Keep whatever's already on screen -- see Dashboard's identical note.
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   function toNumber(v: string): number {
     const n = parseFloat(v);
@@ -102,13 +120,24 @@ export default function WageProfileScreen({ route, navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.teal} />
+        <ListSkeleton rows={2} variant="simple" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
       </View>
     );
   }
 
   return (
-    <KeyboardScreen contentContainerStyle={styles.container}>
+    <KeyboardScreen
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+    >
       <View style={styles.titleRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{workerName}</Text>

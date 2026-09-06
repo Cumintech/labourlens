@@ -1,8 +1,10 @@
 """Phase 3 Day 3 -- statutory form generation (Form 25, 25-B, 12, 15,
-Wage Slip). Sibling to reports.py, reusing its reportlab/openpyxl setup,
-but reports.py has no header/footer helper to reuse -- it's a single
-title Paragraph + one Table. _header_elements() below is new work, not
-a reuse of something that already existed.
+Wage Slip). All PDF only -- Excel export was removed from every one of
+these forms per explicit request; every build_* function below returns
+exactly one PDF, no format parameter. Sibling to reports.py, reusing
+its reportlab setup, but reports.py has no header/footer helper to
+reuse -- it's a single title Paragraph + one Table. _header_elements()
+below is new work, not a reuse of something that already existed.
 
 Form 25 and Form 15 are factory-wide registers (every worker as a row,
 one document per month) -- confirmed from the real Tamil Nadu form
@@ -19,7 +21,6 @@ import calendar
 import io
 from datetime import date, timedelta
 
-from openpyxl import Workbook
 from reportlab.lib import colors as pdf_colors
 from reportlab.lib.pagesizes import A3, A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -528,24 +529,9 @@ def _form25_table_data(db: Session, owner: models.Owner, month: int, year: int) 
     return table_data, start_date, end_date
 
 
-def build_form25(db: Session, owner: models.Owner, month: int, year: int, format: str) -> tuple[bytes, str, str]:
+def build_form25(db: Session, owner: models.Owner, month: int, year: int) -> tuple[bytes, str, str]:
     table_data, start_date, end_date = _form25_table_data(db, owner, month, year)
     period_label = f"{start_date.isoformat()} to {end_date.isoformat()}"
-
-    if format == "excel":
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Form 25"
-        ws.append([owner.factory_name, period_label])
-        for row in table_data:
-            ws.append(row)
-        buf = io.BytesIO()
-        wb.save(buf)
-        return (
-            buf.getvalue(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            f"form25_{year}_{month:02d}.xlsx",
-        )
 
     # Column widths -- without them reportlab auto-splits the page width
     # evenly across all ~45 columns, so even "Name of the Worker" ends up
@@ -613,7 +599,7 @@ def _form25b_day_block(rows: list[dict], shifts: dict[str, models.ShiftConfig]) 
     return block
 
 
-def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month: int, year: int, format: str) -> tuple[bytes, str, str]:
+def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month: int, year: int) -> tuple[bytes, str, str]:
     """Matches the real scanned Form 25-B exactly: page 1 is the day-wise
     time grid (Date / Time of Arrival AM+PM / OT Hrs worked / Total
     Worked Hours / INL), split into two 16-day blocks side by side, the
@@ -641,35 +627,6 @@ def build_form25b(db: Session, owner: models.Owner, worker: models.Worker, month
         ("No. of days of leave granted with wages", str(sum(1 for r in rows if r["paid_leave"]))),
         ("No. of days Counted for wages Inc. weekly Holidays", str(summary["counted_for_wages"])),
     ]
-
-    if format == "excel":
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Form 25-B"
-        ws.append([f"Time Card for the Month of {period_label}"])
-        ws.append([owner.factory_name, "Licence No.", owner.factory_licence_no or "-"])
-        ws.append(["Name of the Worker", worker.name])
-        ws.append(["Father's Name", compliance.father_or_spouse_name if compliance else "-"])
-        ws.append(["Ticket No or Token No.", compliance.worker_code if compliance else "-"])
-        ws.append(["Designation or Occupation", compliance.designation_or_nature_of_work if compliance else "-"])
-        ws.append(
-            ["Date of Entry into Service", compliance.date_of_joining.isoformat() if compliance and compliance.date_of_joining else "-"]
-        )
-        ws.append(["No. of days attendance during the month", str(summary["days_worked"])])
-        ws.append([])
-        ws.append(["ADDITIONAL PARTICULARS"])
-        for label, value in summary_rows:
-            ws.append([label, value])
-        ws.append([])
-        for row in left_block + right_block:
-            ws.append(row)
-        buf = io.BytesIO()
-        wb.save(buf)
-        return (
-            buf.getvalue(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            f"form25b_{worker.id}_{year}_{month:02d}.xlsx",
-        )
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm, leftMargin=1 * cm, rightMargin=1 * cm)
@@ -790,7 +747,7 @@ def _form12_row(worker: models.Worker, compliance: models.WorkerCompliance | Non
     ]
 
 
-def build_form12(db: Session, owner: models.Owner, format: str, worker: models.Worker | None = None) -> tuple[bytes, str, str]:
+def build_form12(db: Session, owner: models.Owner, worker: models.Worker | None = None) -> tuple[bytes, str, str]:
     """Form 12 -- Register of Adult Workers and Young Persons. The real
     government form is a running register (every worker who has ever
     been employed is a row, in registration order, never removed on
@@ -810,16 +767,6 @@ def build_form12(db: Session, owner: models.Owner, format: str, worker: models.W
         filename_suffix = ""
     table_data = [FORM12_HEADER] + rows
 
-    if format == "excel":
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Form 12"
-        ws.append([owner.factory_name, f"Registration No.: {owner.factory_licence_no or '-'}"])
-        for row in table_data:
-            ws.append(row)
-        buf = io.BytesIO()
-        wb.save(buf)
-        return buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", f"form12{filename_suffix}.xlsx"
 
     # Explicit widths (cm), one per column in FORM12_HEADER's order --
     # same reasoning as Form 25: unsized columns split the page evenly
@@ -885,7 +832,7 @@ FORM15_HEADER = [
 ]
 
 
-def build_form15(db: Session, owner: models.Owner, month: int, year: int, format: str) -> tuple[bytes, str, str]:
+def build_form15(db: Session, owner: models.Owner, month: int, year: int) -> tuple[bytes, str, str]:
     """Full 30-column layout per the real Form 15 -- Register of Leave
     with Wages (Part II). Advances and damages/fines ledgers aren't
     tracked anywhere in this app (see Non-goals) so those columns are
@@ -945,20 +892,6 @@ def build_form15(db: Session, owner: models.Owner, month: int, year: int, format
             ]
         )
 
-    if format == "excel":
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Form 15"
-        ws.append([owner.factory_name, period_label])
-        ws.append(
-            ["Men", counts["men"], "Women", counts["women"], "Male Adolescent", counts["male_adolescent"], "Female Adolescent", counts["female_adolescent"]]
-        )
-        for row in table_data:
-            ws.append(row)
-        buf = io.BytesIO()
-        wb.save(buf)
-        return buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", f"form15_{year}_{month:02d}.xlsx"
-
     # Explicit widths (cm), one per column in FORM15_HEADER's order --
     # same reasoning as Form 25/12.
     col_widths_cm = [
@@ -1005,7 +938,7 @@ def build_form15(db: Session, owner: models.Owner, month: int, year: int, format
 # --------------------------------------------------------------------------
 
 
-def build_wageslip(db: Session, owner: models.Owner, worker: models.Worker, month: int, year: int, format: str) -> tuple[bytes, str, str]:
+def build_wageslip(db: Session, owner: models.Owner, worker: models.Worker, month: int, year: int) -> tuple[bytes, str, str]:
     """Field order/labels follow the "Fields of Wage Slip" list exactly
     (the Tamil chit-style sample sent alongside it is a different,
     unrelated form and is intentionally not used as a reference here,
@@ -1038,17 +971,6 @@ def build_wageslip(db: Session, owner: models.Owner, worker: models.Worker, mont
                 wage["payment"].date_of_payment.isoformat() if wage["payment"] and wage["payment"].date_of_payment else "-",
             ],
         ]
-
-    if format == "excel":
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Wage Slip"
-        ws.append([owner.factory_name])
-        for row in rows:
-            ws.append(row)
-        buf = io.BytesIO()
-        wb.save(buf)
-        return buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", f"wageslip_{worker.id}_{year}_{month:02d}.xlsx"
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)

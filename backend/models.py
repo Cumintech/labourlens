@@ -24,6 +24,29 @@ class Owner(Base):
     )
 
 
+class WorkerType(Base):
+    """Wage Rate feature -- a factory-defined category (Skilled/Unskilled/
+    Helper, etc.) with a default rate. Assigning a type to a worker who has
+    no WageProfile yet auto-creates one from these defaults (see
+    _create_wage_profile_from_type in main.py); a worker who already has a
+    rate keeps it when assigned a type, since that rate IS their override.
+    Deliberately does NOT introduce a second wage-storage mechanism --
+    WageProfile stays the one source of truth compute_wage() reads."""
+
+    __tablename__ = "worker_types"
+    __table_args__ = (UniqueConstraint("owner_id", "name", name="uq_worker_type_owner_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # "daily" | "monthly" -- same convention as WageProfile.rate_type
+    default_rate_type: Mapped[str] = mapped_column(String, default="daily", nullable=False)
+    default_rate: Mapped[float] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Worker(Base):
     __tablename__ = "workers"
 
@@ -33,6 +56,7 @@ class Worker(Base):
     mobile: Mapped[str | None] = mapped_column(String, nullable=True)
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[str | None] = mapped_column(String, nullable=True)
+    worker_type_id: Mapped[int | None] = mapped_column(ForeignKey("worker_types.id"), nullable=True)
 
     # Plain last-4 for display ("•••• •••• 7412"); full number encrypted.
     aadhaar_last4: Mapped[str] = mapped_column(String(4), nullable=False)

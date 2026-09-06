@@ -1,4 +1,5 @@
 import React from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, radius, spacing } from "../theme";
 
@@ -21,13 +22,14 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "I forgot my App Lock PIN.",
-    a: "Log out and log back in with your mobile number and password -- this resets App Lock, and you can set a new PIN from Settings.",
+    a: 'On the PIN entry screen, tap "Forgot PIN?" -- this logs you out (you\'ll need your mobile number and password to log back in) and turns off App Lock, so you can set a new PIN from Settings afterward. A normal Settings logout does not reset App Lock.',
   },
 ];
 
 export default function HelpSupportScreen() {
+  const insets = useSafeAreaInsets();
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}>
       <Text style={styles.title}>Help & Support</Text>
 
       {FAQS.map((item) => (

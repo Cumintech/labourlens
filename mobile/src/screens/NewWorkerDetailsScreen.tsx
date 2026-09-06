@@ -10,10 +10,31 @@ import {
   View,
 } from "react-native";
 import { ApiError, createWorker } from "../api/client";
+import DateField from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
+import SelectField from "../components/SelectField";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+
+const GENDER_OPTIONS = [
+  { label: "Male", value: "Male" },
+  { label: "Female", value: "Female" },
+  { label: "Other", value: "Other" },
+];
+
+// OCR text doesn't reliably come back as exactly "Male"/"Female"/"Other"
+// (case, extra whitespace, or a single letter) -- normalize it onto one
+// of the three canonical values the dropdown offers, or drop it if it
+// doesn't match anything recognizable, rather than silently losing it
+// from view because it doesn't match any option's value.
+function normalizeGender(raw: string | null): string {
+  const g = (raw ?? "").trim().toLowerCase();
+  if (g.startsWith("m")) return "Male";
+  if (g.startsWith("f")) return "Female";
+  if (g) return "Other";
+  return "";
+}
 
 type Props = NativeStackScreenProps<RootStackParamList, "NewWorkerDetails">;
 
@@ -26,7 +47,7 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
 
   const [name, setName] = useState(ocrFields.name ?? "");
   const [dob, setDob] = useState(ocrFields.dob ?? "");
-  const [gender, setGender] = useState(ocrFields.gender ?? "");
+  const [gender, setGender] = useState(normalizeGender(ocrFields.gender));
   const [aadhaarNumber, setAadhaarNumber] = useState(ocrFields.aadhaar_number ?? "");
   const [currentAddress, setCurrentAddress] = useState(ocrFields.current_address ?? "");
   const [mobile, setMobile] = useState("");
@@ -80,14 +101,8 @@ export default function NewWorkerDetailsScreen({ route, navigation }: Props) {
 
       <Text style={styles.sectionLabelTeal}>From Aadhaar</Text>
       <Field label="Name" value={name} onChangeText={setName} needsReview={ocrMissed.name} />
-      <Field
-        label="Date of birth (YYYY-MM-DD)"
-        value={dob}
-        onChangeText={setDob}
-        needsReview={ocrMissed.dob}
-        placeholder="1985-03-14"
-      />
-      <Field label="Gender" value={gender} onChangeText={setGender} needsReview={ocrMissed.gender} />
+      <DateField label="Date of birth" value={dob} onChange={setDob} placeholder="Not found by scan, please select" />
+      <SelectField label="Gender" value={gender || null} options={GENDER_OPTIONS} onChange={setGender} placeholder="Not found by scan, please select" />
       <Field
         label="Aadhaar number"
         value={aadhaarNumber}

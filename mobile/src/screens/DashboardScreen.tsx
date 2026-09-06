@@ -1,7 +1,8 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import {
   Attendance,
   AttendanceSlot,
@@ -10,7 +11,9 @@ import {
   LeaveEntry,
   ShiftConfig,
   Worker,
+  createLeaveEntry,
   deactivateWorker,
+  deleteLeaveEntry,
   getDashboard,
   listAttendance,
   listLeaveForDate,
@@ -20,7 +23,10 @@ import {
   markAttendance,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
-import ShiftPresentAbsentRow from "../components/ShiftPresentAbsentRow";
+import DayAttendanceRow from "../components/DayAttendanceRow";
+import ErrorState from "../components/ErrorState";
+import OtHoursModal from "../components/OtHoursModal";
+import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -52,6 +58,7 @@ function addDays(dateStr: string, delta: number): string {
 
 export default function DashboardScreen({ navigation }: Props) {
   const { token, owner } = useAuth();
+  const insets = useSafeAreaInsets();
   const today = useMemo(todayString, []);
   const [selectedDate, setSelectedDate] = useState(today);
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -63,8 +70,14 @@ export default function DashboardScreen({ navigation }: Props) {
   const [firstMissingWorker, setFirstMissingWorker] = useState<Worker | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [statusTab, setStatusTab] = useState<"active" | "deactivated">("active");
   const [bulkBusy, setBulkBusy] = useState(false);
+  // A single shared OT popup instance for the whole screen, not one per
+  // row -- mounting a Modal inside every FlatList row was the likely
+  // cause of the reported "Attendance page isn't scrollable" bug.
+  const [otModalWorker, setOtModalWorker] = useState<Worker | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -85,17 +98,34 @@ export default function DashboardScreen({ navigation }: Props) {
     setLeave(l);
   }, [token, selectedDate]);
 
-  // Only the very first load shows the full-screen spinner -- every
+  // Only the very first load shows the full-screen skeleton -- every
   // refocus after that refreshes quietly in the background, so the
   // screen doesn't blank out and look unresponsive each time the owner
-  // navigates back to it.
+  // navigates back to it. A failure on that *first* load (nothing to
+  // show yet) surfaces a retry affordance instead of a blank screen; a
+  // failed background refresh just leaves the existing data as-is.
   useFocusEffect(
     useCallback(() => {
       load()
-        .catch(() => {})
+        .then(() => setLoadError(false))
+        .catch(() => setLoadError(true))
         .finally(() => setLoading(false));
     }, [load]),
   );
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+      setLoadError(false);
+    } catch {
+      // Pull-to-refresh failing silently keeps whatever was already on
+      // screen -- there's no "nothing to show" case here like the
+      // initial load, so no retry banner needed, just no visible change.
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const attendanceByWorkerSlot = useMemo(() => {
     const map = new Map<string, Attendance>();
@@ -103,37 +133,99 @@ export default function DashboardScreen({ navigation }: Props) {
     return map;
   }, [attendance]);
 
-  // Leave is no longer a settable status from this screen (Present/
-  // Absent/OT only, single tap, no popup) -- this is read-only context
-  // from whatever leave records already exist, so "on leave today" is
-  // still visible while marking attendance, per request.
   const leaveByWorker = useMemo(() => {
     const map = new Map<number, LeaveEntry>();
     for (const l of leave) map.set(l.worker_id, l);
     return map;
   }, [leave]);
 
-  async function handleSetStatus(worker: Worker, slot: AttendanceSlot, status: AttendanceStatus) {
+  // The shift returned last (sort_order-wise) is where a day's single OT
+  // figure lives under the hood -- Attendance still has OT per shift row
+  // on the backend, but the UI now presents exactly one OT control per
+  // day, so it needs one canonical place to store that number. Any other
+  // shift's OT is zeroed out when the day's OT is set, so the two views
+  // (one control vs. per-row storage) never disagree about the total.
+  const canonicalOtShift = shifts[shifts.length - 1];
+
+  function getDayOtHours(worker: Worker): number {
+    return shifts.reduce((sum, s) => sum + (attendanceByWorkerSlot.get(`${worker.id}:${s.slot_key}`)?.overtime_hours ?? 0), 0);
+  }
+
+  async function handleSetShiftStatus(worker: Worker, slot: AttendanceSlot, status: AttendanceStatus) {
     if (!token) return;
     const key = `${worker.id}:${slot}`;
     const current = attendanceByWorkerSlot.get(key);
     try {
       const updated = await markAttendance(token, worker.id, selectedDate, slot, status, current?.overtime_hours ?? 0);
       setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated]);
+      // Present and on-leave are mutually exclusive for the same day --
+      // marking a shift present while on leave doesn't make sense.
+      if (status === "present") {
+        const existingLeave = leaveByWorker.get(worker.id);
+        if (existingLeave) {
+          await deleteLeaveEntry(token, existingLeave.id);
+          setLeave((prev) => prev.filter((l) => l.id !== existingLeave.id));
+        }
+      }
       setSummary(await getDashboard(token, selectedDate));
     } catch {
       Alert.alert("Could not update attendance", "Please try again.");
     }
   }
 
-  // Entering OT hours also marks the shift present -- there's no useful
-  // reading of "4 hours overtime, but otherwise not present that day".
-  async function handleSetOtHours(worker: Worker, slot: AttendanceSlot, hours: number) {
+  async function handleToggleLeave(worker: Worker) {
     if (!token) return;
+    const existing = leaveByWorker.get(worker.id);
     try {
-      const updated = await markAttendance(token, worker.id, selectedDate, slot, "present", hours);
-      setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated]);
+      if (existing) {
+        await deleteLeaveEntry(token, existing.id);
+        setLeave((prev) => prev.filter((l) => l.id !== existing.id));
+      } else {
+        // Turning leave on clears any shift already marked present that
+        // day, the same rule enforced in the other direction above.
+        const presentShifts = shifts.filter((s) => attendanceByWorkerSlot.get(`${worker.id}:${s.slot_key}`)?.status === "present");
+        for (const shift of presentShifts) {
+          const cleared = await markAttendance(token, worker.id, selectedDate, shift.slot_key, "absent", 0);
+          setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === shift.slot_key)), cleared]);
+        }
+        const created = await createLeaveEntry(token, worker.id, {
+          leave_type: "earned",
+          date_from: selectedDate,
+          date_to: selectedDate,
+          days: 1,
+        });
+        setLeave((prev) => [...prev, created]);
+      }
       setSummary(await getDashboard(token, selectedDate));
+    } catch {
+      Alert.alert("Could not update leave", "Please try again.");
+    }
+  }
+
+  async function handleSetDayOt(worker: Worker, hours: number) {
+    if (!token || !canonicalOtShift) return;
+    try {
+      // Zero out OT on every other shift so the day's total is exactly
+      // the one number just entered, never a leftover from before this
+      // screen collapsed OT down to a single day-level control.
+      for (const shift of shifts) {
+        if (shift.slot_key === canonicalOtShift.slot_key) continue;
+        const current = attendanceByWorkerSlot.get(`${worker.id}:${shift.slot_key}`);
+        if (current && current.overtime_hours) {
+          const cleared = await markAttendance(token, worker.id, selectedDate, shift.slot_key, current.status, 0);
+          setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === shift.slot_key)), cleared]);
+        }
+      }
+      const currentCanonical = attendanceByWorkerSlot.get(`${worker.id}:${canonicalOtShift.slot_key}`);
+      const updated = await markAttendance(
+        token,
+        worker.id,
+        selectedDate,
+        canonicalOtShift.slot_key,
+        currentCanonical?.status ?? "absent",
+        hours,
+      );
+      setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === canonicalOtShift.slot_key)), updated]);
     } catch {
       Alert.alert("Could not update overtime", "Please try again.");
     }
@@ -162,17 +254,14 @@ export default function DashboardScreen({ navigation }: Props) {
     );
   }
 
-  // No separate Holiday/Leave concept anymore -- Sunday defaults to
-  // Absent display the same as any other unmarked day (the backend
-  // still counts every Sunday toward wages regardless of marking, see
-  // forms.py's _summarize_month; this is purely a display default).
   const isSunday = new Date(selectedDate).getDay() === 0;
+  const morningShift = shifts[0];
 
   function handleBulkPresent() {
     const activeCount = workers.filter((w) => w.status === "active").length;
     Alert.alert(
       "Mark everyone present?",
-      `Mark all ${activeCount} active workers present, in every one of their shifts, for this day?`,
+      `Mark all ${activeCount} active workers present for the ${morningShift?.label ?? "first"} shift. Evening (and any other shift) still needs marking separately per worker.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Mark Present", onPress: doBulkPresent },
@@ -180,19 +269,21 @@ export default function DashboardScreen({ navigation }: Props) {
     );
   }
 
+  // Only the Morning shift -- Evening presence is a separate, explicit
+  // action per worker, not something a single bulk tap should assume.
   async function doBulkPresent() {
-    if (!token) return;
+    if (!token || !morningShift) return;
     setBulkBusy(true);
     try {
       const activeWorkersNow = workers.filter((w) => w.status === "active");
       await Promise.all(
-        activeWorkersNow.flatMap((worker) =>
-          shifts.map(async (shift) => {
-            const current = attendanceByWorkerSlot.get(`${worker.id}:${shift.slot_key}`);
-            if (current?.status === "present") return;
-            await markAttendance(token, worker.id, selectedDate, shift.slot_key, "present", current?.overtime_hours ?? 0);
-          }),
-        ),
+        activeWorkersNow.map(async (worker) => {
+          const current = attendanceByWorkerSlot.get(`${worker.id}:${morningShift.slot_key}`);
+          if (current?.status === "present") return;
+          await markAttendance(token, worker.id, selectedDate, morningShift.slot_key, "present", current?.overtime_hours ?? 0);
+          const existingLeave = leaveByWorker.get(worker.id);
+          if (existingLeave) await deleteLeaveEntry(token, existingLeave.id);
+        }),
       );
       await load();
     } catch {
@@ -205,7 +296,7 @@ export default function DashboardScreen({ navigation }: Props) {
   function handleCopyYesterday() {
     Alert.alert(
       "Copy yesterday's attendance?",
-      "Copies every worker's shift status and overtime hours from yesterday to this day, overwriting anything already marked here.",
+      "Copies every worker's shift status, leave, and overtime hours from yesterday to this day, overwriting anything already marked here.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Copy", onPress: doCopyYesterday },
@@ -218,9 +309,17 @@ export default function DashboardScreen({ navigation }: Props) {
     setBulkBusy(true);
     try {
       const yesterday = addDays(selectedDate, -1);
-      const yesterdayAttendance = await listAttendance(token, yesterday);
+      const [yesterdayAttendance, yesterdayLeave] = await Promise.all([
+        listAttendance(token, yesterday),
+        listLeaveForDate(token, yesterday),
+      ]);
       await Promise.all(
         yesterdayAttendance.map((a) => markAttendance(token, a.worker_id, selectedDate, a.slot, a.status, a.overtime_hours)),
+      );
+      await Promise.all(
+        yesterdayLeave.map((l) =>
+          createLeaveEntry(token, l.worker_id, { leave_type: l.leave_type as any, date_from: selectedDate, date_to: selectedDate, days: 1 }),
+        ),
       );
       await load();
     } catch {
@@ -250,179 +349,198 @@ export default function DashboardScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.teal} />
+        <ListSkeleton rows={4} />
+      </View>
+    );
+  }
+
+  if (loadError && workers.length === 0) {
+    return (
+      <View style={styles.container}>
+        <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
       </View>
     );
   }
 
   return (
-    <FlatList
-      style={styles.container}
-      data={filtered}
-      keyExtractor={(w) => String(w.id)}
-      contentContainerStyle={{ paddingBottom: spacing.lg }}
-      ListHeaderComponent={
-        <View>
-          <View style={styles.headerCard}>
-            <Text style={styles.factoryName}>{owner?.factory_name ?? "Dashboard"}</Text>
+    <>
+      <FlatList
+        style={styles.container}
+        data={filtered}
+        keyExtractor={(w) => String(w.id)}
+        contentContainerStyle={{ paddingBottom: spacing.xl * 2 + insets.bottom }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+        ListHeaderComponent={
+          <View>
+            <View style={styles.headerCard}>
+              <Text style={styles.factoryName}>{owner?.factory_name ?? "Dashboard"}</Text>
 
-            <View style={styles.dateNavRow}>
-              <TouchableOpacity style={styles.dateNavButton} onPress={() => setSelectedDate((d) => addDays(d, -1))}>
-                <Text style={styles.dateNavButtonText}>‹</Text>
-              </TouchableOpacity>
-              <View style={styles.dateNavField}>
-                <DateField label="" value={selectedDate} onChange={setSelectedDate} />
-              </View>
-              <TouchableOpacity
-                style={[styles.dateNavButton, isToday && styles.dateNavButtonDisabled]}
-                onPress={() => !isToday && setSelectedDate((d) => addDays(d, 1))}
-                disabled={isToday}
-              >
-                <Text style={styles.dateNavButtonText}>›</Text>
-              </TouchableOpacity>
-              {!isToday && (
-                <TouchableOpacity style={styles.todayLink} onPress={() => setSelectedDate(today)}>
-                  <Text style={styles.todayLinkText}>Today</Text>
+              <View style={styles.dateNavRow}>
+                <TouchableOpacity style={styles.dateNavButton} onPress={() => setSelectedDate((d) => addDays(d, -1))}>
+                  <Text style={styles.dateNavButtonText}>‹</Text>
                 </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity onPress={() => navigation.navigate("AttendanceRange")}>
-              <Text style={styles.rangeLink}>Edit multiple days →</Text>
-            </TouchableOpacity>
-
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryTopRow}>
-                <Text style={styles.summaryNumber}>
-                  {summary?.present_today ?? 0} / {summary?.total_workers ?? 0}
-                </Text>
-                <Text style={styles.summaryLabel}>present {isToday ? "today" : "this day"}</Text>
-              </View>
-              <View style={styles.slotRow}>
-                {(summary?.slots ?? []).map((s, i) => {
-                  const accent = SLOT_ACCENTS[i % SLOT_ACCENTS.length];
-                  return (
-                    <View key={s.slot} style={[styles.slotBox, { backgroundColor: accent.bg }]}>
-                      <Text style={[styles.slotBoxLabel, { color: accent.fg }]}>{s.slot}</Text>
-                      <Text style={[styles.slotBoxValue, { color: accent.fg }]}>
-                        {s.present} / {s.total}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View style={styles.bulkRow}>
-              <TouchableOpacity style={styles.bulkButton} onPress={handleBulkPresent} disabled={bulkBusy}>
-                {bulkBusy ? (
-                  <ActivityIndicator color={colors.white} size="small" />
-                ) : (
-                  <Text style={styles.bulkButtonText}>✓ Mark All Present</Text>
+                <View style={styles.dateNavField}>
+                  <DateField label="" value={selectedDate} onChange={setSelectedDate} />
+                </View>
+                <TouchableOpacity
+                  style={[styles.dateNavButton, isToday && styles.dateNavButtonDisabled]}
+                  onPress={() => !isToday && setSelectedDate((d) => addDays(d, 1))}
+                  disabled={isToday}
+                >
+                  <Text style={styles.dateNavButtonText}>›</Text>
+                </TouchableOpacity>
+                {!isToday && (
+                  <TouchableOpacity style={styles.todayLink} onPress={() => setSelectedDate(today)}>
+                    <Text style={styles.todayLinkText}>Today</Text>
+                  </TouchableOpacity>
                 )}
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate("AttendanceRange")}>
+                <Text style={styles.rangeLink}>Edit multiple days →</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.bulkButtonGhost} onPress={handleCopyYesterday} disabled={bulkBusy}>
-                <Text style={styles.bulkButtonGhostText}>📋 Copy Yesterday</Text>
+
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryTopRow}>
+                  <Text style={styles.summaryNumber}>
+                    {summary?.present_today ?? 0} / {summary?.total_workers ?? 0}
+                  </Text>
+                  <Text style={styles.summaryLabel}>present {isToday ? "today" : "this day"}</Text>
+                </View>
+                <View style={styles.slotRow}>
+                  {(summary?.slots ?? []).map((s, i) => {
+                    const accent = SLOT_ACCENTS[i % SLOT_ACCENTS.length];
+                    return (
+                      <View key={s.slot} style={[styles.slotBox, { backgroundColor: accent.bg }]}>
+                        <Text style={[styles.slotBoxLabel, { color: accent.fg }]}>{s.slot}</Text>
+                        <Text style={[styles.slotBoxValue, { color: accent.fg }]}>
+                          {s.present} / {s.total}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                  <View style={[styles.slotBox, { backgroundColor: colors.amberLight }]}>
+                    <Text style={[styles.slotBoxLabel, { color: "#8A5A14" }]}>Leave</Text>
+                    <Text style={[styles.slotBoxValue, { color: "#8A5A14" }]}>{leave.length}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.bulkRow}>
+                <TouchableOpacity style={styles.bulkButton} onPress={handleBulkPresent} disabled={bulkBusy}>
+                  {bulkBusy ? (
+                    <ActivityIndicator color={colors.white} size="small" />
+                  ) : (
+                    <Text style={styles.bulkButtonText}>✓ Mark All Present ({morningShift?.label ?? "Morning"})</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bulkButtonGhost} onPress={handleCopyYesterday} disabled={bulkBusy}>
+                  <Text style={styles.bulkButtonGhostText}>📋 Copy Yesterday</Text>
+                </TouchableOpacity>
+              </View>
+              {isSunday && <Text style={styles.sundayNote}>Sunday defaults to Absent unless you mark a shift present.</Text>}
+            </View>
+
+            {missingComplianceCount > 0 && (
+              <TouchableOpacity style={styles.complianceBanner} onPress={handleMissingCompliancePress}>
+                <Text style={styles.complianceBannerText}>
+                  {missingComplianceCount} worker{missingComplianceCount === 1 ? "" : "s"} need Form 12 details
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.searchWrap}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search workers"
+                placeholderTextColor={colors.muted}
+                value={search}
+                onChangeText={setSearch}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.statusTabRow}>
+              <TouchableOpacity
+                style={[styles.statusTab, statusTab === "active" && styles.statusTabActive]}
+                onPress={() => setStatusTab("active")}
+              >
+                <Text style={[styles.statusTabText, statusTab === "active" && styles.statusTabTextActive]}>
+                  Active · {activeWorkers.length}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.statusTab, statusTab === "deactivated" && styles.statusTabActiveMuted]}
+                onPress={() => setStatusTab("deactivated")}
+              >
+                <Text style={[styles.statusTabText, statusTab === "deactivated" && styles.statusTabTextActiveMuted]}>
+                  Deactivated · {deactivatedWorkers.length}
+                </Text>
               </TouchableOpacity>
             </View>
-            {isSunday && <Text style={styles.sundayNote}>Sunday defaults to Absent unless you mark a shift present.</Text>}
           </View>
-
-          {missingComplianceCount > 0 && (
-            <TouchableOpacity style={styles.complianceBanner} onPress={handleMissingCompliancePress}>
-              <Text style={styles.complianceBannerText}>
-                {missingComplianceCount} worker{missingComplianceCount === 1 ? "" : "s"} need Form 12 details
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <View style={styles.searchWrap}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search workers"
-              placeholderTextColor={colors.muted}
-              value={search}
-              onChangeText={setSearch}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.statusTabRow}>
-            <TouchableOpacity
-              style={[styles.statusTab, statusTab === "active" && styles.statusTabActive]}
-              onPress={() => setStatusTab("active")}
-            >
-              <Text style={[styles.statusTabText, statusTab === "active" && styles.statusTabTextActive]}>
-                Active · {activeWorkers.length}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.statusTab, statusTab === "deactivated" && styles.statusTabActiveMuted]}
-              onPress={() => setStatusTab("deactivated")}
-            >
-              <Text style={[styles.statusTabText, statusTab === "deactivated" && styles.statusTabTextActiveMuted]}>
-                Deactivated · {deactivatedWorkers.length}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      }
-      ListEmptyComponent={
-        <Text style={styles.empty}>
-          {statusTab === "active" ? "No active workers match your search." : "No deactivated workers."}
-        </Text>
-      }
-      renderItem={({ item }) => {
-        const isActive = item.status === "active";
-        const onLeave = leaveByWorker.has(item.id);
-        return (
-          <View style={styles.row}>
-            <View style={styles.rowTop}>
-              <TouchableOpacity
-                style={{ flex: 1 }}
-                onPress={() =>
-                  navigation.navigate("WorkerAttendance", {
-                    workerId: item.id,
-                    workerName: item.name,
-                    workerStatus: item.status,
-                    deactivatedAt: item.deactivated_at,
-                  })
-                }
-              >
-                <View style={styles.nameRow}>
+        }
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            {statusTab === "active" ? "No active workers match your search." : "No deactivated workers."}
+          </Text>
+        }
+        renderItem={({ item }) => {
+          const isActive = item.status === "active";
+          const onLeave = leaveByWorker.has(item.id);
+          return (
+            <View style={styles.row}>
+              <View style={styles.rowTop}>
+                <TouchableOpacity
+                  style={{ flex: 1 }}
+                  onPress={() =>
+                    navigation.navigate("WorkerAttendance", {
+                      workerId: item.id,
+                      workerName: item.name,
+                      workerStatus: item.status,
+                      deactivatedAt: item.deactivated_at,
+                    })
+                  }
+                >
                   <Text style={styles.name}>{item.name}</Text>
-                  {onLeave && (
-                    <View style={styles.leaveBadge}>
-                      <Text style={styles.leaveBadgeText}>On Leave</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.meta}>Aadhaar •••• •••• {item.aadhaar_last4}</Text>
-              </TouchableOpacity>
-              {isActive ? (
-                <TouchableOpacity onPress={() => handleDeactivate(item)}>
-                  <Text style={styles.deactivateLink}>Deactivate</Text>
+                  <Text style={styles.meta}>Aadhaar •••• •••• {item.aadhaar_last4}</Text>
                 </TouchableOpacity>
-              ) : (
-                <View style={[styles.badge, styles.badgeInactive]}>
-                  <Text style={styles.badgeText}>
-                    Deactivated{item.deactivated_at ? ` · ${item.deactivated_at.slice(0, 10)}` : ""}
-                  </Text>
-                </View>
+                {isActive ? (
+                  <TouchableOpacity onPress={() => handleDeactivate(item)}>
+                    <Text style={styles.deactivateLink}>Deactivate</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[styles.badge, styles.badgeInactive]}>
+                    <Text style={styles.badgeText}>
+                      Deactivated{item.deactivated_at ? ` · ${item.deactivated_at.slice(0, 10)}` : ""}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {isActive && (
+                <DayAttendanceRow
+                  shifts={shifts}
+                  getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.status}
+                  onSetShiftStatus={(slotKey, status) => handleSetShiftStatus(item, slotKey, status)}
+                  isOnLeave={onLeave}
+                  onToggleLeave={() => handleToggleLeave(item)}
+                  otHours={getDayOtHours(item)}
+                  onOpenOt={() => setOtModalWorker(item)}
+                />
               )}
             </View>
-            {isActive && (
-              <ShiftPresentAbsentRow
-                shifts={shifts}
-                getStatus={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.status}
-                getOtHours={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.overtime_hours ?? 0}
-                onSetStatus={(slotKey, status) => handleSetStatus(item, slotKey, status)}
-                onSetOtHours={(slotKey, hours) => handleSetOtHours(item, slotKey, hours)}
-              />
-            )}
-          </View>
-        );
-      }}
-    />
+          );
+        }}
+      />
+      <OtHoursModal
+        visible={otModalWorker !== null}
+        initialHours={otModalWorker ? getDayOtHours(otModalWorker) : 0}
+        onConfirm={async (hours) => {
+          if (otModalWorker) await handleSetDayOt(otModalWorker, hours);
+          setOtModalWorker(null);
+        }}
+        onCancel={() => setOtModalWorker(null)}
+      />
+    </>
   );
 }
 
@@ -506,10 +624,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   name: { fontSize: 15, fontWeight: "700", color: colors.navy },
-  leaveBadge: { backgroundColor: colors.amberLight, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  leaveBadgeText: { fontSize: 9, fontWeight: "700", color: "#8A5A14" },
   meta: { fontSize: 11, color: colors.muted, marginTop: 1 },
   deactivateLink: { color: colors.danger, fontSize: 11, fontWeight: "700" },
   badge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },

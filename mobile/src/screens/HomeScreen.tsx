@@ -1,8 +1,9 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { DashboardSummary, getDashboard } from "../api/client";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { DashboardSummary, getDashboard, listLeaveForDate } from "../api/client";
 import { isoDate } from "../components/DateField";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -22,19 +23,37 @@ type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 // instead of matching it in size. Logout moved to the Settings tab.
 export default function HomeScreen({ navigation }: Props) {
   const { token, owner } = useAuth();
+  const insets = useSafeAreaInsets();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [leaveCount, setLeaveCount] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    const today = isoDate(new Date());
+    const [s, l] = await Promise.all([getDashboard(token, today), listLeaveForDate(token, today)]);
+    setSummary(s);
+    setLeaveCount(l.length);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!token) return;
-      getDashboard(token, isoDate(new Date()))
-        .then(setSummary)
-        .catch(() => {});
-    }, [token]),
+      load().catch(() => {});
+    }, [load]),
   );
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    await load().catch(() => {});
+    setRefreshing(false);
+  }
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+    >
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
           <Text style={styles.heroEmoji}>🏭</Text>
@@ -55,7 +74,9 @@ export default function HomeScreen({ navigation }: Props) {
         <View style={styles.tileTextWrap}>
           <Text style={[styles.bigTileTitle, { color: "#0F6E56" }]}>Labour Attendance</Text>
           <Text style={styles.tileSubtitle}>
-            {summary ? `${summary.present_today}/${summary.total_workers} active workers present today` : "Mark today's shifts, leave, and overtime"}
+            {summary
+              ? `${summary.present_today}/${summary.total_workers} present today${leaveCount ? ` · ${leaveCount} on leave` : ""}`
+              : "Mark today's shifts, leave, and overtime"}
           </Text>
         </View>
         <Text style={[styles.tileArrow, { color: "#0F6E56" }]}>›</Text>
@@ -68,6 +89,14 @@ export default function HomeScreen({ navigation }: Props) {
         >
           <Text style={styles.smallTileEmoji}>👷</Text>
           <Text style={[styles.smallTileTitle, { color: colors.skyBlue }]}>Add Worker</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.smallTile, { backgroundColor: colors.coralLight }]}
+          onPress={() => navigation.navigate("WageRateWorkers")}
+        >
+          <Text style={styles.smallTileEmoji}>💰</Text>
+          <Text style={[styles.smallTileTitle, { color: colors.coral }]}>Wage Rate</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

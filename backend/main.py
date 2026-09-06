@@ -46,6 +46,9 @@ from schemas import (
     WorkerComplianceOut,
     WorkerCreateIn,
     WorkerOut,
+    WorkerTypeAssignIn,
+    WorkerTypeIn,
+    WorkerTypeOut,
     WorkerWageOut,
 )
 
@@ -487,6 +490,116 @@ def get_wage_profile_history(
         .order_by(models.WageProfile.effective_from.desc())
         .all()
     )
+
+
+@app.get("/worker-types", response_model=list[WorkerTypeOut])
+def list_worker_types(
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    return db.query(models.WorkerType).filter(models.WorkerType.owner_id == owner.id).order_by(models.WorkerType.name).all()
+
+
+@app.post("/worker-types", response_model=WorkerTypeOut, status_code=201)
+def create_worker_type(
+    body: WorkerTypeIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    existing = (
+        db.query(models.WorkerType)
+        .filter(models.WorkerType.owner_id == owner.id, models.WorkerType.name == body.name)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail=f"A worker type named {body.name!r} already exists")
+    worker_type = models.WorkerType(owner_id=owner.id, **body.model_dump())
+    db.add(worker_type)
+    db.commit()
+    db.refresh(worker_type)
+    return worker_type
+
+
+@app.put("/worker-types/{worker_type_id}", response_model=WorkerTypeOut)
+def update_worker_type(
+    worker_type_id: int,
+    body: WorkerTypeIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    worker_type = (
+        db.query(models.WorkerType)
+        .filter(models.WorkerType.id == worker_type_id, models.WorkerType.owner_id == owner.id)
+        .first()
+    )
+    if not worker_type:
+        raise HTTPException(status_code=404, detail="Worker type not found")
+    worker_type.name = body.name
+    worker_type.default_rate_type = body.default_rate_type
+    worker_type.default_rate = body.default_rate
+    db.commit()
+    db.refresh(worker_type)
+    return worker_type
+
+
+@app.delete("/worker-types/{worker_type_id}", status_code=204)
+def delete_worker_type(
+    worker_type_id: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    worker_type = (
+        db.query(models.WorkerType)
+        .filter(models.WorkerType.id == worker_type_id, models.WorkerType.owner_id == owner.id)
+        .first()
+    )
+    if not worker_type:
+        raise HTTPException(status_code=404, detail="Worker type not found")
+    # Assigned workers keep their worker_type_id pointing at a row that no
+    # longer exists otherwise -- clear the assignment first so WorkerOut
+    # never has to handle a dangling reference.
+    db.query(models.Worker).filter(models.Worker.worker_type_id == worker_type_id).update({"worker_type_id": None})
+    db.delete(worker_type)
+    db.commit()
+
+
+@app.put("/workers/{worker_id}/worker-type", response_model=WorkerOut)
+def assign_worker_type(
+    worker_id: int,
+    body: WorkerTypeAssignIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Assigning a type to a worker who has no WageProfile yet auto-creates
+    one from the type's defaults, effective today -- "defaults to that
+    type's rate unless individually overridden". A worker who already has
+    a rate keeps it: that rate already IS their override, so it's never
+    touched here. This deliberately reuses WageProfile as the one source
+    of truth for wages instead of adding a second, competing rate field."""
+    worker = _get_owned_worker(worker_id, owner, db)
+    if body.worker_type_id is not None:
+        worker_type = (
+            db.query(models.WorkerType)
+            .filter(models.WorkerType.id == body.worker_type_id, models.WorkerType.owner_id == owner.id)
+            .first()
+        )
+        if not worker_type:
+            raise HTTPException(status_code=404, detail="Worker type not found")
+        has_rate = db.query(models.WageProfile).filter(models.WageProfile.worker_id == worker_id).first()
+        if not has_rate:
+            db.add(
+                models.WageProfile(
+                    worker_id=worker_id,
+                    created_by=owner.id,
+                    rate_type=worker_type.default_rate_type,
+                    basic=worker_type.default_rate,
+                    effective_from=date_.today(),
+                )
+            )
+    worker.worker_type_id = body.worker_type_id
+    db.commit()
+    db.refresh(worker)
+    return worker
 
 
 @app.post("/workers/{worker_id}/leave", response_model=LeaveEntryOut, status_code=201)
@@ -998,24 +1111,23 @@ def _generate_form_content(
     worker_id: int | None,
     month: int | None,
     year: int | None,
-    format: str,
 ) -> tuple[bytes, str, str]:
-    if format not in ("pdf", "excel"):
-        raise HTTPException(status_code=422, detail="format must be 'pdf' or 'excel'")
-
+    """Every form is PDF only -- Excel export was removed entirely per
+    explicit request, so there's no format parameter to validate here
+    anymore (there used to be)."""
     if form_code == "form25":
-        return forms.build_form25(db, owner, month, year, format)
+        return forms.build_form25(db, owner, month, year)
     if form_code == "form15":
-        return forms.build_form15(db, owner, month, year, format)
+        return forms.build_form15(db, owner, month, year)
     if form_code == "form12":
         worker = _get_owned_worker(worker_id, owner, db) if worker_id is not None else None
-        return forms.build_form12(db, owner, format, worker=worker)
+        return forms.build_form12(db, owner, worker=worker)
     if form_code == "form25b":
         worker = _get_owned_worker(worker_id, owner, db)
-        return forms.build_form25b(db, owner, worker, month, year, format)
+        return forms.build_form25b(db, owner, worker, month, year)
     if form_code == "wageslip":
         worker = _get_owned_worker(worker_id, owner, db)
-        return forms.build_wageslip(db, owner, worker, month, year, format)
+        return forms.build_wageslip(db, owner, worker, month, year)
     raise HTTPException(status_code=404, detail=f"Unknown form_code {form_code!r}")
 
 
@@ -1023,11 +1135,10 @@ def _generate_form_content(
 def get_form25(
     month: int,
     year: int,
-    format: str = "pdf",
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, media_type, filename = _generate_form_content(db, owner, "form25", None, month, year, format)
+    content, media_type, filename = _generate_form_content(db, owner, "form25", None, month, year)
     _log_form_generation(db, owner, "form25", None, month, year, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -1037,25 +1148,23 @@ def get_form25b(
     worker_id: int,
     month: int,
     year: int,
-    format: str = "pdf",
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, media_type, filename = _generate_form_content(db, owner, "form25b", worker_id, month, year, format)
+    content, media_type, filename = _generate_form_content(db, owner, "form25b", worker_id, month, year)
     _log_form_generation(db, owner, "form25b", worker_id, month, year, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.get("/forms/form12")
 def get_form12_register(
-    format: str = "pdf",
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
     """The full register -- every worker who has ever been employed, one
     row each, in registration order. This is what a real Form 12 is: a
     running register, not a per-worker sheet."""
-    content, media_type, filename = _generate_form_content(db, owner, "form12", None, None, None, format)
+    content, media_type, filename = _generate_form_content(db, owner, "form12", None, None, None)
     _log_form_generation(db, owner, "form12", None, None, None, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -1063,13 +1172,12 @@ def get_form12_register(
 @app.get("/forms/form12/{worker_id}")
 def get_form12(
     worker_id: int,
-    format: str = "pdf",
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
     """A single register row for one worker -- same exact 24-column
     layout as the full register, just narrowed to one worker."""
-    content, media_type, filename = _generate_form_content(db, owner, "form12", worker_id, None, None, format)
+    content, media_type, filename = _generate_form_content(db, owner, "form12", worker_id, None, None)
     _log_form_generation(db, owner, "form12", worker_id, None, None, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -1078,11 +1186,10 @@ def get_form12(
 def get_form15(
     month: int,
     year: int,
-    format: str = "pdf",
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, media_type, filename = _generate_form_content(db, owner, "form15", None, month, year, format)
+    content, media_type, filename = _generate_form_content(db, owner, "form15", None, month, year)
     _log_form_generation(db, owner, "form15", None, month, year, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -1092,11 +1199,10 @@ def get_wageslip(
     worker_id: int,
     month: int,
     year: int,
-    format: str = "pdf",
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, media_type, filename = _generate_form_content(db, owner, "wageslip", worker_id, month, year, format)
+    content, media_type, filename = _generate_form_content(db, owner, "wageslip", worker_id, month, year)
     _log_form_generation(db, owner, "wageslip", worker_id, month, year, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -1108,16 +1214,14 @@ def email_form(
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    content, _media_type, filename = _generate_form_content(
-        db, owner, form_code, body.worker_id, body.month, body.year, body.format
-    )
+    content, _media_type, filename = _generate_form_content(db, owner, form_code, body.worker_id, body.month, body.year)
     send_report_email(
         to_email=body.recipient_email,
         subject=f"{owner.factory_name} -- {form_code}",
         body_text=f"Attached: {form_code} from {owner.factory_name}.",
         attachment_bytes=content,
         attachment_filename=filename,
-        format=body.format,
+        format="pdf",
     )
     _log_form_generation(db, owner, form_code, body.worker_id, body.month, body.year, "emailed")
     return {"status": "email sent"}

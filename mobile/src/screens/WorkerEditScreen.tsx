@@ -11,7 +11,9 @@ import {
   updateWorkerCompliance,
 } from "../api/client";
 import DateField from "../components/DateField";
+import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
+import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -28,6 +30,7 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
   const isActive = workerStatus === "active";
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [exists, setExists] = useState(false);
 
   const now = new Date();
@@ -65,16 +68,28 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
       setFitnessCertNo(c.fitness_cert_no ?? "");
       setFitnessCertValidTill(c.fitness_cert_valid_till ?? "");
     } catch (e) {
-      // No compliance record yet (e.g. a worker registered before Phase 3
-      // shipped) -- fall through to the create form instead of erroring.
-      setExists(false);
+      // A real 404 means no compliance record yet (e.g. a worker
+      // registered before Phase 3 shipped) -- fall through to the create
+      // form, that's expected. Anything else (network failure, 500, ...)
+      // used to be treated the same way, which silently dropped an
+      // *existing* compliance record from view and would have sent a
+      // "Save" straight into a 409 conflict against the record it never
+      // showed. Only a genuine 404 is a non-error here.
+      if (e instanceof ApiError && e.status === 404) {
+        setExists(false);
+      } else {
+        throw e;
+      }
     }
   }, [token, workerId]);
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      load().finally(() => setLoading(false));
+      load()
+        .then(() => setLoadError(false))
+        .catch(() => setLoadError(true))
+        .finally(() => setLoading(false));
     }, [load]),
   );
 
@@ -138,7 +153,15 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.teal} />
+        <ListSkeleton rows={2} variant="simple" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
       </View>
     );
   }

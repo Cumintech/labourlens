@@ -5,19 +5,15 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity,
 import {
   Attendance,
   AttendanceStatus,
-  LeaveEntry,
   ShiftConfig,
   WorkerWage,
-  createLeaveEntry,
   deactivateWorker,
-  deleteLeaveEntry,
   getWorkerWageComputation,
   listShiftConfigs,
   listWorkerAttendanceMonth,
-  listWorkerLeaveRange,
   markAttendance,
 } from "../api/client";
-import ShiftAttendanceRow from "../components/ShiftAttendanceRow";
+import ShiftPresentAbsentRow from "../components/ShiftPresentAbsentRow";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -51,27 +47,21 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear] = useState(today.getFullYear());
   const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [leave, setLeave] = useState<LeaveEntry[]>([]);
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
   const [wage, setWage] = useState<WorkerWage | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const monthStart = `${year}-${pad(month)}-01`;
-  const monthEnd = `${year}-${pad(month)}-${pad(daysInMonth(month, year))}`;
-
   const load = useCallback(async () => {
     if (!token) return;
-    const [a, l, s, w] = await Promise.all([
+    const [a, s, w] = await Promise.all([
       listWorkerAttendanceMonth(token, workerId, month, year),
-      listWorkerLeaveRange(token, workerId, monthStart, monthEnd),
       listShiftConfigs(token),
       getWorkerWageComputation(token, workerId, month, year),
     ]);
     setAttendance(a);
-    setLeave(l);
     setShifts(s);
     setWage(w);
-  }, [token, workerId, month, year, monthStart, monthEnd]);
+  }, [token, workerId, month, year]);
 
   useFocusEffect(
     useCallback(() => {
@@ -88,32 +78,6 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
     return map;
   }, [attendance]);
 
-  // A date is "on leave" for this summary if a LeaveEntry range covers
-  // it -- the same day-level record the statutory forms read from.
-  function isDateOnLeave(dateStr: string): boolean {
-    return leave.some((l) => l.date_from <= dateStr && l.date_to >= dateStr);
-  }
-
-  async function syncDayLeave(dateStr: string, attendanceForDay: Attendance[]) {
-    if (!token) return;
-    const leaveCount = attendanceForDay.filter((a) => a.status === "leave").length;
-    const totalShifts = shifts.length || 1;
-    const existing = leave.find((l) => l.date_from === dateStr && l.date_to === dateStr);
-    if (existing) {
-      await deleteLeaveEntry(token, existing.id);
-      setLeave((prev) => prev.filter((l) => l.id !== existing.id));
-    }
-    if (leaveCount > 0) {
-      const created = await createLeaveEntry(token, workerId, {
-        leave_type: "earned",
-        date_from: dateStr,
-        date_to: dateStr,
-        days: leaveCount / totalShifts,
-      });
-      setLeave((prev) => [...prev, created]);
-    }
-  }
-
   async function refreshWage() {
     if (!token) return;
     try {
@@ -129,11 +93,7 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
     const current = attendanceByDateSlot.get(key);
     try {
       const updated = await markAttendance(token, workerId, dateStr, slotKey, status, current?.overtime_hours ?? 0);
-      const attendanceAfter = [...attendance.filter((a) => !(a.date === dateStr && a.slot === slotKey)), updated];
-      setAttendance(attendanceAfter);
-      if (status === "leave" || current?.status === "leave") {
-        await syncDayLeave(dateStr, attendanceAfter.filter((a) => a.date === dateStr));
-      }
+      setAttendance((prev) => [...prev.filter((a) => !(a.date === dateStr && a.slot === slotKey)), updated]);
       await refreshWage();
     } catch {
       Alert.alert("Could not update attendance", "Please try again.");
@@ -201,19 +161,16 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
   const summary = useMemo(() => {
     let present = 0;
     let absent = 0;
-    let leaveDays = 0;
     let otHours = 0;
     for (const { dateStr } of days) {
       const dayRecords = attendance.filter((a) => a.date === dateStr);
       const isPresent = dayRecords.some((a) => a.status === "present");
-      const onLeave = isDateOnLeave(dateStr);
       if (isPresent) present += 1;
-      else if (onLeave) leaveDays += 1;
-      else if (dayRecords.length > 0) absent += 1;
+      else absent += 1;
       otHours += dayRecords.filter((a) => a.status === "present").reduce((sum, a) => sum + (a.overtime_hours || 0), 0);
     }
-    return { present, absent, leaveDays, otHours };
-  }, [days, attendance, leave]);
+    return { present, absent, otHours };
+  }, [days, attendance]);
 
   if (loading || !token) {
     return (
@@ -276,10 +233,6 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
               <Text style={[styles.statValue, { color: colors.danger }]}>{summary.absent}</Text>
               <Text style={styles.statLabel}>Absent</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: colors.amberLight }]}>
-              <Text style={[styles.statValue, { color: "#8A5A14" }]}>{summary.leaveDays}</Text>
-              <Text style={styles.statLabel}>Leave</Text>
-            </View>
             <View style={[styles.statCard, { backgroundColor: colors.violetLight }]}>
               <Text style={[styles.statValue, { color: colors.violet }]}>{summary.otHours}h</Text>
               <Text style={styles.statLabel}>Overtime</Text>
@@ -322,7 +275,7 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
               <Text style={styles.dateWeekday}>{item.weekday}</Text>
             </View>
             <View style={styles.chipsCol}>
-              <ShiftAttendanceRow
+              <ShiftPresentAbsentRow
                 shifts={shifts}
                 getStatus={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.status}
                 getOtHours={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.overtime_hours ?? 0}

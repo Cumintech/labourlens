@@ -6,9 +6,11 @@ import { OcrFields } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import AttendanceRangeScreen from "../screens/AttendanceRangeScreen";
 import DashboardScreen from "../screens/DashboardScreen";
+import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
 import NewWorkerDetailsScreen from "../screens/NewWorkerDetailsScreen";
 import NewWorkerScanScreen from "../screens/NewWorkerScanScreen";
+import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ReportScreen from "../screens/ReportScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
@@ -32,6 +34,8 @@ export type RootStackParamList = {
   ShiftSettings: undefined;
   StatutoryForms: undefined;
   Report: undefined;
+  PrivacyPolicy: undefined;
+  HelpSupport: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -80,7 +84,9 @@ export default function RootNavigator() {
         <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ title: "Wage Rate" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="StatutoryForms" component={StatutoryFormsScreen} options={{ title: "Forms & Reports" }} />
-        <Stack.Screen name="Report" component={ReportScreen} options={{ title: "6-month report" }} />
+        <Stack.Screen name="Report" component={ReportScreen} options={{ title: "Attendance Report" }} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} options={{ title: "Help & Support" }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

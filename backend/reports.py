@@ -1,10 +1,11 @@
-"""6-month attendance report generation -- Excel via openpyxl, PDF via
-reportlab. Both are pure-Python/pip-installable, no system binary needed
-(same reasoning as choosing EasyOCR over Tesseract elsewhere in this repo)."""
+"""Attendance report generation -- PDF via reportlab. Excel support was
+removed per explicit request (PDF + email/download only); reportlab is
+pure-Python/pip-installable, no system binary needed (same reasoning as
+choosing EasyOCR over Tesseract elsewhere in this repo)."""
 
 import io
+from datetime import datetime, time
 
-from openpyxl import Workbook
 from reportlab.lib import colors as pdf_colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -29,21 +30,35 @@ def _fetch_rows(db: Session, owner: models.Owner, start_date, end_date):
     )
 
 
-def _build_excel(owner: models.Owner, start_date, end_date, rows: list) -> bytes:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Attendance"
-    ws.append(["Worker", "Aadhaar (last 4)", "Date", "Slot", "Status"])
-    for attendance, worker in rows:
-        ws.append(
-            [worker.name, worker.aadhaar_last4, attendance.date.isoformat(), attendance.slot, attendance.status]
+def _fetch_deactivated_in_period(db: Session, owner: models.Owner, start_date, end_date):
+    """Workers deactivated during the report period -- attendance rows
+    alone don't say who left partway through and why, which matters for
+    a period-spanning report. deactivated_at is a full datetime (real
+    time-of-day, not midnight) -- comparing it against plain `date`
+    bind params in SQLite is a text comparison, and "2026-08-18
+    10:15:00" sorts *after* "2026-08-18" lexicographically, so a bare
+    `<= end_date` silently excludes anyone deactivated on the end date
+    itself. Widening to end-of-day avoids that."""
+    end_of_day = datetime.combine(end_date, time.max)
+    return (
+        db.query(models.Worker)
+        .filter(
+            models.Worker.owner_id == owner.id,
+            models.Worker.status == "deactivated",
+            models.Worker.deactivated_at.isnot(None),
+            models.Worker.deactivated_at >= start_date,
+            models.Worker.deactivated_at <= end_of_day,
         )
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+        .order_by(models.Worker.deactivated_at)
+        .all()
+    )
 
 
-def _build_pdf(owner: models.Owner, start_date, end_date, rows: list) -> bytes:
+def build_report(db: Session, owner: models.Owner, start_date, end_date) -> tuple[bytes, str, str]:
+    """Returns (content_bytes, media_type, filename)."""
+    rows = _fetch_rows(db, owner, start_date, end_date)
+    deactivated = _fetch_deactivated_in_period(db, owner, start_date, end_date)
+
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
     styles = getSampleStyleSheet()
@@ -73,21 +88,35 @@ def _build_pdf(owner: models.Owner, start_date, end_date, rows: list) -> bytes:
         )
     )
     elements.append(table)
-    doc.build(elements)
-    return buf.getvalue()
 
-
-def build_report(db: Session, owner: models.Owner, start_date, end_date, format: str) -> tuple[bytes, str, str]:
-    """Returns (content_bytes, media_type, filename)."""
-    rows = _fetch_rows(db, owner, start_date, end_date)
-
-    if format == "excel":
-        content = _build_excel(owner, start_date, end_date, rows)
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        filename = f"attendance_{start_date}_{end_date}.xlsx"
+    elements.append(Spacer(1, 0.6 * cm))
+    elements.append(Paragraph("Workers deactivated during this period", styles["Heading3"]))
+    if deactivated:
+        deactivated_data = [["Worker", "Aadhaar (last 4)", "Date deactivated", "Reason"]]
+        for worker in deactivated:
+            deactivated_data.append(
+                [
+                    worker.name,
+                    worker.aadhaar_last4,
+                    worker.deactivated_at.date().isoformat(),
+                    worker.deactivated_reason or "-",
+                ]
+            )
+        deactivated_table = Table(deactivated_data, repeatRows=1)
+        deactivated_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), pdf_colors.HexColor("#1B2340")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), pdf_colors.white),
+                    ("FONTSIZE", (0, 0), (-1, -1), 9),
+                    ("GRID", (0, 0), (-1, -1), 0.5, pdf_colors.HexColor("#E5E7EB")),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [pdf_colors.white, pdf_colors.HexColor("#F4F6F9")]),
+                ]
+            )
+        )
+        elements.append(deactivated_table)
     else:
-        content = _build_pdf(owner, start_date, end_date, rows)
-        media_type = "application/pdf"
-        filename = f"attendance_{start_date}_{end_date}.pdf"
+        elements.append(Paragraph("None.", styles["Normal"]))
 
-    return content, media_type, filename
+    doc.build(elements)
+    return buf.getvalue(), "application/pdf", f"attendance_{start_date}_{end_date}.pdf"

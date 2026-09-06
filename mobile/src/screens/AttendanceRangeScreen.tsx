@@ -6,19 +6,15 @@ import {
   Attendance,
   AttendanceSlot,
   AttendanceStatus,
-  LeaveEntry,
   ShiftConfig,
   Worker,
-  createLeaveEntry,
-  deleteLeaveEntry,
   listAttendance,
-  listLeaveForDate,
   listShiftConfigs,
   listWorkers,
   markAttendance,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
-import ShiftAttendanceRow from "../components/ShiftAttendanceRow";
+import ShiftPresentAbsentRow from "../components/ShiftPresentAbsentRow";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -59,17 +55,15 @@ function formatDateLabel(dateStr: string): string {
 // independently editable, which is the whole point of this screen.
 function DayBlock({ token, date, workers, shifts }: { token: string; date: string; workers: Worker[]; shifts: ShiftConfig[] }) {
   const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [leave, setLeave] = useState<LeaveEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([listAttendance(token, date), listLeaveForDate(token, date)])
-      .then(([a, l]) => {
+    listAttendance(token, date)
+      .then((a) => {
         if (cancelled) return;
         setAttendance(a);
-        setLeave(l);
       })
       .catch(() => {})
       .finally(() => {
@@ -86,41 +80,12 @@ function DayBlock({ token, date, workers, shifts }: { token: string; date: strin
     return map;
   }, [attendance]);
 
-  const leaveByWorker = useMemo(() => {
-    const map = new Map<number, LeaveEntry>();
-    for (const l of leave) map.set(l.worker_id, l);
-    return map;
-  }, [leave]);
-
-  async function syncDayLeave(worker: Worker, attendanceForDay: Attendance[]) {
-    const leaveCount = attendanceForDay.filter((a) => a.status === "leave").length;
-    const totalShifts = shifts.length || 1;
-    const existing = leaveByWorker.get(worker.id);
-    if (existing) {
-      await deleteLeaveEntry(token, existing.id);
-      setLeave((prev) => prev.filter((l) => l.id !== existing.id));
-    }
-    if (leaveCount > 0) {
-      const created = await createLeaveEntry(token, worker.id, {
-        leave_type: "earned",
-        date_from: date,
-        date_to: date,
-        days: leaveCount / totalShifts,
-      });
-      setLeave((prev) => [...prev, created]);
-    }
-  }
-
   async function handleSetStatus(worker: Worker, slot: AttendanceSlot, status: AttendanceStatus) {
     const key = `${worker.id}:${slot}`;
     const current = attendanceByWorkerSlot.get(key);
     try {
       const updated = await markAttendance(token, worker.id, date, slot, status, current?.overtime_hours ?? 0);
-      const attendanceAfter = [...attendance.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated];
-      setAttendance(attendanceAfter);
-      if (status === "leave" || current?.status === "leave") {
-        await syncDayLeave(worker, attendanceAfter.filter((a) => a.worker_id === worker.id));
-      }
+      setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated]);
     } catch {
       Alert.alert("Could not update attendance", `Please try again (${formatDateLabel(date)}).`);
     }
@@ -144,7 +109,7 @@ function DayBlock({ token, date, workers, shifts }: { token: string; date: strin
         workers.map((worker) => (
           <View key={worker.id} style={styles.workerRow}>
             <Text style={styles.workerName}>{worker.name}</Text>
-            <ShiftAttendanceRow
+            <ShiftPresentAbsentRow
               shifts={shifts}
               getStatus={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.status}
               getOtHours={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.overtime_hours ?? 0}

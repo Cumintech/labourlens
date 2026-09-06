@@ -1,20 +1,67 @@
-import React from "react";
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import React, { useState } from "react";
+import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useAppLock } from "../context/AppLockContext";
 import { useAuth } from "../context/AuthContext";
+import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 
-// Settings tab -- previously logout had no home anywhere in the app at
-// all. App Lock is a placeholder toggle (no such feature exists in the
-// backend yet) so it's disabled rather than wired to nothing; Shifts &
-// Profile lives on the Home tab's icon row instead of here, per request.
-export default function SettingsScreen() {
+// Rendered as the Settings tab's content inside MainTabs -- see
+// StatutoryFormsScreen for why the nav prop is typed this loosely.
+type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
+
+const PIN_PATTERN = /^\d{4}$/;
+
+export default function SettingsScreen({ navigation }: Props) {
   const { owner, logout } = useAuth();
+  const { isPinSet, setPin, clearPin, verifyPin } = useAppLock();
+
+  const [setPinModal, setSetPinModal] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+
+  const [disablePinModal, setDisablePinModal] = useState(false);
+  const [disablePinInput, setDisablePinInput] = useState("");
 
   function handleLogout() {
     Alert.alert("Log out", "Log out of Labour Lens on this device?", [
       { text: "Cancel", style: "cancel" },
       { text: "Log out", style: "destructive", onPress: logout },
     ]);
+  }
+
+  function handleToggleAppLock(value: boolean) {
+    if (value) {
+      setNewPin("");
+      setConfirmPin("");
+      setSetPinModal(true);
+    } else {
+      setDisablePinInput("");
+      setDisablePinModal(true);
+    }
+  }
+
+  async function handleConfirmSetPin() {
+    if (!PIN_PATTERN.test(newPin)) {
+      Alert.alert("Enter a 4-digit PIN", "The PIN must be exactly 4 digits.");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      Alert.alert("PINs don't match", "Enter the same 4-digit PIN both times.");
+      return;
+    }
+    await setPin(newPin);
+    setSetPinModal(false);
+    Alert.alert("App Lock enabled", "Labour Lens will now ask for this PIN whenever you open or return to the app.");
+  }
+
+  async function handleConfirmDisable() {
+    if (!verifyPin(disablePinInput)) {
+      Alert.alert("Incorrect PIN", "Enter your current App Lock PIN to turn it off.");
+      return;
+    }
+    await clearPin();
+    setDisablePinModal(false);
   }
 
   return (
@@ -51,13 +98,24 @@ export default function SettingsScreen() {
           <Text style={styles.rowIcon}>🔒</Text>
           <View style={styles.rowTextWrap}>
             <Text style={styles.rowLabel}>App Lock</Text>
+            <Text style={styles.rowValue}>{isPinSet ? "On" : "Off"}</Text>
           </View>
-          <Switch value={false} disabled trackColor={{ true: colors.teal }} />
+          <Switch value={isPinSet} onValueChange={handleToggleAppLock} trackColor={{ true: colors.teal }} />
         </View>
       </View>
 
       <Text style={styles.sectionLabel}>General</Text>
       <View style={styles.card}>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("PrivacyPolicy")}>
+          <Text style={styles.rowIcon}>📄</Text>
+          <Text style={styles.rowValue}>Privacy Policy</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("HelpSupport")}>
+          <Text style={styles.rowIcon}>❓</Text>
+          <Text style={styles.rowValue}>Help & Support</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
         <TouchableOpacity style={styles.row} onPress={handleLogout}>
           <Text style={styles.rowIcon}>🚪</Text>
           <Text style={[styles.rowValue, { color: colors.danger, fontWeight: "700" }]}>Log Out</Text>
@@ -65,6 +123,70 @@ export default function SettingsScreen() {
       </View>
 
       <Text style={styles.footer}>Labour Lens v1.0{"\n"}Tamil Nadu Factories Act compliance, made simple 🇮🇳</Text>
+
+      <Modal visible={setPinModal} transparent animationType="fade" onRequestClose={() => setSetPinModal(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Set a 4-digit PIN</Text>
+            <Text style={styles.modalLabel}>New PIN</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newPin}
+              onChangeText={(t) => setNewPin(t.replace(/\D/g, "").slice(0, 4))}
+              keyboardType="number-pad"
+              secureTextEntry
+              maxLength={4}
+              placeholder="••••"
+              placeholderTextColor={colors.muted}
+            />
+            <Text style={styles.modalLabel}>Confirm PIN</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={confirmPin}
+              onChangeText={(t) => setConfirmPin(t.replace(/\D/g, "").slice(0, 4))}
+              keyboardType="number-pad"
+              secureTextEntry
+              maxLength={4}
+              placeholder="••••"
+              placeholderTextColor={colors.muted}
+            />
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setSetPinModal(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirmButton} onPress={handleConfirmSetPin}>
+                <Text style={styles.modalConfirmText}>Enable</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={disablePinModal} transparent animationType="fade" onRequestClose={() => setDisablePinModal(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enter current PIN to disable App Lock</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={disablePinInput}
+              onChangeText={(t) => setDisablePinInput(t.replace(/\D/g, "").slice(0, 4))}
+              keyboardType="number-pad"
+              secureTextEntry
+              maxLength={4}
+              placeholder="••••"
+              placeholderTextColor={colors.muted}
+            />
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDisablePinModal(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirmButton} onPress={handleConfirmDisable}>
+                <Text style={styles.modalConfirmText}>Disable</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -82,4 +204,22 @@ const styles = StyleSheet.create({
   rowValue: { fontSize: 15, color: colors.navy, fontWeight: "600", marginTop: 2 },
   divider: { height: 1, backgroundColor: colors.white, marginLeft: spacing.md + 28 },
   footer: { textAlign: "center", color: colors.muted, fontSize: 12, marginTop: spacing.xl, lineHeight: 18 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
+  modalCard: { backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.lg, width: "85%" },
+  modalTitle: { fontSize: 16, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
+  modalLabel: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },
+  modalInput: {
+    backgroundColor: colors.fieldBg,
+    borderRadius: radius.sm,
+    padding: 12,
+    fontSize: 20,
+    color: colors.navy,
+    textAlign: "center",
+    letterSpacing: 8,
+  },
+  modalButtonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
+  modalCancelButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
+  modalCancelText: { color: colors.muted, fontWeight: "700" },
+  modalConfirmButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.teal },
+  modalConfirmText: { color: colors.white, fontWeight: "700" },
 });

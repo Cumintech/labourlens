@@ -94,6 +94,17 @@ export default function NewWorkerScanScreen({ navigation }: Props) {
           <Text style={styles.buttonText}>Scan Now</Text>
         )}
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.manualLink}
+        onPress={() =>
+          navigation.navigate("NewWorkerDetails", {
+            ocrFields: { name: null, dob: null, gender: null, aadhaar_number: null, current_address: null },
+          })
+        }
+      >
+        <Text style={styles.manualLinkText}>Aadhaar card not available? Enter details manually →</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -123,4 +134,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.5 },
   buttonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
+  manualLink: { marginTop: spacing.lg, alignItems: "center" },
+  manualLinkText: { color: colors.skyBlue, fontSize: 13, fontWeight: "700" },
 });

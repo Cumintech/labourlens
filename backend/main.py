@@ -608,6 +608,7 @@ def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:
         worker_name=worker.name,
         has_rate=True,
         days_worked=wage["summary"]["days_worked"],
+        days_absent=wage["summary"]["days_absent"],
         gross_wage=wage["gross"],
         net_wage=wage["net"],
         paid=wage["payment"] is not None and wage["payment"].date_of_payment is not None,
@@ -620,7 +621,11 @@ def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:
         ot_wages=wage["ot_wages"],
         leave_wages=wage["leave_wages"],
         pf=wage["pf"],
+        pf_rate=wage["rate"].pf_rate,
+        pf_base=wage["basic_wage"] + wage["rate"].da,
         esi=wage["esi"],
+        esi_rate=wage["rate"].esi_rate,
+        esi_base=wage["gross"],
         lwf=wage["lwf"],
         total_deductions=wage["total_deductions"],
     )
@@ -1122,16 +1127,13 @@ def email_form(
 def download_report(
     start_date: date_,
     end_date: date_,
-    format: str = "excel",
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    if format not in ("excel", "pdf"):
-        raise HTTPException(status_code=422, detail="format must be 'excel' or 'pdf'")
     if end_date < start_date:
         raise HTTPException(status_code=422, detail="end_date must not be before start_date")
 
-    content, media_type, filename = reports.build_report(db, owner, start_date, end_date, format)
+    content, media_type, filename = reports.build_report(db, owner, start_date, end_date)
     return Response(
         content=content,
         media_type=media_type,
@@ -1145,14 +1147,10 @@ def email_report(
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    if body.format not in ("excel", "pdf"):
-        raise HTTPException(status_code=422, detail="format must be 'excel' or 'pdf'")
     if body.end_date < body.start_date:
         raise HTTPException(status_code=422, detail="end_date must not be before start_date")
 
-    content, _media_type, filename = reports.build_report(
-        db, owner, body.start_date, body.end_date, body.format
-    )
+    content, _media_type, filename = reports.build_report(db, owner, body.start_date, body.end_date)
     send_report_email(
         to_email=body.recipient_email,
         subject=f"{owner.factory_name} attendance report ({body.start_date} to {body.end_date})",
@@ -1162,6 +1160,6 @@ def email_report(
         ),
         attachment_bytes=content,
         attachment_filename=filename,
-        format=body.format,
+        format="pdf",
     )
     return {"status": "email sent"}

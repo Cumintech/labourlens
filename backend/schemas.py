@@ -132,7 +132,6 @@ class ReportEmailIn(BaseModel):
     start_date: date
     end_date: date
     recipient_email: str
-    format: str  # "pdf" | "excel"
 
 
 _HHMM_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -277,6 +276,7 @@ class WorkerWageOut(BaseModel):
     worker_name: str
     has_rate: bool  # False = no WageProfile set yet, every figure below is 0
     days_worked: float
+    days_absent: float = 0
     gross_wage: float
     net_wage: float
     paid: bool
@@ -291,7 +291,11 @@ class WorkerWageOut(BaseModel):
     ot_wages: float = 0
     leave_wages: float = 0
     pf: float = 0
+    pf_rate: float = 0
+    pf_base: float = 0  # Basic + DA, the statutory PF wage base
     esi: float = 0
+    esi_rate: float = 0
+    esi_base: float = 0  # Gross Wages, the statutory ESI wage base
     lwf: float = 0
     total_deductions: float = 0
 

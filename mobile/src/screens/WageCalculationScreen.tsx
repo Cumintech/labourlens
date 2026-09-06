@@ -302,12 +302,33 @@ export default function WageCalculationScreen() {
             <>
               <Text style={styles.modalTitle}>{detailTarget.worker_name}</Text>
               <Text style={styles.modalSubtitle}>
-                {MONTH_NAMES[month - 1]} {year} · {detailTarget.rate_amount.toFixed(2)}/{detailTarget.rate_type} ·{" "}
-                {detailTarget.days_worked} day{detailTarget.days_worked === 1 ? "" : "s"} worked
+                {MONTH_NAMES[month - 1]} {year} · ₹{detailTarget.rate_amount.toFixed(2)}/{detailTarget.rate_type}
               </Text>
+
+              <View style={styles.daysRow}>
+                <View style={[styles.dayStat, { backgroundColor: colors.tealLight }]}>
+                  <Text style={[styles.dayStatValue, { color: "#0F6E56" }]}>{detailTarget.days_worked}</Text>
+                  <Text style={styles.dayStatLabel}>Days Worked</Text>
+                </View>
+                <View style={[styles.dayStat, { backgroundColor: colors.dangerLight }]}>
+                  <Text style={[styles.dayStatValue, { color: colors.danger }]}>{detailTarget.days_absent}</Text>
+                  <Text style={styles.dayStatLabel}>Days Absent</Text>
+                </View>
+              </View>
+
               <View style={styles.detailDivider} />
+              <View style={styles.detailRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Basic Wages</Text>
+                  <Text style={styles.detailFormula}>
+                    {detailTarget.rate_type === "daily"
+                      ? `${detailTarget.days_worked} days × ₹${detailTarget.rate_amount.toFixed(2)}`
+                      : `₹${detailTarget.rate_amount.toFixed(2)} / month`}
+                  </Text>
+                </View>
+                <Text style={styles.detailValue}>₹{detailTarget.basic_wage.toFixed(2)}</Text>
+              </View>
               {[
-                ["Basic Wages", detailTarget.basic_wage],
                 ["Dearness Allowance", detailTarget.da],
                 ["House Rent Allowance", detailTarget.hra],
                 ["Other Allowances", detailTarget.other_allowances],
@@ -324,16 +345,28 @@ export default function WageCalculationScreen() {
                 <Text style={styles.detailValueBold}>₹{detailTarget.gross_wage.toFixed(2)}</Text>
               </View>
               <View style={styles.detailDivider} />
-              {[
-                ["Provident Fund", detailTarget.pf],
-                ["Employees State Insurance", detailTarget.esi],
-                ["Labour Welfare Fund", detailTarget.lwf],
-              ].map(([label, value]) => (
-                <View key={label as string} style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>{label}</Text>
-                  <Text style={styles.detailValueNegative}>-₹{(value as number).toFixed(2)}</Text>
+              <View style={styles.detailRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Provident Fund</Text>
+                  <Text style={styles.detailFormula}>
+                    {detailTarget.pf_rate}% of ₹{detailTarget.pf_base.toFixed(2)} (Basic+DA)
+                  </Text>
                 </View>
-              ))}
+                <Text style={styles.detailValueNegative}>-₹{detailTarget.pf.toFixed(2)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Employees State Insurance</Text>
+                  <Text style={styles.detailFormula}>
+                    {detailTarget.esi_rate}% of ₹{detailTarget.esi_base.toFixed(2)} (Gross)
+                  </Text>
+                </View>
+                <Text style={styles.detailValueNegative}>-₹{detailTarget.esi.toFixed(2)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Labour Welfare Fund</Text>
+                <Text style={styles.detailValueNegative}>-₹{detailTarget.lwf.toFixed(2)}</Text>
+              </View>
               <View style={styles.detailDivider} />
               <View style={styles.detailRowTotal}>
                 <Text style={styles.detailLabelBold}>Net Wages</Text>
@@ -400,6 +433,11 @@ const styles = StyleSheet.create({
   workerName: { fontSize: 14, fontWeight: "700", color: colors.navy },
   workerAmount: { fontSize: 16, fontWeight: "700", color: colors.teal, marginTop: 2 },
   workerDetailLink: { fontSize: 11, color: colors.skyBlue, fontWeight: "700", marginTop: 4 },
+  daysRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  dayStat: { flex: 1, borderRadius: radius.sm, paddingVertical: spacing.sm, alignItems: "center" },
+  dayStatValue: { fontSize: 20, fontWeight: "700" },
+  dayStatLabel: { fontSize: 10, color: colors.muted, marginTop: 2, fontWeight: "600" },
+  detailFormula: { fontSize: 10, color: colors.muted, marginTop: 1 },
   detailDivider: { height: 1, backgroundColor: colors.fieldBg, marginVertical: spacing.sm },
   detailRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
   detailLabel: { fontSize: 13, color: colors.muted },

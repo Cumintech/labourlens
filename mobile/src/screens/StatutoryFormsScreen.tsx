@@ -144,8 +144,9 @@ export default function StatutoryFormsScreen({ navigation }: Props) {
       <Text style={styles.title}>Forms & Reports</Text>
       <Text style={styles.subtitle}>Download or email any statutory form, for any worker, whenever it's needed.</Text>
 
-      <TouchableOpacity style={styles.reportLinkButton} onPress={() => navigation.navigate("Report")}>
-        <Text style={styles.reportLinkButtonText}>Open 6-month attendance report →</Text>
+      <Text style={styles.sectionLabel}>Report</Text>
+      <TouchableOpacity style={styles.formOption} onPress={() => navigation.navigate("Report")}>
+        <Text style={styles.formOptionText}>📊 Attendance Report — choose any period</Text>
       </TouchableOpacity>
 
       <Text style={styles.sectionLabel}>Form</Text>
@@ -230,13 +231,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
   sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs, textTransform: "uppercase" },
-  reportLinkButton: {
-    backgroundColor: colors.violetLight,
-    borderRadius: radius.sm,
-    padding: spacing.sm + 4,
-    marginBottom: spacing.sm,
-  },
-  reportLinkButtonText: { color: colors.violet, fontSize: 13, fontWeight: "700" },
   empty: { fontSize: 13, color: colors.muted },
   formOption: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, marginBottom: spacing.xs },
   formOptionSelected: { backgroundColor: colors.teal },

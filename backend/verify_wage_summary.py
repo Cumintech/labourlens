@@ -69,6 +69,9 @@ assert body["rate_amount"] == 500 and body["rate_type"] == "daily", body
 assert abs(body["basic_wage"] - BASIC_WAGE) < 0.01, body
 assert abs(body["ot_wages"] - OT_WAGES) < 0.01, body
 assert body["pf"] == 0 and body["esi"] == 0 and body["lwf"] == 0 and body["total_deductions"] == 0, body
+assert body["days_absent"] >= 0, body
+assert body["pf_rate"] == 0 and body["pf_base"] == body["basic_wage"], body  # DA=0 here, so PF base == basic wage
+assert body["esi_rate"] == 0 and abs(body["esi_base"] - body["gross_wage"]) < 0.01, body
 print("per-worker wage computation matches hand-computed expected value: PASSED")
 
 w3_wage = client.get(f"/workers/{w3['id']}/wage-computation", headers=headers_a, params={"month": 9, "year": 2026})

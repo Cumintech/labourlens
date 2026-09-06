@@ -11,8 +11,6 @@ import {
   ShiftConfig,
   Worker,
   deactivateWorker,
-  deleteLeaveEntry,
-  createLeaveEntry,
   getDashboard,
   listAttendance,
   listLeaveForDate,
@@ -22,7 +20,7 @@ import {
   markAttendance,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
-import ShiftStatusLine from "../components/ShiftStatusLine";
+import ShiftPresentAbsentRow from "../components/ShiftPresentAbsentRow";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -105,38 +103,15 @@ export default function DashboardScreen({ navigation }: Props) {
     return map;
   }, [attendance]);
 
+  // Leave is no longer a settable status from this screen (Present/
+  // Absent/OT only, single tap, no popup) -- this is read-only context
+  // from whatever leave records already exist, so "on leave today" is
+  // still visible while marking attendance, per request.
   const leaveByWorker = useMemo(() => {
     const map = new Map<number, LeaveEntry>();
     for (const l of leave) map.set(l.worker_id, l);
     return map;
   }, [leave]);
-
-  // The statutory forms (Form 15/25/25-B) compute paid leave from the
-  // day-level LeaveEntry table, not from Attendance rows directly -- so
-  // every time a shift's leave state changes, the day's LeaveEntry is
-  // recreated to match how many of the worker's shifts are on leave that
-  // day (a fractional day when only some shifts are). This dashboard is
-  // the only place LeaveEntry rows are created in this app, so it's safe
-  // to treat "the one entry for this worker+day" as fully owned here.
-  async function syncDayLeave(worker: Worker, attendanceForDay: Attendance[]) {
-    if (!token) return;
-    const leaveCount = attendanceForDay.filter((a) => a.status === "leave").length;
-    const totalShifts = shifts.length || 1;
-    const existing = leaveByWorker.get(worker.id);
-    if (existing) {
-      await deleteLeaveEntry(token, existing.id);
-      setLeave((prev) => prev.filter((l) => l.id !== existing.id));
-    }
-    if (leaveCount > 0) {
-      const created = await createLeaveEntry(token, worker.id, {
-        leave_type: "earned",
-        date_from: selectedDate,
-        date_to: selectedDate,
-        days: leaveCount / totalShifts,
-      });
-      setLeave((prev) => [...prev, created]);
-    }
-  }
 
   async function handleSetStatus(worker: Worker, slot: AttendanceSlot, status: AttendanceStatus) {
     if (!token) return;
@@ -144,14 +119,7 @@ export default function DashboardScreen({ navigation }: Props) {
     const current = attendanceByWorkerSlot.get(key);
     try {
       const updated = await markAttendance(token, worker.id, selectedDate, slot, status, current?.overtime_hours ?? 0);
-      const attendanceAfter = [...attendance.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated];
-      setAttendance(attendanceAfter);
-      if (status === "leave" || current?.status === "leave") {
-        await syncDayLeave(
-          worker,
-          attendanceAfter.filter((a) => a.worker_id === worker.id),
-        );
-      }
+      setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated]);
       setSummary(await getDashboard(token, selectedDate));
     } catch {
       Alert.alert("Could not update attendance", "Please try again.");
@@ -194,22 +162,22 @@ export default function DashboardScreen({ navigation }: Props) {
     );
   }
 
-  // Sunday is treated as a default paid holiday -- the backend already
-  // counts every Sunday toward wages regardless of whether anyone marks
-  // attendance (see forms.py's _summarize_month), so this is purely
-  // about not making the owner tap through every worker on a day that's
-  // already correct by default.
+  // No separate Holiday/Leave concept anymore -- Sunday defaults to
+  // Absent display the same as any other unmarked day (the backend
+  // still counts every Sunday toward wages regardless of marking, see
+  // forms.py's _summarize_month; this is purely a display default).
   const isSunday = new Date(selectedDate).getDay() === 0;
 
   function handleBulkPresent() {
     const activeCount = workers.filter((w) => w.status === "active").length;
-    const message = isSunday
-      ? "Today is Sunday, a default holiday -- wages are already counted for everyone without marking attendance. Mark all active workers present anyway?"
-      : `Mark all ${activeCount} active workers present, in every one of their shifts, for this day?`;
-    Alert.alert(isSunday ? "Sunday is a default holiday" : "Mark everyone present?", message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Mark Present", onPress: doBulkPresent },
-    ]);
+    Alert.alert(
+      "Mark everyone present?",
+      `Mark all ${activeCount} active workers present, in every one of their shifts, for this day?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Mark Present", onPress: doBulkPresent },
+      ],
+    );
   }
 
   async function doBulkPresent() {
@@ -251,17 +219,9 @@ export default function DashboardScreen({ navigation }: Props) {
     try {
       const yesterday = addDays(selectedDate, -1);
       const yesterdayAttendance = await listAttendance(token, yesterday);
-      const updated = await Promise.all(
+      await Promise.all(
         yesterdayAttendance.map((a) => markAttendance(token, a.worker_id, selectedDate, a.slot, a.status, a.overtime_hours)),
       );
-      const byWorker = new Map<number, Attendance[]>();
-      for (const a of updated) {
-        byWorker.set(a.worker_id, [...(byWorker.get(a.worker_id) ?? []), a]);
-      }
-      for (const [workerId, records] of byWorker) {
-        const worker = workers.find((w) => w.id === workerId);
-        if (worker) await syncDayLeave(worker, records);
-      }
       await load();
     } catch {
       Alert.alert("Could not copy yesterday's attendance", "Please try again.");
@@ -330,28 +290,6 @@ export default function DashboardScreen({ navigation }: Props) {
               <Text style={styles.rangeLink}>Edit multiple days →</Text>
             </TouchableOpacity>
 
-            {isSunday && (
-              <View style={styles.sundayBanner}>
-                <Text style={styles.sundayBannerText}>
-                  🎉 Sunday is a default holiday -- wages are already counted for everyone. Mark a shift only if
-                  someone actually worked.
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.bulkRow}>
-              <TouchableOpacity style={styles.bulkButton} onPress={handleBulkPresent} disabled={bulkBusy}>
-                {bulkBusy ? (
-                  <ActivityIndicator color={colors.white} size="small" />
-                ) : (
-                  <Text style={styles.bulkButtonText}>✓ Mark All Present</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.bulkButtonGhost} onPress={handleCopyYesterday} disabled={bulkBusy}>
-                <Text style={styles.bulkButtonGhostText}>📋 Copy Yesterday</Text>
-              </TouchableOpacity>
-            </View>
-
             <View style={styles.summaryCard}>
               <View style={styles.summaryTopRow}>
                 <Text style={styles.summaryNumber}>
@@ -373,11 +311,21 @@ export default function DashboardScreen({ navigation }: Props) {
                 })}
               </View>
             </View>
-          </View>
 
-          <TouchableOpacity style={styles.addWorkerButton} onPress={() => navigation.navigate("NewWorkerScan")}>
-            <Text style={styles.addWorkerButtonText}>+ Add New Worker</Text>
-          </TouchableOpacity>
+            <View style={styles.bulkRow}>
+              <TouchableOpacity style={styles.bulkButton} onPress={handleBulkPresent} disabled={bulkBusy}>
+                {bulkBusy ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Text style={styles.bulkButtonText}>✓ Mark All Present</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.bulkButtonGhost} onPress={handleCopyYesterday} disabled={bulkBusy}>
+                <Text style={styles.bulkButtonGhostText}>📋 Copy Yesterday</Text>
+              </TouchableOpacity>
+            </View>
+            {isSunday && <Text style={styles.sundayNote}>Sunday defaults to Absent unless you mark a shift present.</Text>}
+          </View>
 
           {missingComplianceCount > 0 && (
             <TouchableOpacity style={styles.complianceBanner} onPress={handleMissingCompliancePress}>
@@ -425,10 +373,12 @@ export default function DashboardScreen({ navigation }: Props) {
       }
       renderItem={({ item }) => {
         const isActive = item.status === "active";
+        const onLeave = leaveByWorker.has(item.id);
         return (
           <View style={styles.row}>
             <View style={styles.rowTop}>
               <TouchableOpacity
+                style={{ flex: 1 }}
                 onPress={() =>
                   navigation.navigate("WorkerAttendance", {
                     workerId: item.id,
@@ -438,7 +388,14 @@ export default function DashboardScreen({ navigation }: Props) {
                   })
                 }
               >
-                <Text style={styles.name}>{item.name}</Text>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  {onLeave && (
+                    <View style={styles.leaveBadge}>
+                      <Text style={styles.leaveBadgeText}>On Leave</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.meta}>Aadhaar •••• •••• {item.aadhaar_last4}</Text>
               </TouchableOpacity>
               {isActive ? (
@@ -454,9 +411,8 @@ export default function DashboardScreen({ navigation }: Props) {
               )}
             </View>
             {isActive && (
-              <ShiftStatusLine
+              <ShiftPresentAbsentRow
                 shifts={shifts}
-                isSunday={isSunday}
                 getStatus={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.status}
                 getOtHours={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.overtime_hours ?? 0}
                 onSetStatus={(slotKey, status) => handleSetStatus(item, slotKey, status)}
@@ -489,14 +445,15 @@ const styles = StyleSheet.create({
   todayLink: { paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.teal, borderRadius: radius.sm },
   todayLinkText: { color: colors.white, fontSize: 11, fontWeight: "700" },
   rangeLink: { color: colors.tealPale, fontSize: 12, fontWeight: "700", marginTop: spacing.sm },
-  sundayBanner: {
-    backgroundColor: "rgba(124,92,191,0.18)",
-    borderRadius: radius.sm,
-    padding: spacing.sm + 2,
-    marginTop: spacing.sm,
-  },
-  sundayBannerText: { color: colors.white, fontSize: 12, fontWeight: "600" },
-  bulkRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  summaryCard: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.sm + 6, marginTop: spacing.md },
+  summaryTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  summaryNumber: { color: colors.navy, fontSize: 26, fontWeight: "700" },
+  summaryLabel: { color: "#0F6E56", fontSize: 12, fontWeight: "700" },
+  slotRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.sm, flexWrap: "wrap" },
+  slotBox: { flexGrow: 1, flexBasis: "30%", borderRadius: radius.sm, padding: spacing.xs + 4 },
+  slotBoxLabel: { fontSize: 11 },
+  slotBoxValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
+  bulkRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
   bulkButton: {
     flex: 1,
     backgroundColor: colors.teal,
@@ -513,23 +470,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bulkButtonGhostText: { color: colors.white, fontSize: 13, fontWeight: "700" },
-  summaryCard: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.sm + 6, marginTop: spacing.md },
-  summaryTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
-  summaryNumber: { color: colors.navy, fontSize: 26, fontWeight: "700" },
-  summaryLabel: { color: "#0F6E56", fontSize: 12, fontWeight: "700" },
-  slotRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.sm, flexWrap: "wrap" },
-  slotBox: { flexGrow: 1, flexBasis: "30%", borderRadius: radius.sm, padding: spacing.xs + 4 },
-  slotBoxLabel: { fontSize: 11 },
-  slotBoxValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
-  addWorkerButton: {
-    backgroundColor: colors.teal,
-    borderRadius: radius.md,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    paddingVertical: spacing.sm + 8,
-    alignItems: "center",
-  },
-  addWorkerButtonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
+  sundayNote: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: spacing.sm, textAlign: "center" },
   complianceBanner: {
     backgroundColor: "#FFF8EC",
     borderColor: colors.amber,
@@ -565,7 +506,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   name: { fontSize: 15, fontWeight: "700", color: colors.navy },
+  leaveBadge: { backgroundColor: colors.amberLight, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  leaveBadgeText: { fontSize: 9, fontWeight: "700", color: "#8A5A14" },
   meta: { fontSize: 11, color: colors.muted, marginTop: 1 },
   deactivateLink: { color: colors.danger, fontSize: 11, fontWeight: "700" },
   badge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },

@@ -295,14 +295,12 @@ export function getDashboard(token: string, date: string): Promise<DashboardSumm
   });
 }
 
-export type ReportFormat = "excel" | "pdf";
-
+// PDF only -- Excel support was removed from this report.
 export function emailReport(
   token: string,
   startDate: string,
   endDate: string,
   recipientEmail: string,
-  format: ReportFormat,
 ): Promise<{ status: string }> {
   return request<{ status: string }>("/reports/attendance/email", {
     method: "POST",
@@ -311,9 +309,12 @@ export function emailReport(
       start_date: startDate,
       end_date: endDate,
       recipient_email: recipientEmail,
-      format,
     }),
   });
+}
+
+export function getReportDownloadUrl(startDate: string, endDate: string): string {
+  return `${API_BASE_URL}/reports/attendance?start_date=${startDate}&end_date=${endDate}`;
 }
 
 export type WorkerComplianceInput = {
@@ -518,6 +519,7 @@ export type WorkerWage = {
   worker_name: string;
   has_rate: boolean;
   days_worked: number;
+  days_absent: number;
   gross_wage: number;
   net_wage: number;
   paid: boolean;
@@ -530,7 +532,11 @@ export type WorkerWage = {
   ot_wages: number;
   leave_wages: number;
   pf: number;
+  pf_rate: number;
+  pf_base: number;
   esi: number;
+  esi_rate: number;
+  esi_base: number;
   lwf: number;
   total_deductions: number;
 };

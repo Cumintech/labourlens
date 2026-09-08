@@ -23,7 +23,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Leave Owner A", "mobile": "9000000501", "password": "pass123", "factory_name": "Leave Factory A"},
+    json={"name": "Leave Owner A", "mobile": "9000000501", "password": "pass123", "factory_name": "Leave Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -111,7 +111,7 @@ print("DELETE /leave/{id} removes the entry: PASSED")
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Leave Owner B", "mobile": "9000000502", "password": "pass123", "factory_name": "Leave Factory B"},
+    json={"name": "Leave Owner B", "mobile": "9000000502", "password": "pass123", "factory_name": "Leave Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

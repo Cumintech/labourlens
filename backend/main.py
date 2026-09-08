@@ -106,6 +106,9 @@ def health():
 
 @app.post("/owners/signup", response_model=TokenOut, status_code=201)
 def signup(body: OwnerSignupIn, db: Session = Depends(get_db)):
+    if not body.consent_given:
+        raise HTTPException(status_code=422, detail="You must accept the Privacy Policy to create an account")
+
     existing = db.query(models.Owner).filter(models.Owner.mobile == body.mobile).first()
     if existing:
         raise HTTPException(status_code=409, detail="An owner with this mobile number already exists")
@@ -115,6 +118,7 @@ def signup(body: OwnerSignupIn, db: Session = Depends(get_db)):
         mobile=body.mobile,
         password_hash=hash_password(body.password),
         factory_name=body.factory_name,
+        consent_given_at=datetime.now(timezone.utc),
     )
     db.add(owner)
     db.commit()
@@ -362,6 +366,7 @@ def create_worker_compliance(
         **body_data,
     )
     db.add(compliance)
+    db.add(models.AuditLog(owner_id=owner.id, worker_id=worker_id, action="compliance_create"))
     db.commit()
     db.refresh(compliance)
     return _compliance_out(compliance, worker)
@@ -423,6 +428,7 @@ def update_worker_compliance(
     # wiped to null just because this request didn't mention it.
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(compliance, field, value)
+    db.add(models.AuditLog(owner_id=owner.id, worker_id=worker_id, action="compliance_update"))
     db.commit()
     db.refresh(compliance)
     return _compliance_out(compliance, worker)
@@ -453,6 +459,14 @@ def create_wage_profile(
     _get_owned_worker(worker_id, owner, db)
     profile = models.WageProfile(worker_id=worker_id, created_by=owner.id, **body.model_dump())
     db.add(profile)
+    db.add(
+        models.AuditLog(
+            owner_id=owner.id,
+            worker_id=worker_id,
+            action="wage_rate_set",
+            reason=f"{body.rate_type} rate set to {body.basic}, effective {body.effective_from}",
+        )
+    )
     db.commit()
     db.refresh(profile)
     return profile
@@ -598,6 +612,14 @@ def assign_worker_type(
                     rate_type=worker_type.default_rate_type,
                     basic=worker_type.default_rate,
                     effective_from=date_.today(),
+                )
+            )
+            db.add(
+                models.AuditLog(
+                    owner_id=owner.id,
+                    worker_id=worker_id,
+                    action="wage_rate_set",
+                    reason=f"auto-created from worker type '{worker_type.name}' default ({worker_type.default_rate_type} {worker_type.default_rate})",
                 )
             )
     worker.worker_type_id = body.worker_type_id

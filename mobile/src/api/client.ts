@@ -87,10 +87,11 @@ export function signup(
   mobile: string,
   password: string,
   factoryName: string,
+  consentGiven: boolean,
 ): Promise<AuthResponse> {
   return request<AuthResponse>("/owners/signup", {
     method: "POST",
-    body: JSON.stringify({ name, mobile, password, factory_name: factoryName }),
+    body: JSON.stringify({ name, mobile, password, factory_name: factoryName, consent_given: consentGiven }),
   });
 }
 

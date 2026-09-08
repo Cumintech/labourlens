@@ -44,6 +44,16 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Only two screens exist before login: Login itself, and the real
+// Privacy Policy screen (reused as-is, not duplicated) so the DPDP
+// consent checkbox on Login can link to the actual policy text instead
+// of a summary baked into the login form.
+export type AuthStackParamList = {
+  Login: undefined;
+  PrivacyPolicy: undefined;
+};
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+
 export default function RootNavigator() {
   const { token, loading } = useAuth();
 
@@ -56,7 +66,20 @@ export default function RootNavigator() {
   }
 
   if (!token) {
-    return <LoginScreen />;
+    return (
+      <NavigationContainer>
+        <AuthStack.Navigator
+          screenOptions={{
+            headerStyle: { backgroundColor: colors.white },
+            headerTitleStyle: { color: colors.navy, fontWeight: "700" },
+            headerTintColor: colors.teal,
+          }}
+        >
+          <AuthStack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+          <AuthStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
+        </AuthStack.Navigator>
+      </NavigationContainer>
+    );
   }
 
   return (

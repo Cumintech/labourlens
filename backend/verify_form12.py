@@ -23,7 +23,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Compliance Owner A", "mobile": "9000000301", "password": "pass123", "factory_name": "Compliance Factory A"},
+    json={"name": "Compliance Owner A", "mobile": "9000000301", "password": "pass123", "factory_name": "Compliance Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -105,7 +105,7 @@ print("PUT omitting worker_code leaves the existing auto-generated code untouche
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Compliance Owner B", "mobile": "9000000302", "password": "pass123", "factory_name": "Compliance Factory B"},
+    json={"name": "Compliance Owner B", "mobile": "9000000302", "password": "pass123", "factory_name": "Compliance Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

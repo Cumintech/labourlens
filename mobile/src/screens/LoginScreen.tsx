@@ -1,22 +1,27 @@
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import KeyboardScreen from "../components/KeyboardScreen";
+import { AuthStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+
+type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
 // Signing up was previously only possible via a raw API call -- every
 // account on this app so far was created by hand outside the UI. This
 // adds the missing path so any number of separate factory owners can
 // create their own login (each one fully isolated server-side by
 // owner_id -- see AuthContext.signup) without needing that done for them.
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }: Props) {
   const { login, signup } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [factoryName, setFactoryName] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
+  const [consentChecked, setConsentChecked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -31,7 +36,14 @@ export default function LoginScreen() {
           setError("Owner name and factory name are required.");
           return;
         }
-        await signup(name.trim(), mobile.trim(), password, factoryName.trim());
+        // Decorative-only wouldn't be a real gate -- the backend itself
+        // also rejects a signup without consent_given=true, but this
+        // stops the request before it's even sent, with a clear reason.
+        if (!consentChecked) {
+          setError("Please accept the Privacy Policy to create an account.");
+          return;
+        }
+        await signup(name.trim(), mobile.trim(), password, factoryName.trim(), consentChecked);
       }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.");
@@ -104,12 +116,27 @@ export default function LoginScreen() {
         autoCorrect={false}
       />
 
+      {mode === "signup" && (
+        <TouchableOpacity style={styles.consentRow} onPress={() => setConsentChecked((v) => !v)}>
+          <View style={[styles.checkbox, consentChecked && styles.checkboxChecked]}>
+            {consentChecked && <Text style={styles.checkboxTick}>✓</Text>}
+          </View>
+          <Text style={styles.consentText}>
+            I agree to the{" "}
+            <Text style={styles.consentLink} onPress={() => navigation.navigate("PrivacyPolicy")}>
+              Privacy Policy
+            </Text>
+            , including how worker data is stored and retained.
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {error && <Text style={styles.error}>{error}</Text>}
 
       <TouchableOpacity
-        style={[styles.button, submitting && styles.buttonDisabled]}
+        style={[styles.button, (submitting || (mode === "signup" && !consentChecked)) && styles.buttonDisabled]}
         onPress={handleSubmit}
-        disabled={submitting}
+        disabled={submitting || (mode === "signup" && !consentChecked)}
       >
         {submitting ? (
           <ActivityIndicator color={colors.white} />
@@ -145,6 +172,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.navy,
   },
+  consentRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginTop: spacing.lg },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.sm - 4,
+    borderWidth: 1.5,
+    borderColor: colors.muted,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  checkboxChecked: { backgroundColor: colors.teal, borderColor: colors.teal },
+  checkboxTick: { color: colors.white, fontSize: 14, fontWeight: "700" },
+  consentText: { flex: 1, fontSize: 12, color: colors.muted, lineHeight: 17 },
+  consentLink: { color: colors.teal, fontWeight: "700" },
   error: { color: colors.danger, marginTop: spacing.md, textAlign: "center" },
   button: {
     backgroundColor: colors.teal,

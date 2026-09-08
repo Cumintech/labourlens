@@ -39,7 +39,7 @@ client = TestClient(app)
 # --- Owner A: the one we'll actually exercise ---
 signup_resp = client.post(
     "/owners/signup",
-    json={"name": "Owner A", "mobile": "9000000001", "password": "pass123", "factory_name": "Factory A"},
+    json={"name": "Owner A", "mobile": "9000000001", "password": "pass123", "factory_name": "Factory A", "consent_given": True},
 )
 assert signup_resp.status_code == 201, signup_resp.text
 token_a = signup_resp.json()["access_token"]
@@ -49,7 +49,7 @@ print("owner A signed up")
 # --- Owner B: only used to prove multi-tenant scoping ---
 signup_resp_b = client.post(
     "/owners/signup",
-    json={"name": "Owner B", "mobile": "9000000002", "password": "pass123", "factory_name": "Factory B"},
+    json={"name": "Owner B", "mobile": "9000000002", "password": "pass123", "factory_name": "Factory B", "consent_given": True},
 )
 assert signup_resp_b.status_code == 201, signup_resp_b.text
 token_b = signup_resp_b.json()["access_token"]
@@ -90,17 +90,17 @@ assert worker["aadhaar_last4"] == "9012", worker
 assert "aadhaar_number" not in worker, "raw Aadhaar must never appear in API responses"
 assert "aadhaar_encrypted" not in worker, "encrypted column must never appear in API responses"
 
-# --- Confirm PII is genuinely encrypted at rest, not just via the ORM ---
-import sqlite3
-db_path = None
-import os
-db_url = os.environ["DATABASE_URL"]
-assert db_url.startswith("sqlite:///"), "this raw-DB check assumes the sqlite dev DB"
-db_path = db_url.replace("sqlite:///", "")
-conn = sqlite3.connect(db_path)
-row = conn.execute(
-    "SELECT aadhaar_encrypted, current_address, aadhaar_last4 FROM workers WHERE id=?", (worker["id"],)
-).fetchone()
+# --- Confirm PII is genuinely encrypted at rest, not just via the ORM
+# -- via the same SQLAlchemy engine the app itself uses (not a
+# database-specific driver like sqlite3), so this check runs unchanged
+# against SQLite in dev or a real Postgres instance in staging/prod. ---
+from sqlalchemy import text
+
+with engine.connect() as raw_conn:
+    row = raw_conn.execute(
+        text("SELECT aadhaar_encrypted, current_address, aadhaar_last4 FROM workers WHERE id=:id"),
+        {"id": worker["id"]},
+    ).fetchone()
 raw_aadhaar_encrypted, raw_address_encrypted, raw_last4 = row
 assert raw_aadhaar_encrypted != "123456789012", f"Aadhaar stored in plaintext! {raw_aadhaar_encrypted!r}"
 assert raw_address_encrypted != "42 MG Road, Bengaluru", f"Address stored in plaintext! {raw_address_encrypted!r}"

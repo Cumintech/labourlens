@@ -10,6 +10,10 @@ class OwnerSignupIn(BaseModel):
     mobile: str
     password: str
     factory_name: str
+    # Must be explicitly True -- the endpoint itself rejects signup
+    # without it (a real gate, not just a UI checkbox that could be
+    # bypassed by any other client of this API).
+    consent_given: bool = False
 
 
 class OwnerLoginIn(BaseModel):

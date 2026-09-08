@@ -40,10 +40,21 @@ export default function PrivacyPolicyScreen() {
         storage (Android Keystore / iOS Keychain) -- it's never sent to our servers.
       </Text>
 
+      <Text style={styles.heading}>How long we keep it</Text>
+      <Text style={styles.body}>
+        Worker records, attendance, wage, and compliance data are kept for as long as your factory's account is
+        active, and afterward for as long as the Tamil Nadu Factories Act requires factories to retain these
+        statutory registers -- deactivating a worker does not delete their record, since the law requires the
+        register to keep showing everyone who has ever been employed. If you close your account, we retain data
+        only as long as the law requires before deleting it. Your consent to this policy, and when you gave it, is
+        itself kept as a record of that consent.
+      </Text>
+
       <Text style={styles.heading}>Your control</Text>
       <Text style={styles.body}>
         You can deactivate a worker's record at any time from the app. Contact us via Help & Support if you need
-        a worker's data corrected or removed.
+        a worker's data corrected or removed, or if you have questions about how long a specific record will be
+        kept.
       </Text>
     </ScrollView>
   );

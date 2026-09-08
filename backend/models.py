@@ -19,6 +19,11 @@ class Owner(Base):
     # Printed on every Phase 3 statutory form header -- not PII, plain columns.
     factory_address: Mapped[str | None] = mapped_column(String, nullable=True)
     factory_licence_no: Mapped[str | None] = mapped_column(String, nullable=True)
+    # DPDP consent -- signup is blocked server-side (not just a UI
+    # checkbox) unless this was explicitly given; the timestamp is the
+    # actual evidence of consent, not just a boolean flag, in case it's
+    # ever needed to demonstrate compliance.
+    consent_given_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

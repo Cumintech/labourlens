@@ -32,7 +32,7 @@ assert requests.get(f"{PORTAL_URL}/login").status_code == 200, (
 # --- Owner + Portal credentials ---
 signup = client.post(
     "/owners/signup",
-    json={"name": "Sync Test Owner", "mobile": "9000000099", "password": "pass123", "factory_name": "Sync Test Factory"},
+    json={"name": "Sync Test Owner", "mobile": "9000000099", "password": "pass123", "factory_name": "Sync Test Factory", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]
@@ -103,7 +103,7 @@ print("worker confirmed inactive on the real Test Portal after deactivate sync: 
 # --- Genuine failure path: wrong Portal credentials ---
 signup2 = client.post(
     "/owners/signup",
-    json={"name": "Bad Cred Owner", "mobile": "9000000098", "password": "pass123", "factory_name": "Bad Cred Factory"},
+    json={"name": "Bad Cred Owner", "mobile": "9000000098", "password": "pass123", "factory_name": "Bad Cred Factory", "consent_given": True},
 )
 token2 = signup2.json()["access_token"]
 headers2 = {"Authorization": f"Bearer {token2}"}

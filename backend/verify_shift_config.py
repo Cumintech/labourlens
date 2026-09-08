@@ -10,6 +10,7 @@ history is blocked, and cross-owner scoping throughout.
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -26,7 +27,7 @@ client = TestClient(app)
 # --- New signup gets default shifts automatically ---
 signup = client.post(
     "/owners/signup",
-    json={"name": "Shift Owner A", "mobile": "9000000201", "password": "pass123", "factory_name": "Shift Factory A"},
+    json={"name": "Shift Owner A", "mobile": "9000000201", "password": "pass123", "factory_name": "Shift Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -39,7 +40,8 @@ print("new signup gets 3 default shifts automatically: PASSED")
 # --- Migration script backfills a pre-existing owner with zero shifts ---
 db = SessionLocal()
 legacy_owner = models.Owner(
-    name="Legacy Owner", mobile="9000000202", password_hash="x", factory_name="Legacy Factory"
+    name="Legacy Owner", mobile="9000000202", password_hash="x", factory_name="Legacy Factory",
+    consent_given_at=datetime.now(timezone.utc),  # pre-existing row simulated directly via the ORM, bypassing signup's own consent gate
 )
 db.add(legacy_owner)
 db.commit()
@@ -167,7 +169,7 @@ print("deleting a shift with no attendance history: succeeds: PASSED")
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Shift Owner B", "mobile": "9000000203", "password": "pass123", "factory_name": "Shift Factory B"},
+    json={"name": "Shift Owner B", "mobile": "9000000203", "password": "pass123", "factory_name": "Shift Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

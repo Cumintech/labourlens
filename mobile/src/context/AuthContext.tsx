@@ -10,7 +10,7 @@ type AuthContextValue = {
   owner: Owner | null;
   loading: boolean;
   login: (mobile: string, password: string) => Promise<void>;
-  signup: (name: string, mobile: string, password: string, factoryName: string) => Promise<void>;
+  signup: (name: string, mobile: string, password: string, factoryName: string, consentGiven: boolean) => Promise<void>;
   logout: () => Promise<void>;
   updateOwner: (updated: Owner) => Promise<void>;
 };
@@ -49,8 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // up and only ever see their own workers/attendance/forms. Only one
   // account is the active session on this device at a time (log out,
   // then log in as a different one to switch), same as login().
-  async function signup(name: string, mobile: string, password: string, factoryName: string) {
-    const res = await apiSignup(name, mobile, password, factoryName);
+  async function signup(name: string, mobile: string, password: string, factoryName: string, consentGiven: boolean) {
+    const res = await apiSignup(name, mobile, password, factoryName, consentGiven);
     await AsyncStorage.setItem(TOKEN_KEY, res.access_token);
     await AsyncStorage.setItem(OWNER_KEY, JSON.stringify(res.owner));
     setToken(res.access_token);

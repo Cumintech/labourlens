@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import admin
 import forms
 import models
 import ocr
@@ -14,7 +15,7 @@ import reports
 import sync_worker
 from auth import create_token, get_current_owner, hash_password, verify_password
 from crypto import mask_aadhaar
-from database import Base, engine, get_db
+from database import Base, SessionLocal, engine, get_db
 from email_service import send_report_email
 from schemas import (
     AttendanceMarkIn,
@@ -91,6 +92,26 @@ async def lifespan(app: FastAPI):
     # behavior: the first real Aadhaar scan stays fast).
     if os.environ.get("OCR_WARM_UP", "true").lower() != "false":
         ocr.warm_up()
+
+    # One-time admin account bootstrap via env vars -- the other half of
+    # seed_admin.py's "seeded via a one-time script or environment
+    # variable" requirement. Only fires when no admin_user row exists
+    # yet, so setting these in Render's env vars once (with real shell
+    # access unavailable on the free tier) creates the account on first
+    # boot and is a no-op on every boot after that -- never overwrites
+    # an existing admin on a later redeploy even if the env vars are
+    # still set.
+    admin_email = os.environ.get("ADMIN_EMAIL")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if admin_email and admin_password:
+        db = SessionLocal()
+        try:
+            if not db.query(models.AdminUser).first():
+                db.add(models.AdminUser(email=admin_email, password_hash=hash_password(admin_password)))
+                db.commit()
+        finally:
+            db.close()
+
     yield
 
 
@@ -105,6 +126,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(admin.router)
 
 
 @app.get("/health", response_model=HealthOut)
@@ -138,6 +161,20 @@ def signup(body: OwnerSignupIn, db: Session = Depends(get_db)):
     # valid slots. Owner can rename/retime/replace these afterward.
     for slot_key, label, sort_order in (("AM", "AM", 0), ("PM", "PM", 1), ("Evening", "Evening", 2)):
         db.add(models.ShiftConfig(owner_id=owner.id, slot_key=slot_key, label=label, sort_order=sort_order))
+
+    # Every Owner is one factory for admin-portal purposes -- auto-create
+    # the matching Factory row here rather than requiring the admin to
+    # manually re-enter every factory that's already signed up. Starts
+    # in "trial" status; the admin updates it as the business
+    # relationship changes (see admin.py).
+    db.add(
+        models.Factory(
+            owner_id=owner.id,
+            name=owner.factory_name,
+            owner_name=owner.name,
+            owner_contact=owner.mobile,
+        )
+    )
     db.commit()
 
     token = create_token(owner.id)

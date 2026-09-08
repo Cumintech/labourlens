@@ -282,6 +282,79 @@ class WagePayment(Base):
     )
 
 
+class Factory(Base):
+    """Admin-portal-only business/billing overlay on top of Owner --
+    every Owner in this app already IS one factory, so rather than a
+    second, independently-maintained factory directory, one Factory row
+    is auto-created per Owner at signup (see signup() in main.py),
+    holding the admin-only fields the mobile app has no use for
+    (subscription status, plan tier, internal notes). owner_name/
+    owner_contact are captured at creation time, not joined live, so
+    the admin portal's record of who ran the account doesn't silently
+    change if the owner edits their own profile later."""
+
+    __tablename__ = "factories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    owner_name: Mapped[str] = mapped_column(String, nullable=False)
+    owner_contact: Mapped[str] = mapped_column(String, nullable=False)
+    # "trial" | "active" | "payment_overdue" | "suspended" | "churned"
+    status: Mapped[str] = mapped_column(String, default="trial", nullable=False)
+    plan_tier: Mapped[str | None] = mapped_column(String, nullable=True)
+    enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    notes: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class FactoryPayment(Base):
+    """Manually recorded by the admin for now -- there's no billing
+    integration yet (Razorpay is separate, later work), so this is the
+    source of truth for what's been invoiced/paid until that lands."""
+
+    __tablename__ = "factory_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    factory_id: Mapped[int] = mapped_column(ForeignKey("factories.id"), nullable=False)
+    amount: Mapped[float] = mapped_column(nullable=False)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # "paid" | "pending" | "overdue" -- the admin can set this directly,
+    # but the API also computes "is this actually overdue" from
+    # due_date at read time so a forgotten status field doesn't hide a
+    # real overdue payment (see admin.py's _payment_out).
+    status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FactoryEmployeeSnapshot(Base):
+    """Populated by a monthly scheduled job (monthly_employee_snapshot.py),
+    deliberately not a live join over Worker -- so a historical month's
+    count stays exactly what it was that month even after workers are
+    later deactivated, which is the whole point of a trend view."""
+
+    __tablename__ = "factory_employee_snapshots"
+    __table_args__ = (UniqueConstraint("factory_id", "month", name="uq_snapshot_factory_month"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    factory_id: Mapped[int] = mapped_column(ForeignKey("factories.id"), nullable=False)
+    month: Mapped[str] = mapped_column(String, nullable=False)  # "2026-09"
+    active_employee_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AdminUser(Base):
+    """Single row, by design -- no roles/permissions table, no public
+    signup route. Created only via seed_admin.py."""
+
+    __tablename__ = "admin_user"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class FormGenerationLog(Base):
     """Phase 3 Day 3 -- one row per successful form generation/email.
     worker_id is null for the two factory-wide forms (Form 25, Form 15),

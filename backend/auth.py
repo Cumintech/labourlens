@@ -51,7 +51,14 @@ def get_current_owner(
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    owner = db.get(models.Owner, payload["owner_id"])
+    # A token signed with the same secret but shaped differently (e.g.
+    # the admin portal's token, which has no "owner_id" claim at all)
+    # must fail cleanly here, not crash with an unhandled KeyError.
+    owner_id = payload.get("owner_id")
+    if owner_id is None:
+        raise HTTPException(status_code=401, detail="Not an owner token")
+
+    owner = db.get(models.Owner, owner_id)
     if not owner:
         raise HTTPException(status_code=401, detail="Owner not found")
     return owner

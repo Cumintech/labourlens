@@ -342,3 +342,70 @@ class DailyWageSummaryOut(BaseModel):
     total_workers_present: int
     total_daily_cost: float
     workers: list[DailyWorkerWageOut]
+
+
+# --- Admin portal (see admin.py) ---
+
+
+class AdminLoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class AdminTokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class FactoryOut(BaseModel):
+    id: int
+    owner_id: int
+    name: str
+    owner_name: str
+    owner_contact: str
+    status: str
+    plan_tier: str | None
+    enrolled_at: datetime
+    notes: str | None
+    active_employee_count: int  # current count, joined in at read time
+
+
+class FactoryUpdateIn(BaseModel):
+    status: Literal["trial", "active", "payment_overdue", "suspended", "churned"] | None = None
+    plan_tier: str | None = None
+    notes: str | None = None
+
+
+class FactoryPaymentIn(BaseModel):
+    amount: float
+    due_date: date
+    paid_date: date | None = None
+    status: Literal["paid", "pending", "overdue"] = "pending"
+
+
+class FactoryPaymentOut(BaseModel):
+    id: int
+    factory_id: int
+    amount: float
+    due_date: date
+    paid_date: date | None
+    status: str
+    is_overdue: bool  # computed: status != "paid" and due_date has passed
+
+
+class FactoryEmployeeSnapshotOut(BaseModel):
+    month: str
+    active_employee_count: int
+    is_current_month: bool
+
+
+class FactoryDetailOut(BaseModel):
+    factory: FactoryOut
+    payments: list[FactoryPaymentOut]
+    employee_trend: list[FactoryEmployeeSnapshotOut]
+
+
+class AdminDashboardOut(BaseModel):
+    total_factories: int
+    counts_by_status: dict[str, int]
+    total_active_employees: int

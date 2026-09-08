@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from datetime import date as date_, datetime, timezone
 
@@ -82,7 +83,14 @@ def _shift_configs_for_owner(db: Session, owner_id: int) -> list[models.ShiftCon
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    ocr.warm_up()
+    # Skippable via OCR_WARM_UP=false -- loading EasyOCR's PyTorch models
+    # at startup needs real memory headroom a free-tier host (e.g.
+    # Render's 512MB web service) doesn't have, and an OOM here takes
+    # the whole app down before it can even start serving requests, not
+    # just the OCR feature. Defaults to on (unchanged local-dev
+    # behavior: the first real Aadhaar scan stays fast).
+    if os.environ.get("OCR_WARM_UP", "true").lower() != "false":
+        ocr.warm_up()
     yield
 
 

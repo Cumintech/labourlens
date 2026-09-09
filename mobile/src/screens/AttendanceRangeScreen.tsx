@@ -106,6 +106,7 @@ function DayBlock({
           <DayAttendanceRow
             shifts={shifts}
             getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.status}
+            getShiftSource={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.source}
             onSetShiftStatus={(slotKey, status) => onSetStatus(date, worker, slotKey, status)}
             isOnLeave={leaveByWorker.has(worker.id)}
             onToggleLeave={() => onToggleLeave(date, worker)}

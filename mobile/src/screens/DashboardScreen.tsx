@@ -520,6 +520,7 @@ export default function DashboardScreen({ navigation }: Props) {
                 <DayAttendanceRow
                   shifts={shifts}
                   getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.status}
+                  getShiftSource={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.source}
                   onSetShiftStatus={(slotKey, status) => handleSetShiftStatus(item, slotKey, status)}
                   isOnLeave={onLeave}
                   onToggleLeave={() => handleToggleLeave(item)}

@@ -59,11 +59,12 @@ export default function WorkerComplianceScreen({ route, navigation }: Props) {
         fitness_cert_no: fitnessCertNo.trim() || undefined,
         fitness_cert_valid_till: fitnessCertValidTill.trim() || undefined,
       });
-      // Wage rate used to be something the owner had to remember to go
-      // add later from the worker's own screen -- now it's the next
-      // step of registration itself (still skippable there if the rate
-      // isn't decided yet).
-      navigation.navigate("WageProfile", { workerId, workerName, fromRegistration: true });
+      // Biometric consent (DPDP requirement) comes next, before wage
+      // rate -- it must be captured before any biometric enrollment
+      // happens for this worker, and asking right after their own
+      // details are fresh in view is the natural point, not a
+      // separate flow the owner has to remember to come back to.
+      navigation.navigate("BiometricConsent", { workerId, workerName, fromRegistration: true });
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
       Alert.alert("Save failed", message);

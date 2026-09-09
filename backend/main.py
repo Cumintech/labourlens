@@ -8,11 +8,13 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import admin
+import biometric_api
 import forms
 import models
 import ocr
 import reports
 import sync_worker
+from attendance_service import upsert_attendance
 from auth import create_token, get_current_owner, hash_password, verify_password
 from crypto import mask_aadhaar
 from database import Base, SessionLocal, engine, get_db
@@ -128,6 +130,7 @@ app.add_middleware(
 )
 
 app.include_router(admin.router)
+app.include_router(biometric_api.router)
 
 # Informational only -- deliberately no gate anywhere in this app that
 # blocks a factory owner from using it once this hits zero. Days are
@@ -1071,33 +1074,19 @@ def mark_attendance(
     # Upsert on (worker_id, date, slot) -- re-marking the same slot updates
     # it rather than creating a duplicate row (matches the DB's own unique
     # constraint, so this also avoids ever hitting that constraint error).
-    record = (
-        db.query(models.Attendance)
-        .filter(
-            models.Attendance.worker_id == body.worker_id,
-            models.Attendance.date == body.date,
-            models.Attendance.slot == body.slot,
-        )
-        .first()
+    # Shared with the biometric sync job (attendance_service.py) so a
+    # supervisor's manual tap and a resolved punch write the same way.
+    return upsert_attendance(
+        db,
+        worker_id=body.worker_id,
+        date=body.date,
+        slot=body.slot,
+        status=body.status,
+        overtime_hours=body.overtime_hours,
+        marked_by=owner.id,
+        source="manual",
+        source_detail=owner.name,
     )
-    if record:
-        record.status = body.status
-        record.overtime_hours = body.overtime_hours
-        record.marked_by = owner.id
-        record.marked_at = datetime.now(timezone.utc)
-    else:
-        record = models.Attendance(
-            worker_id=body.worker_id,
-            date=body.date,
-            slot=body.slot,
-            status=body.status,
-            overtime_hours=body.overtime_hours,
-            marked_by=owner.id,
-        )
-        db.add(record)
-    db.commit()
-    db.refresh(record)
-    return record
 
 
 @app.get("/attendance", response_model=list[AttendanceOut])

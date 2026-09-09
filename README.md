@@ -55,3 +55,34 @@ Store submission is deliberately deferred to Day 3 so Days 1–2 can focus on fu
 ### Day 3
 
 App Store / Play Store submission only.
+
+## Biometric attendance sync layer (ZKTeco)
+
+Integration layer for ZKTeco fingerprint devices, built and fully tested without physical hardware. The device-connection logic is isolated behind one interface (`biometric.BaseConnector`) so switching from mock data to a real device is a config change, not a code change.
+
+**What's built:**
+- Data model: `biometric_devices`, `device_user_mapping`, `biometric_punches`, `biometric_consents`; `workers.numeric_employee_code` (doubles as the device's User ID for the common case).
+- `MockConnector` / `ZKTecoConnector`, selected via `BIOMETRIC_CONNECTOR` env var (`mock` default, or `zkteco`).
+- Sync job (`biometric_sync.py`): resolves punches to workers (mapping, else direct employee-code match), dedups on `(device_id, raw_device_user_id, timestamp)`, writes attendance through the same shared `attendance_service.upsert_attendance` used by manual marking (never a parallel path), and never overwrites a manually-marked day.
+- Enrollment: employee-code-as-device-ID (preferred) or manual mapping screen (fallback), with a post-enrollment verification punch and disambiguated worker display (name + employee code + status) everywhere a worker is picked in this flow.
+- Health & visibility: per-device online/offline + `last_synced_at`, 30-minute stale threshold, unmapped-punch and pending-sync counts surfaced in the admin/mobile UI; every attendance record shows its source (`Biometric — device — timestamp` or `Manual override — supervisor — reason`), never a bare tick.
+- DPDP consent: one-time, timestamped `BiometricConsent` record captured in Worker Details onboarding; enrollment (device mapping) is server-side blocked with a 422 if consent hasn't been captured yet — not just a UI checkbox.
+- Test coverage: `backend/verify_biometric_sync.py` — normal sync, duplicate punch (no double-insert), unmapped device_user_id (flagged, not dropped, doesn't crash), backlogged/out-of-order timestamps landing on the correct date, manual-override protection, connection timeout / partial read / device-busy handling. All passing against `MockConnector`.
+
+**Mocked vs. real:**
+| Piece | Status |
+|---|---|
+| Data model, migrations | Real — same schema used for mock and real punches |
+| Sync/mapping/dedup/attendance-writing logic | Real — identical code path for both connectors |
+| `MockConnector` | Fully real, used for all current testing (`default_mock_batch()`: normal in/out pairs, one unmapped ID, one backlogged pair) |
+| `ZKTecoConnector` | Structurally complete (`pyzk` connect → `disable_device()` → `get_attendance()` → `get_users()` reconcile → `enable_device()`/disconnect, TCP/UDP + comm password, timeout/busy/partial-read handling) but **never run against a real device** |
+| `pyzk` dependency | Commented out in `backend/requirements.txt` (lazy-imported only if `ZKTecoConnector` is actually selected) |
+
+**Checklist for the first real-device integration test:**
+1. Uncomment `pyzk==0.9` in [`backend/requirements.txt`](backend/requirements.txt), `pip install`, set `BIOMETRIC_CONNECTOR=zkteco`.
+2. Confirm networking prerequisites: device has a static IP or DHCP reservation, reachable from the backend host over LAN/VPN on TCP port 4370 (or UDP if `force_udp` is needed for that model).
+3. Confirm the device's comm password format matches what `ZKTecoConnector` sends (int-cast) — mismatches fail silently on some firmware.
+4. Verify `pyzk`'s actual `punch_type` codes for this specific device model match the assumed in/out mapping — ZKTeco firmware isn't fully consistent across models here.
+5. Register one real worker with an employee code as the device's enrolled User ID, do a real fingerprint punch, run a sync cycle, and confirm: the punch lands as `source="device"`, resolves to the correct worker, and a verification punch round-trip confirms it's not a "wrong Ramesh" (id collision).
+6. Confirm `disable_device()` / `enable_device()` and memory-clear-after-confirmed-write behave correctly on the real unit — this can only be verified against real firmware, not mocked.
+7. Re-run `verify_biometric_sync.py`'s scenarios manually against the real device: unmapped ID, duplicate punch, connection drop mid-sync, backlogged punches from being briefly offline.

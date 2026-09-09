@@ -91,6 +91,7 @@ class WorkerOut(BaseModel):
     deactivated_at: datetime | None
     deactivated_reason: str | None
     worker_type_id: int | None
+    numeric_employee_code: str | None = None
     created_at: datetime
 
 
@@ -142,6 +143,11 @@ class AttendanceOut(BaseModel):
     status: str
     overtime_hours: float
     marked_at: datetime
+    # "manual" | "biometric" | None (old rows predating this column).
+    # Never shown as a bare Present/Absent tick with no origin -- see
+    # biometric.py's PHASE3-style module docstring.
+    source: str | None = None
+    source_detail: str | None = None
 
 
 class SlotSummary(BaseModel):
@@ -416,3 +422,102 @@ class AdminDashboardOut(BaseModel):
     total_factories: int
     counts_by_status: dict[str, int]
     total_active_employees: int
+
+
+# --- Biometric attendance sync (see biometric.py / biometric_sync.py) ---
+
+
+class BiometricDeviceIn(BaseModel):
+    name: str
+    ip_address: str
+    port: int = 4370
+    force_udp: bool = False
+    comm_password: str | None = None
+
+
+class BiometricDeviceUpdateIn(BaseModel):
+    name: str | None = None
+    ip_address: str | None = None
+    port: int | None = None
+    force_udp: bool | None = None
+    comm_password: str | None = None
+    status: Literal["active", "inactive"] | None = None
+
+
+class BiometricDeviceOut(BaseModel):
+    id: int
+    name: str
+    ip_address: str
+    port: int
+    force_udp: bool
+    status: str
+    last_sync_status: str | None
+    last_synced_at: datetime | None
+    # True if last_synced_at is older than the configured staleness
+    # threshold (or has never synced at all) while the device is
+    # active -- computed at read time, not stored.
+    is_stale: bool
+
+
+class DeviceUserMappingIn(BaseModel):
+    device_id: int
+    device_user_id: str
+    worker_id: int
+
+
+class DeviceUserMappingOut(BaseModel):
+    id: int
+    device_id: int
+    device_user_id: str
+    worker_id: int
+    worker_name: str
+    worker_employee_code: str | None
+    enrolled_at: datetime
+
+
+class UnmappedPunchOut(BaseModel):
+    id: int
+    device_id: int
+    device_name: str
+    raw_device_user_id: str
+    timestamp: datetime
+    punch_type: str
+
+
+class SyncResultOut(BaseModel):
+    device_id: int
+    status: str
+    new_punches: int
+    duplicate_punches: int
+    unmapped_punches: int
+    error: str | None = None
+
+
+class BiometricHealthOut(BaseModel):
+    devices: list[BiometricDeviceOut]
+    unmapped_punch_count: int
+
+
+class BiometricConsentIn(BaseModel):
+    notice_text: str
+
+
+class BiometricConsentOut(BaseModel):
+    worker_id: int
+    consented_at: datetime
+    consented_by: int
+    notice_text: str
+
+
+class EmployeeCodeOut(BaseModel):
+    worker_id: int
+    numeric_employee_code: str
+
+
+class VerifyPunchOut(BaseModel):
+    resolved: bool
+    worker_id: int | None = None
+    worker_name: str | None = None
+    worker_employee_code: str | None = None
+    timestamp: datetime | None = None
+    message: str

@@ -54,6 +54,7 @@ class WorkerType(Base):
 
 class Worker(Base):
     __tablename__ = "workers"
+    __table_args__ = (UniqueConstraint("owner_id", "numeric_employee_code", name="uq_worker_employee_code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False)
@@ -62,6 +63,13 @@ class Worker(Base):
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[str | None] = mapped_column(String, nullable=True)
     worker_type_id: Mapped[int | None] = mapped_column(ForeignKey("worker_types.id"), nullable=True)
+    # A stable numeric badge/token number -- generated once, on demand,
+    # never reused even after deactivation. Exists specifically so a
+    # biometric device that only accepts numeric enrollment IDs can use
+    # this as its device_user_id, making the id itself the shared key
+    # (no separate DeviceUserMapping lookup needed for that common
+    # case) -- see biometric.py.
+    numeric_employee_code: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Plain last-4 for display ("•••• •••• 7412"); full number encrypted.
     aadhaar_last4: Mapped[str] = mapped_column(String(4), nullable=False)
@@ -106,6 +114,14 @@ class Attendance(Base):
     marked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # "manual" | "biometric" -- nullable so existing rows (all manual,
+    # from before this column existed) aren't forced to backfill a
+    # value; the API treats a missing value as "manual" for display.
+    # source_detail is a short human-readable origin note -- device name
+    # + punch time for biometric, the marking owner's name for manual --
+    # never shown as a bare Present/Absent tick with no origin.
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_detail: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class SyncStatus(Base):
@@ -374,3 +390,105 @@ class FormGenerationLog(Base):
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class BiometricDevice(Base):
+    """One row per fingerprint terminal (e.g. "Main Gate"). Real device
+    mechanics live in biometric.py, kept behind a single connector
+    interface so this table and everything downstream of it (mapping,
+    punches, sync) never needs to know whether it's talking to a mock
+    or a real ZKTeco unit over the network."""
+
+    __tablename__ = "biometric_devices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    ip_address: Mapped[str] = mapped_column(String, nullable=False)
+    port: Mapped[int] = mapped_column(Integer, default=4370, nullable=False)
+    # Some devices/configs need UDP instead of TCP -- pyzk's own
+    # connect() takes this as a flag, not something to auto-detect.
+    force_udp: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # Device "comm key" / comm password, if one is set on the unit --
+    # recommended over leaving the device default. Not treated as
+    # sensitive as Aadhaar/bank details (it protects a LAN-local
+    # attendance terminal, not personal data), so plain text like every
+    # other device-config field here.
+    comm_password: Mapped[str | None] = mapped_column(String, nullable=True)
+    # "active" | "inactive" -- owner-controlled (e.g. a device taken out
+    # of service), distinct from last_sync_status below (which reflects
+    # whether syncing is actually succeeding).
+    status: Mapped[str] = mapped_column(String, default="active", nullable=False)
+    # "ok" | "unreachable" | "error" | None (never synced yet) -- set by
+    # the sync job after each attempt, win or lose, so a device page can
+    # show real health instead of just "last synced 3 days ago" with no
+    # indication of why.
+    last_sync_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DeviceUserMapping(Base):
+    """Fallback/safety-net mapping for when a worker's numeric_employee_code
+    wasn't used as the device's own enrollment ID (device only accepts
+    auto-increment IDs, or the direct-ID step was skipped/misconfigured).
+    device_user_id is only unique WITHIN one device -- the same raw ID
+    can and will recur across different gates/terminals enrolled
+    independently, hence the composite unique constraint rather than a
+    unique constraint on device_user_id alone."""
+
+    __tablename__ = "device_user_mapping"
+    __table_args__ = (UniqueConstraint("device_id", "device_user_id", name="uq_device_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("biometric_devices.id"), nullable=False)
+    device_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False)
+    enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BiometricPunch(Base):
+    """One row per raw punch pulled from a device (or the mock source).
+    worker_id is nullable -- a punch from a device_user_id with no
+    resolvable mapping is still stored (never silently dropped), just
+    with worker_id left null and raw_device_user_id kept so it surfaces
+    as an "unmapped punch needing attention" rather than vanishing.
+    The uniqueness constraint is what makes re-pulling the same device
+    batch on a later sync a safe no-op instead of a duplicate insert."""
+
+    __tablename__ = "biometric_punches"
+    __table_args__ = (
+        UniqueConstraint("device_id", "raw_device_user_id", "timestamp", name="uq_punch_dedup"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("biometric_devices.id"), nullable=False)
+    worker_id: Mapped[int | None] = mapped_column(ForeignKey("workers.id"), nullable=True)
+    raw_device_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # "in" | "out"
+    punch_type: Mapped[str] = mapped_column(String, nullable=False)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # "device" | "mock" -- which connector produced this row; lets a
+    # health/debug view tell real data apart from test data at a glance
+    # even after a real device is in production alongside earlier mock
+    # runs from development.
+    source: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class BiometricConsent(Base):
+    """DPDP Act requires this to exist as a real record (who consented,
+    when, what they were told), not just a boolean flag on Worker --
+    captured once during Worker Details onboarding, before any
+    enrollment happens for that worker."""
+
+    __tablename__ = "biometric_consents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False, unique=True)
+    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    consented_by: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False)
+    # A snapshot of what the worker was actually told at consent time --
+    # kept as a real record rather than assuming today's notice text
+    # always matches whatever was shown when this row was created.
+    notice_text: Mapped[str] = mapped_column(String, nullable=False)

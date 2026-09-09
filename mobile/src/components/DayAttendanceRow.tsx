@@ -6,6 +6,10 @@ import { colors, radius, spacing } from "../theme";
 type Props = {
   shifts: ShiftConfig[];
   getShiftStatus: (slotKey: string) => AttendanceStatus | undefined;
+  // "manual" | "biometric" | null/undefined -- optional so screens that
+  // don't have this data yet (or don't care) can omit it; when present,
+  // never shown as a bare Present tick with no origin.
+  getShiftSource?: (slotKey: string) => string | null | undefined;
   onSetShiftStatus: (slotKey: string, status: AttendanceStatus) => void;
   isOnLeave: boolean;
   onToggleLeave: () => void;
@@ -20,11 +24,21 @@ type Props = {
 // day) was a likely cause of the "Attendance page isn't scrollable"
 // report; the OT modal is a single shared instance owned by the
 // screen, and this component just calls onOpenOt() to ask for it.
-export default function DayAttendanceRow({ shifts, getShiftStatus, onSetShiftStatus, isOnLeave, onToggleLeave, otHours, onOpenOt }: Props) {
+export default function DayAttendanceRow({
+  shifts,
+  getShiftStatus,
+  getShiftSource,
+  onSetShiftStatus,
+  isOnLeave,
+  onToggleLeave,
+  otHours,
+  onOpenOt,
+}: Props) {
   return (
     <View style={styles.row}>
       {shifts.map((shift) => {
         const isPresent = getShiftStatus(shift.slot_key) === "present";
+        const isBiometric = isPresent && getShiftSource?.(shift.slot_key) === "biometric";
         return (
           <TouchableOpacity
             key={shift.slot_key}
@@ -33,6 +47,7 @@ export default function DayAttendanceRow({ shifts, getShiftStatus, onSetShiftSta
           >
             <Text style={[styles.tileText, isPresent ? styles.textPresent : styles.textAbsent]} numberOfLines={1}>
               {shift.label} {isPresent ? "P" : "A"}
+              {isBiometric ? " 👆" : ""}
             </Text>
           </TouchableOpacity>
         );

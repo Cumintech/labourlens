@@ -378,6 +378,7 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
                 <DayAttendanceRow
                   shifts={shifts}
                   getShiftStatus={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.status}
+                  getShiftSource={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.source}
                   onSetShiftStatus={(slotKey, status) => handleSetStatus(item.dateStr, slotKey, status)}
                   isOnLeave={isDateOnLeave(item.dateStr)}
                   onToggleLeave={() => handleToggleLeave(item.dateStr)}

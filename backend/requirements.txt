@@ -26,3 +26,12 @@ playwright==1.62.0
 # system binary (same reasoning as EasyOCR over Tesseract elsewhere).
 openpyxl==3.1.5
 reportlab==4.2.5
+
+# Biometric attendance sync (see biometric.py) -- deliberately NOT
+# installed today. ZKTecoConnector imports it lazily inside a try/except
+# specifically so nothing here needs it: every real usage right now is
+# MockConnector (BIOMETRIC_CONNECTOR unset/"mock"), and pyzk needs a real
+# device on the network to do anything meaningful anyway. Uncomment and
+# pip install once a physical ZKTeco unit is available to test against,
+# then set BIOMETRIC_CONNECTOR=zkteco.
+# pyzk==0.9

@@ -5,6 +5,10 @@ import { ActivityIndicator, View } from "react-native";
 import { OcrFields } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import AttendanceRangeScreen from "../screens/AttendanceRangeScreen";
+import BiometricConsentScreen from "../screens/BiometricConsentScreen";
+import BiometricDevicesScreen from "../screens/BiometricDevicesScreen";
+import DeviceUserMappingScreen from "../screens/DeviceUserMappingScreen";
+import UnmappedPunchesScreen from "../screens/UnmappedPunchesScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
@@ -30,6 +34,10 @@ export type RootStackParamList = {
   NewWorkerScan: undefined;
   NewWorkerDetails: { ocrFields: OcrFields };
   WorkerCompliance: { workerId: number; workerName: string; workerDob: string | null };
+  BiometricConsent: { workerId: number; workerName: string; fromRegistration?: boolean };
+  BiometricDevices: undefined;
+  DeviceUserMapping: { deviceId: number; deviceName: string };
+  UnmappedPunches: undefined;
   WorkerAttendance: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
   WorkerEdit: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
   WageProfile: { workerId: number; workerName: string; fromRegistration?: boolean };
@@ -106,6 +114,10 @@ export default function RootNavigator() {
           component={WorkerComplianceScreen}
           options={{ title: "Form 12 Details" }}
         />
+        <Stack.Screen name="BiometricConsent" component={BiometricConsentScreen} options={{ title: "Biometric Consent" }} />
+        <Stack.Screen name="BiometricDevices" component={BiometricDevicesScreen} options={{ title: "Biometric Devices" }} />
+        <Stack.Screen name="DeviceUserMapping" component={DeviceUserMappingScreen} options={{ title: "Map Device Users" }} />
+        <Stack.Screen name="UnmappedPunches" component={UnmappedPunchesScreen} options={{ title: "Unmapped Punches" }} />
         <Stack.Screen name="WorkerAttendance" component={WorkerAttendanceScreen} options={{ title: "Worker" }} />
         <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ title: "Edit Worker" }} />
         <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ title: "Wage Rate" }} />

@@ -125,6 +125,7 @@ export type Worker = {
   deactivated_at: string | null;
   deactivated_reason: string | null;
   worker_type_id: number | null;
+  numeric_employee_code: string | null;
   created_at: string;
 };
 
@@ -259,6 +260,9 @@ export type Attendance = {
   status: AttendanceStatus;
   overtime_hours: number;
   marked_at: string;
+  // "manual" | "biometric" | null (rows from before this existed)
+  source: string | null;
+  source_detail: string | null;
 };
 
 export function markAttendance(
@@ -707,6 +711,170 @@ export function emailForm(
       end_date: formCode === "form12" ? undefined : input.endDate,
       recipient_email: input.recipient_email,
     }),
+  });
+}
+
+// --- Biometric attendance sync (see backend/biometric.py) ---
+
+export type BiometricDevice = {
+  id: number;
+  name: string;
+  ip_address: string;
+  port: number;
+  force_udp: boolean;
+  status: "active" | "inactive";
+  last_sync_status: string | null;
+  last_synced_at: string | null;
+  is_stale: boolean;
+};
+
+export function listBiometricDevices(token: string): Promise<BiometricDevice[]> {
+  return request<BiometricDevice[]>("/biometric/devices", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function createBiometricDevice(
+  token: string,
+  input: { name: string; ip_address: string; port?: number; force_udp?: boolean; comm_password?: string },
+): Promise<BiometricDevice> {
+  return request<BiometricDevice>("/biometric/devices", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateBiometricDevice(
+  token: string,
+  deviceId: number,
+  input: Partial<{ name: string; ip_address: string; port: number; force_udp: boolean; comm_password: string; status: "active" | "inactive" }>,
+): Promise<BiometricDevice> {
+  return request<BiometricDevice>(`/biometric/devices/${deviceId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export type SyncResult = {
+  device_id: number;
+  status: string;
+  new_punches: number;
+  duplicate_punches: number;
+  unmapped_punches: number;
+  error: string | null;
+};
+
+export function triggerBiometricSync(token: string, deviceId: number): Promise<SyncResult> {
+  return request<SyncResult>(`/biometric/devices/${deviceId}/sync`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type DeviceUserMapping = {
+  id: number;
+  device_id: number;
+  device_user_id: string;
+  worker_id: number;
+  worker_name: string;
+  worker_employee_code: string | null;
+  enrolled_at: string;
+};
+
+export function listDeviceMappings(token: string, deviceId?: number): Promise<DeviceUserMapping[]> {
+  const qs = deviceId ? `?device_id=${deviceId}` : "";
+  return request<DeviceUserMapping[]>(`/biometric/device-mappings${qs}`, { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function createDeviceMapping(
+  token: string,
+  input: { device_id: number; device_user_id: string; worker_id: number },
+): Promise<DeviceUserMapping> {
+  return request<DeviceUserMapping>("/biometric/device-mappings", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteDeviceMapping(token: string, mappingId: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/biometric/device-mappings/${mappingId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) await throwForErrorResponse(res, "Request failed");
+}
+
+export type UnmappedPunch = {
+  id: number;
+  device_id: number;
+  device_name: string;
+  raw_device_user_id: string;
+  timestamp: string;
+  punch_type: string;
+};
+
+export function listUnmappedPunches(token: string): Promise<UnmappedPunch[]> {
+  return request<UnmappedPunch[]>("/biometric/unmapped-punches", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function resolveUnmappedPunch(token: string, punchId: number, workerId: number): Promise<DeviceUserMapping> {
+  return request<DeviceUserMapping>(`/biometric/unmapped-punches/${punchId}/resolve?worker_id=${workerId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type BiometricHealth = {
+  devices: BiometricDevice[];
+  unmapped_punch_count: number;
+};
+
+export function getBiometricHealth(token: string): Promise<BiometricHealth> {
+  return request<BiometricHealth>("/biometric/health", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export type VerifyPunchResult = {
+  resolved: boolean;
+  worker_id: number | null;
+  worker_name: string | null;
+  worker_employee_code: string | null;
+  timestamp: string | null;
+  message: string;
+};
+
+export function verifyPunch(token: string, deviceId: number, deviceUserId: string): Promise<VerifyPunchResult> {
+  return request<VerifyPunchResult>(
+    `/biometric/devices/${deviceId}/verify-punch?device_user_id=${encodeURIComponent(deviceUserId)}`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
+}
+
+export function getOrCreateEmployeeCode(token: string, workerId: number): Promise<{ worker_id: number; numeric_employee_code: string }> {
+  return request(`/workers/${workerId}/employee-code`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type BiometricConsent = {
+  worker_id: number;
+  consented_at: string;
+  consented_by: number;
+  notice_text: string;
+};
+
+export function getBiometricConsent(token: string, workerId: number): Promise<BiometricConsent | null> {
+  return request<BiometricConsent | null>(`/workers/${workerId}/biometric-consent`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function captureBiometricConsent(token: string, workerId: number, noticeText: string): Promise<BiometricConsent> {
+  return request<BiometricConsent>(`/workers/${workerId}/biometric-consent`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ notice_text: noticeText }),
   });
 }
 

@@ -127,6 +127,15 @@ still_unmapped = client.get("/biometric/unmapped-punches", headers=headers)
 assert len(still_unmapped.json()) == 0, still_unmapped.json()
 print("Resolving an unmapped punch creates the mapping and clears it from the pending list: PASSED")
 
+# The punch that was unmapped at sync time (9999, 9:10am) predates the
+# mapping -- resolving it must derive Worker C's attendance from that
+# already-stored punch too, not just silence the pending count while
+# leaving them unmarked until their next fresh punch.
+list_attendance_after_resolve = client.get(f"/attendance?date={today.date().isoformat()}", headers=headers).json()
+worker_c_record = next(r for r in list_attendance_after_resolve if r["worker_id"] == worker_c["id"])
+assert worker_c_record["source"] == "biometric", worker_c_record
+print("Resolving an unmapped punch also backfills attendance for the pre-existing punch: PASSED")
+
 # --- Duplicate punch: re-syncing the exact same batch must not double-insert ---
 db = SessionLocal()
 device = db.query(models.BiometricDevice).filter(models.BiometricDevice.id == device_id).first()

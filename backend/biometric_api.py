@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 import models
 from auth import get_current_owner
 from biometric import ConnectorError, get_connector
-from biometric_sync import resolve_worker_for_punch, sync_device
+from biometric_sync import derive_attendance_for_punches, resolve_worker_for_punch, sync_device
 from database import get_db
 from schemas import (
     BiometricConsentIn,
@@ -205,6 +205,29 @@ def create_device_mapping(
     db.add(mapping)
     db.commit()
     db.refresh(mapping)
+
+    # A raw device_user_id commonly starts showing up in punches before
+    # anyone maps it (the mock, and a real device, both just report
+    # whatever's in memory). Backfill those already-stored unmapped
+    # punches to this worker and derive attendance for them now --
+    # otherwise mapping someone silently does nothing until their next
+    # fresh punch.
+    backfilled = (
+        db.query(models.BiometricPunch)
+        .filter(
+            models.BiometricPunch.device_id == device.id,
+            models.BiometricPunch.raw_device_user_id == body.device_user_id,
+            models.BiometricPunch.worker_id.is_(None),
+        )
+        .all()
+    )
+    if backfilled:
+        for p in backfilled:
+            p.worker_id = worker.id
+        db.commit()
+        derive_attendance_for_punches(db, backfilled, device)
+        db.commit()
+
     return DeviceUserMappingOut(
         id=mapping.id,
         device_id=mapping.device_id,
@@ -263,11 +286,12 @@ def resolve_unmapped_punch(
     db: Session = Depends(get_db),
 ):
     """Maps the punch's device_user_id to a worker going forward (same
-    consent gate as the manual mapping screen) and backfills every
-    other still-unmapped punch on that device with the same raw ID --
-    a device_user_id that showed up unmapped once typically shows up
-    unmapped many times before someone notices, so fixing all of them
-    at once is what actually clears the "X unmapped punches" count."""
+    consent gate as the manual mapping screen). create_device_mapping
+    itself backfills every still-unmapped punch on that device with the
+    same raw ID -- and derives attendance for them -- since a
+    device_user_id that showed up unmapped once typically shows up
+    unmapped many times before someone notices; this endpoint just
+    finds the (device_id, device_user_id) pair to hand it."""
     punch = (
         db.query(models.BiometricPunch)
         .join(models.BiometricDevice, models.BiometricDevice.id == models.BiometricPunch.device_id)
@@ -277,25 +301,11 @@ def resolve_unmapped_punch(
     if not punch:
         raise HTTPException(status_code=404, detail="Punch not found")
 
-    mapping_result = create_device_mapping(
+    return create_device_mapping(
         DeviceUserMappingIn(device_id=punch.device_id, device_user_id=punch.raw_device_user_id, worker_id=worker_id),
         owner,
         db,
     )
-
-    still_unmapped = (
-        db.query(models.BiometricPunch)
-        .filter(
-            models.BiometricPunch.device_id == punch.device_id,
-            models.BiometricPunch.raw_device_user_id == punch.raw_device_user_id,
-            models.BiometricPunch.worker_id.is_(None),
-        )
-        .all()
-    )
-    for p in still_unmapped:
-        p.worker_id = worker_id
-    db.commit()
-    return mapping_result
 
 
 # --- Health ---

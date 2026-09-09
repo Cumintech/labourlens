@@ -100,6 +100,59 @@ def _slot_for_time(shifts: list[models.ShiftConfig], t: time_type) -> str | None
     return None
 
 
+def derive_attendance_for_punches(db: Session, punches: list[models.BiometricPunch], device: models.BiometricDevice) -> None:
+    """Derives and writes attendance for each already-mapped punch,
+    through the same shared attendance-writing service manual marking
+    uses. Called both from a live sync's newly-inserted punches AND from
+    the mapping endpoints -- mapping a device_user_id after punches for
+    it already exist (the common case: the mock/device generates
+    punches for a raw ID before anyone's mapped it) must derive
+    attendance for those already-stored punches too, not just future
+    ones, or "map this worker" silently does nothing visible."""
+    shifts_by_owner: dict[int, list[models.ShiftConfig]] = {}
+    for row in punches:
+        if row.worker_id is None:
+            continue
+        worker = db.get(models.Worker, row.worker_id)
+        if worker is None:
+            continue
+        if worker.owner_id not in shifts_by_owner:
+            shifts_by_owner[worker.owner_id] = (
+                db.query(models.ShiftConfig).filter(models.ShiftConfig.owner_id == worker.owner_id).all()
+            )
+        shifts = shifts_by_owner[worker.owner_id]
+        slot = _slot_for_time(shifts, row.timestamp.time())
+        if not slot:
+            continue  # punch time doesn't fall inside any configured shift window -- can't attribute it, skip rather than guess
+
+        punch_date: date_type = row.timestamp.date()
+        existing_attendance = (
+            db.query(models.Attendance)
+            .filter(
+                models.Attendance.worker_id == row.worker_id,
+                models.Attendance.date == punch_date,
+                models.Attendance.slot == slot,
+            )
+            .first()
+        )
+        if existing_attendance and existing_attendance.source == "manual":
+            # Never let an automated sync silently overwrite a human's
+            # explicit correction for that worker/day/slot.
+            continue
+
+        upsert_attendance(
+            db,
+            worker_id=row.worker_id,
+            date=punch_date,
+            slot=slot,
+            status="present",
+            overtime_hours=existing_attendance.overtime_hours if existing_attendance else 0,
+            marked_by=worker.owner_id,
+            source="biometric",
+            source_detail=f"{device.name} -- {row.timestamp.isoformat()}",
+        )
+
+
 def sync_device(db: Session, device: models.BiometricDevice, connector: BaseConnector) -> dict:
     """Runs one full sync cycle for a single device. Returns a summary
     dict rather than raising on an expected failure mode -- one
@@ -177,48 +230,7 @@ def sync_device(db: Session, device: models.BiometricDevice, connector: BaseConn
     # unmapped ones stay visible in biometric_punches (worker_id NULL)
     # for the "unmapped punches need attention" surface, never silently
     # dropped, but there's nothing to attribute attendance to yet.
-    shifts_by_owner: dict[int, list[models.ShiftConfig]] = {}
-    for row in newly_inserted:
-        if row.worker_id is None:
-            continue
-        worker = db.get(models.Worker, row.worker_id)
-        if worker is None:
-            continue
-        if worker.owner_id not in shifts_by_owner:
-            shifts_by_owner[worker.owner_id] = (
-                db.query(models.ShiftConfig).filter(models.ShiftConfig.owner_id == worker.owner_id).all()
-            )
-        shifts = shifts_by_owner[worker.owner_id]
-        slot = _slot_for_time(shifts, row.timestamp.time())
-        if not slot:
-            continue  # punch time doesn't fall inside any configured shift window -- can't attribute it, skip rather than guess
-
-        punch_date: date_type = row.timestamp.date()
-        existing_attendance = (
-            db.query(models.Attendance)
-            .filter(
-                models.Attendance.worker_id == row.worker_id,
-                models.Attendance.date == punch_date,
-                models.Attendance.slot == slot,
-            )
-            .first()
-        )
-        if existing_attendance and existing_attendance.source == "manual":
-            # Never let an automated sync silently overwrite a human's
-            # explicit correction for that worker/day/slot.
-            continue
-
-        upsert_attendance(
-            db,
-            worker_id=row.worker_id,
-            date=punch_date,
-            slot=slot,
-            status="present",
-            overtime_hours=existing_attendance.overtime_hours if existing_attendance else 0,
-            marked_by=worker.owner_id,
-            source="biometric",
-            source_detail=f"{device.name} -- {row.timestamp.isoformat()}",
-        )
+    derive_attendance_for_punches(db, newly_inserted, device)
 
     device.last_synced_at = datetime.now(timezone.utc)
     device.last_sync_status = "ok"

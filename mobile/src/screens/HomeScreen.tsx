@@ -66,6 +66,16 @@ export default function HomeScreen({ navigation }: Props) {
         <View style={styles.heroAccentBar} />
       </View>
 
+      {owner?.plan_status === "trial" && (
+        <View style={styles.trialBanner}>
+          <Text style={styles.trialBannerText}>
+            {owner.trial_days_remaining && owner.trial_days_remaining > 0
+              ? `Free trial -- ${owner.trial_days_remaining} day${owner.trial_days_remaining === 1 ? "" : "s"} left`
+              : "Your free trial has ended -- contact us to move to a paid plan"}
+          </Text>
+        </View>
+      )}
+
       <TouchableOpacity
         style={[styles.bigTile, { backgroundColor: colors.tealLight }]}
         onPress={() => navigation.navigate("Dashboard")}
@@ -128,6 +138,13 @@ const styles = StyleSheet.create({
   factoryName: { color: colors.white, fontSize: 24, fontWeight: "700", marginTop: spacing.sm },
   heroSubtitle: { color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 4 },
   heroAccentBar: { height: 4, backgroundColor: colors.teal, borderRadius: 2, marginTop: spacing.md, width: 56 },
+  trialBanner: {
+    backgroundColor: colors.amberLight,
+    borderRadius: radius.md,
+    padding: spacing.sm + 4,
+    marginBottom: spacing.md,
+  },
+  trialBannerText: { color: "#8A5A14", fontSize: 13, fontWeight: "700", textAlign: "center" },
   bigTile: {
     flexDirection: "row",
     alignItems: "center",

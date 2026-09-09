@@ -10,7 +10,7 @@ type AuthContextValue = {
   owner: Owner | null;
   loading: boolean;
   login: (mobile: string, password: string) => Promise<void>;
-  signup: (name: string, mobile: string, password: string, factoryName: string, consentGiven: boolean) => Promise<void>;
+  signup: (name: string, mobile: string, password: string, factoryName: string, consentGiven: boolean) => Promise<Owner>;
   logout: () => Promise<void>;
   updateOwner: (updated: Owner) => Promise<void>;
 };
@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(OWNER_KEY, JSON.stringify(res.owner));
     setToken(res.access_token);
     setOwner(res.owner);
+    return res.owner;
   }
 
   // The factory-profile screen returns the updated Owner directly from

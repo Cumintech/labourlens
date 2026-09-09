@@ -129,6 +129,31 @@ app.add_middleware(
 
 app.include_router(admin.router)
 
+# Informational only -- deliberately no gate anywhere in this app that
+# blocks a factory owner from using it once this hits zero. Days are
+# counted from the matching Factory row's enrolled_at (== signup time),
+# so no separate "trial start" field is needed.
+TRIAL_DAYS = 3
+
+
+def _owner_out(db: Session, owner: models.Owner) -> OwnerOut:
+    factory = db.query(models.Factory).filter(models.Factory.owner_id == owner.id).first()
+    plan_status = factory.status if factory else "trial"
+    trial_days_remaining = None
+    if plan_status == "trial" and factory:
+        # SQLite doesn't actually preserve timezone-awareness even for a
+        # DateTime(timezone=True) column (unlike Postgres) -- it hands
+        # back a naive datetime, which can't be subtracted from an
+        # aware one. Treat a naive value as UTC (the only timezone
+        # anything here is ever written in) rather than assuming the
+        # database always round-trips it aware.
+        enrolled_at = factory.enrolled_at
+        if enrolled_at.tzinfo is None:
+            enrolled_at = enrolled_at.replace(tzinfo=timezone.utc)
+        elapsed_days = (datetime.now(timezone.utc) - enrolled_at).days
+        trial_days_remaining = max(TRIAL_DAYS - elapsed_days, 0)
+    return OwnerOut(**owner.__dict__, plan_status=plan_status, trial_days_remaining=trial_days_remaining)
+
 
 @app.get("/health", response_model=HealthOut)
 def health():
@@ -178,7 +203,7 @@ def signup(body: OwnerSignupIn, db: Session = Depends(get_db)):
     db.commit()
 
     token = create_token(owner.id)
-    return TokenOut(access_token=token, owner=OwnerOut(**owner.__dict__))
+    return TokenOut(access_token=token, owner=_owner_out(db, owner))
 
 
 @app.post("/owners/login", response_model=TokenOut)
@@ -188,12 +213,12 @@ def login(body: OwnerLoginIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid mobile number or password")
 
     token = create_token(owner.id)
-    return TokenOut(access_token=token, owner=OwnerOut(**owner.__dict__))
+    return TokenOut(access_token=token, owner=_owner_out(db, owner))
 
 
 @app.get("/owners/me", response_model=OwnerOut)
-def get_me(owner: models.Owner = Depends(get_current_owner)):
-    return OwnerOut(**owner.__dict__)
+def get_me(owner: models.Owner = Depends(get_current_owner), db: Session = Depends(get_db)):
+    return _owner_out(db, owner)
 
 
 @app.put("/owners/me/factory-profile", response_model=OwnerOut)
@@ -211,7 +236,7 @@ def update_factory_profile(
     owner.factory_licence_no = body.factory_licence_no
     db.commit()
     db.refresh(owner)
-    return OwnerOut(**owner.__dict__)
+    return _owner_out(db, owner)
 
 
 @app.post("/workers/ocr", response_model=OcrFieldsOut)

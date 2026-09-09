@@ -15,6 +15,10 @@ export type Owner = {
   factory_name: string;
   factory_address: string | null;
   factory_licence_no: string | null;
+  // "trial" | "active" | "payment_overdue" | "suspended" | "churned" --
+  // informational only, never blocks anything in this app.
+  plan_status: string;
+  trial_days_remaining: number | null;
 };
 
 export function updateFactoryProfile(

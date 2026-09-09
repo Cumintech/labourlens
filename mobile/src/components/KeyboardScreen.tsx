@@ -1,26 +1,33 @@
 import React, { ReactElement } from "react";
-import { RefreshControlProps, StyleProp, ViewStyle } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { KeyboardAvoidingView, Platform, RefreshControlProps, ScrollView, StyleProp, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Real feedback from device testing: fields below the fold (e.g. PF rate
 // on Wage Rate) were unreachable because the keyboard covered them and
-// the screen never scrolled to compensate. A plain ScrollView +
-// KeyboardAvoidingView (RN's own building blocks, the same pattern
-// LoginScreen used successfully for its 2-field form) turned out not to
-// reliably auto-scroll a focused input into view on a longer form --
-// confirmed still broken on a real device after that fix. This library
-// explicitly measures the focused input's position and scrolls it above
-// the keyboard, which is the part RN's own components don't do for you.
+// the screen never scrolled to compensate. This used to be built on
+// react-native-keyboard-aware-scroll-view, but that library predates
+// React Native's New Architecture (the Fabric renderer Expo SDK 57
+// defaults to) and its keyboard/measurement logic doesn't reliably work
+// under it -- confirmed on a real device as a much worse regression:
+// the screen didn't scroll AT ALL, making the save button on every
+// screen using this component unreachable, not just fields near the
+// keyboard. Rebuilt on RN's own KeyboardAvoidingView + ScrollView --
+// actively maintained, works correctly under Fabric -- with an
+// explicit flex:1 on the outer view, which is what actually bounds the
+// ScrollView to the screen so it has something to scroll within (the
+// missing piece before: no caller ever passed a `style` prop, so the
+// scroll container had no fixed height to scroll inside of).
+//
+// Trade-off worth knowing: this doesn't auto-scroll a focused input
+// exactly above the keyboard the way the old library aimed to -- but a
+// screen that scrolls manually is strictly better than one that
+// doesn't scroll at all, which is the failure this replaces.
 //
 // Extra bottom padding equal to the device's safe-area inset is added
 // here, once, rather than in every screen's own contentContainerStyle
 // -- every screen using KeyboardScreen gets it automatically, which is
 // the actual fix for "the last button is unreachable/clipped on a short
-// device" (a real, confirmed instance of that bug was a plain View with
-// no scroll container at all elsewhere; this covers the more common
-// variant, not enough bottom clearance past the home indicator/gesture
-// bar).
+// device" past the home indicator/gesture bar.
 export default function KeyboardScreen({
   children,
   contentContainerStyle,
@@ -34,15 +41,19 @@ export default function KeyboardScreen({
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <KeyboardAwareScrollView
-      style={style}
-      contentContainerStyle={[contentContainerStyle, { paddingBottom: insets.bottom + 24 }]}
-      keyboardShouldPersistTaps="handled"
-      enableOnAndroid
-      extraScrollHeight={20}
-      refreshControl={refreshControl}
+    <KeyboardAvoidingView
+      style={[{ flex: 1 }, style]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
     >
-      {children}
-    </KeyboardAwareScrollView>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[contentContainerStyle, { flexGrow: 1, paddingBottom: insets.bottom + 24 }]}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={refreshControl}
+      >
+        {children}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

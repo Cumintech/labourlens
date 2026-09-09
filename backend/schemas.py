@@ -28,6 +28,13 @@ class OwnerOut(BaseModel):
     factory_name: str
     factory_address: str | None = None
     factory_licence_no: str | None = None
+    # Mirrors the admin-portal Factory row's status -- "trial" /
+    # "active" / "payment_overdue" / "suspended" / "churned".
+    # trial_days_remaining is only meaningful while plan_status ==
+    # "trial" (None otherwise); it's informational only, never a gate
+    # that blocks app usage -- see main.py's _owner_out.
+    plan_status: str = "trial"
+    trial_days_remaining: int | None = None
 
 
 class FactoryProfileIn(BaseModel):

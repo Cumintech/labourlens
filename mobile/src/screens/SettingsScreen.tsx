@@ -97,6 +97,22 @@ export default function SettingsScreen({ navigation }: Props) {
         </View>
         <View style={styles.divider} />
         <View style={styles.row}>
+          <Text style={styles.rowIcon}>💳</Text>
+          <View style={styles.rowTextWrap}>
+            <Text style={styles.rowLabel}>Plan</Text>
+            <Text style={styles.rowValue}>
+              {owner?.plan_status === "trial"
+                ? owner.trial_days_remaining && owner.trial_days_remaining > 0
+                  ? `Free trial -- ${owner.trial_days_remaining} day${owner.trial_days_remaining === 1 ? "" : "s"} left`
+                  : "Free trial ended"
+                : owner?.plan_status
+                  ? owner.plan_status.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+                  : "-"}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.row}>
           <Text style={styles.rowIcon}>🔒</Text>
           <View style={styles.rowTextWrap}>
             <Text style={styles.rowLabel}>App Lock</Text>

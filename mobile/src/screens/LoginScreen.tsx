@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import KeyboardScreen from "../components/KeyboardScreen";
@@ -43,7 +43,13 @@ export default function LoginScreen({ navigation }: Props) {
           setError("Please accept the Privacy Policy to create an account.");
           return;
         }
-        await signup(name.trim(), mobile.trim(), password, factoryName.trim(), consentChecked);
+        const newOwner = await signup(name.trim(), mobile.trim(), password, factoryName.trim(), consentChecked);
+        if (newOwner.plan_status === "trial") {
+          Alert.alert(
+            "Welcome to Labour Lens",
+            `Your ${newOwner.trial_days_remaining}-day free trial has started. You'll need to move to a paid plan to keep using the app after that.`,
+          );
+        }
       }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.");

@@ -1,8 +1,20 @@
 import * as SecureStore from "expo-secure-store";
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { AppState, AppStateStatus } from "react-native";
+import { AppState, AppStateStatus, Platform } from "react-native";
 
 const PIN_KEY = "labourlens_app_lock_pin";
+
+// expo-secure-store has no web implementation (there's no Keychain/Keystore
+// to back it) -- Platform.OS === "web" only happens in the web preview used
+// for documentation screenshots, never in a real build, but it must not
+// throw and leave the app stuck on its loading state.
+const Store = Platform.OS === "web"
+  ? {
+      getItemAsync: async (key: string) => localStorage.getItem(key),
+      setItemAsync: async (key: string, value: string) => localStorage.setItem(key, value),
+      deleteItemAsync: async (key: string) => localStorage.removeItem(key),
+    }
+  : SecureStore;
 
 type AppLockContextValue = {
   isPinSet: boolean;
@@ -29,7 +41,7 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const pin = await SecureStore.getItemAsync(PIN_KEY);
+      const pin = await Store.getItemAsync(PIN_KEY);
       setStoredPin(pin);
       setIsLocked(!!pin);
       setLoading(false);
@@ -47,13 +59,13 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   }, [storedPin]);
 
   async function setPin(pin: string) {
-    await SecureStore.setItemAsync(PIN_KEY, pin);
+    await Store.setItemAsync(PIN_KEY, pin);
     setStoredPin(pin);
     setIsLocked(false);
   }
 
   async function clearPin() {
-    await SecureStore.deleteItemAsync(PIN_KEY);
+    await Store.deleteItemAsync(PIN_KEY);
     setStoredPin(null);
     setIsLocked(false);
   }

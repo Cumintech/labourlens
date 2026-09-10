@@ -56,5 +56,5 @@ const styles = StyleSheet.create({
   answer: { fontSize: 12, color: colors.muted, marginTop: 4, lineHeight: 18 },
   contactHeading: { fontSize: 14, fontWeight: "700", color: colors.navy, marginTop: spacing.lg, marginBottom: spacing.xs },
   contactCard: { backgroundColor: colors.tealLight, borderRadius: radius.sm, padding: spacing.sm + 4 },
-  contactText: { fontSize: 13, color: "#0F6E56", fontWeight: "600" },
+  contactText: { fontSize: 13, color: colors.tealDark, fontWeight: "600" },
 });

@@ -5,6 +5,7 @@ import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, Touchabl
 import { useAppLock } from "../context/AppLockContext";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { displayPlanStatus } from "../planStatus";
 import { colors, radius, spacing } from "../theme";
 
 // Rendered as the Settings tab's content inside MainTabs -- see
@@ -101,13 +102,10 @@ export default function SettingsScreen({ navigation }: Props) {
           <View style={styles.rowTextWrap}>
             <Text style={styles.rowLabel}>Plan</Text>
             <Text style={styles.rowValue}>
-              {owner?.plan_status === "trial"
-                ? owner.trial_days_remaining && owner.trial_days_remaining > 0
-                  ? `Free trial -- ${owner.trial_days_remaining} day${owner.trial_days_remaining === 1 ? "" : "s"} left`
-                  : "Free trial ended"
-                : owner?.plan_status
-                  ? owner.plan_status.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
-                  : "-"}
+              {displayPlanStatus(owner?.plan_status)}
+              {owner?.plan_status === "trial" && owner.trial_days_remaining != null
+                ? ` -- ${owner.trial_days_remaining} day${owner.trial_days_remaining === 1 ? "" : "s"} left`
+                : ""}
             </Text>
           </View>
         </View>

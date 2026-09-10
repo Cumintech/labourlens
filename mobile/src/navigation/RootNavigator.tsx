@@ -2,8 +2,8 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
 import { ActivityIndicator, View } from "react-native";
-import { OcrFields } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import AddWorkerScreen from "../screens/AddWorkerScreen";
 import AttendanceRangeScreen from "../screens/AttendanceRangeScreen";
 import BiometricConsentScreen from "../screens/BiometricConsentScreen";
 import BiometricDevicesScreen from "../screens/BiometricDevicesScreen";
@@ -12,8 +12,6 @@ import UnmappedPunchesScreen from "../screens/UnmappedPunchesScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
-import NewWorkerDetailsScreen from "../screens/NewWorkerDetailsScreen";
-import NewWorkerScanScreen from "../screens/NewWorkerScanScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
@@ -21,7 +19,6 @@ import WageProfileScreen from "../screens/WageProfileScreen";
 import WageRateWorkerDetailScreen from "../screens/WageRateWorkerDetailScreen";
 import WageRateWorkersScreen from "../screens/WageRateWorkersScreen";
 import WorkerAttendanceScreen from "../screens/WorkerAttendanceScreen";
-import WorkerComplianceScreen from "../screens/WorkerComplianceScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
 import WorkerTypesScreen from "../screens/WorkerTypesScreen";
 import { colors } from "../theme";
@@ -31,9 +28,12 @@ export type RootStackParamList = {
   Home: undefined;
   Dashboard: undefined;
   AttendanceRange: undefined;
+  // Route name kept as "NewWorkerScan" (not renamed to "AddWorker")
+  // so HomeScreen's existing navigation.navigate("NewWorkerScan") call
+  // needs no change -- the component behind it is the new merged
+  // AddWorkerScreen (scan + details + compliance + wage in one screen,
+  // replacing the old 4-screen flow).
   NewWorkerScan: undefined;
-  NewWorkerDetails: { ocrFields: OcrFields };
-  WorkerCompliance: { workerId: number; workerName: string; workerDob: string | null };
   BiometricConsent: { workerId: number; workerName: string; fromRegistration?: boolean };
   BiometricDevices: undefined;
   DeviceUserMapping: { deviceId: number; deviceName: string };
@@ -103,17 +103,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Labour Attendance" }} />
         <Stack.Screen name="AttendanceRange" component={AttendanceRangeScreen} options={{ title: "Edit Multiple Days" }} />
-        <Stack.Screen name="NewWorkerScan" component={NewWorkerScanScreen} options={{ title: "New Worker" }} />
-        <Stack.Screen
-          name="NewWorkerDetails"
-          component={NewWorkerDetailsScreen}
-          options={{ title: "Worker Details" }}
-        />
-        <Stack.Screen
-          name="WorkerCompliance"
-          component={WorkerComplianceScreen}
-          options={{ title: "Form 12 Details" }}
-        />
+        <Stack.Screen name="NewWorkerScan" component={AddWorkerScreen} options={{ title: "Add Worker" }} />
         <Stack.Screen name="BiometricConsent" component={BiometricConsentScreen} options={{ title: "Biometric Consent" }} />
         <Stack.Screen name="BiometricDevices" component={BiometricDevicesScreen} options={{ title: "Biometric Devices" }} />
         <Stack.Screen name="DeviceUserMapping" component={DeviceUserMappingScreen} options={{ title: "Map Device Users" }} />

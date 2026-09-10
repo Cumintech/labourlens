@@ -169,7 +169,11 @@ export default function DateField({
           // one that has a tappable month/year header opening a
           // scrollable year list -- "calendar" forces that mode
           // explicitly rather than leaving it to the device's theme.
-          display={Platform.OS === "ios" ? "spinner" : "calendar"}
+          // iOS's "spinner" has no year-jump at all (a real DOB like 1994
+          // means scrolling one year at a time) -- "inline" is iOS 14+'s
+          // full calendar-grid style with the same tappable month/year
+          // header Android's "calendar" mode has.
+          display={Platform.OS === "ios" ? "inline" : "calendar"}
           onValueChange={handlePickerChange}
           onDismiss={handleDismiss}
         />

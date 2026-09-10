@@ -34,7 +34,7 @@ print("Effective rate for a worker with nothing set: 404, not fabricated: PASSED
 
 # --- WorkerType assignment auto-creates a WageProfile from the type's
 # default -- the effective-rate lookup must reflect it immediately ---
-wtype = client.post("/worker-types", headers=headers, json={"name": "Plumber", "default_rate_type": "daily", "default_rate": 650}).json()
+wtype = client.post("/worker-types", headers=headers, json={"name": "Plumber Test Type", "default_rate_type": "daily", "default_rate": 650}).json()
 w2 = client.post("/workers", headers=headers, json={"name": "Type Default Worker", "aadhaar_number": "444455556666"}).json()
 assign = client.put(f"/workers/{w2['id']}/worker-type", headers=headers, json={"worker_type_id": wtype["id"]})
 assert assign.status_code == 200, assign.text

@@ -44,8 +44,12 @@ assert update.status_code == 200 and update.json()["default_rate"] == 750, updat
 print("worker type update: PASSED")
 
 listing = client.get("/worker-types", headers=headers_a)
-assert listing.status_code == 200 and len(listing.json()) == 1, listing.text
-print("worker type listing: PASSED")
+# Every new signup is pre-seeded with 3 default types (Plumber,
+# Electrician, Helper) -- see main.py's signup() -- so a fresh owner who
+# then creates one more type ("Skilled") has 4 total, not 1.
+listing_names = {t["name"] for t in listing.json()}
+assert listing.status_code == 200 and listing_names == {"Plumber", "Electrician", "Helper", "Skilled"}, listing.text
+print("worker type listing (includes the 3 pre-seeded defaults): PASSED")
 
 # --- Assigning a type to a worker with no wage profile auto-creates one ---
 w1 = client.post("/workers", headers=headers_a, json={"name": "No Rate Yet", "aadhaar_number": "444455556666"}).json()
@@ -94,7 +98,8 @@ create_b = client.post("/worker-types", headers=headers_b, json={"name": "Skille
 assert create_b.status_code == 201, "owner B should be able to create a type with the same name as owner A's (different owner)"
 
 listing_b = client.get("/worker-types", headers=headers_b)
-assert len(listing_b.json()) == 1, "owner B should never see owner A's worker types"
+listing_b_names = {t["name"] for t in listing_b.json()}
+assert listing_b_names == {"Plumber", "Electrician", "Helper", "Skilled"}, "owner B should never see owner A's worker types"
 
 cross_assign = client.put(f"/workers/{w1['id']}/worker-type", headers=headers_b, json={"worker_type_id": create_b.json()["id"]})
 assert cross_assign.status_code == 404, "owner B should not be able to assign a type to owner A's worker"

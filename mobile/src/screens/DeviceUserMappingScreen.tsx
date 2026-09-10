@@ -20,6 +20,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+import { workerLabel } from "../workerLabel";
 
 type Props = NativeStackScreenProps<RootStackParamList, "DeviceUserMapping">;
 
@@ -148,7 +149,7 @@ export default function DeviceUserMappingScreen({ route }: Props) {
   // (and "(Deactivated)" for anyone no longer active), same rule as
   // every other worker picker in the app.
   const workerOptions = workers.map((w) => ({
-    label: `${w.name} (${w.numeric_employee_code ? `#${w.numeric_employee_code}` : "no code yet"})${w.status === "active" ? "" : " (Deactivated)"}`,
+    label: workerLabel(w),
     value: String(w.id),
   }));
 

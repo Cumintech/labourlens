@@ -19,6 +19,12 @@ class Owner(Base):
     # Printed on every Phase 3 statutory form header -- not PII, plain columns.
     factory_address: Mapped[str | None] = mapped_column(String, nullable=True)
     factory_licence_no: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Which state's statutory forms apply to this factory -- e.g. "Tamil
+    # Nadu", "Karnataka" -- drives the Forms & Reports state selector and
+    # which form_templates rows show up there. Free text today (not an
+    # enum/FK) since the set of supported states is small and changes
+    # rarely; the mobile app hardcodes the option list for now.
+    state: Mapped[str | None] = mapped_column(String, nullable=True)
     # DPDP consent -- signup is blocked server-side (not just a UI
     # checkbox) unless this was explicitly given; the timestamp is the
     # actual evidence of consent, not just a boolean flag, in case it's
@@ -492,3 +498,24 @@ class BiometricConsent(Base):
     # kept as a real record rather than assuming today's notice text
     # always matches whatever was shown when this row was created.
     notice_text: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class FormTemplate(Base):
+    """Reference data, not owner-scoped -- one row per (state, form_code)
+    pair, static and seeded via migration, not something an owner
+    creates. Tamil Nadu's rows point at forms.py's existing build_*
+    functions (already fully implemented); a state with is_available=False
+    is a stub -- listed so the owner knows it's coming, but generation
+    for it returns 501 (see main.py's _generate_form_content) until the
+    real field mapping is built. Adding a new state later is a data
+    change here, not a UI change -- the Forms & Reports screen already
+    just renders whatever this table returns for the selected state."""
+
+    __tablename__ = "form_templates"
+    __table_args__ = (UniqueConstraint("state", "form_code", name="uq_form_template_state_code"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    state: Mapped[str] = mapped_column(String, nullable=False)
+    form_code: Mapped[str] = mapped_column(String, nullable=False)
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    is_available: Mapped[bool] = mapped_column(default=True, nullable=False)

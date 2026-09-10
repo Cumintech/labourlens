@@ -322,7 +322,7 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
 
             <View style={styles.summaryRow}>
               <View style={[styles.statCard, { backgroundColor: colors.tealLight }]}>
-                <Text style={[styles.statValue, { color: "#0F6E56" }]}>{summary.present}</Text>
+                <Text style={[styles.statValue, { color: colors.tealDark }]}>{summary.present}</Text>
                 <Text style={styles.statLabel}>Present</Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: colors.dangerLight }]}>
@@ -330,7 +330,7 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
                 <Text style={styles.statLabel}>Absent</Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: colors.amberLight }]}>
-                <Text style={[styles.statValue, { color: "#8A5A14" }]}>{summary.leaveDays}</Text>
+                <Text style={[styles.statValue, { color: colors.amberDark }]}>{summary.leaveDays}</Text>
                 <Text style={styles.statLabel}>Leave</Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: colors.violetLight }]}>
@@ -370,22 +370,20 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
           const isToday = item.dateStr === `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
           return (
             <View style={[styles.dayRow, isToday && styles.dayRowToday]}>
-              <View style={styles.dateCol}>
+              <View style={styles.dateRow}>
                 <Text style={styles.dateNumber}>{pad(item.day)}</Text>
                 <Text style={styles.dateWeekday}>{item.weekday}</Text>
               </View>
-              <View style={styles.chipsCol}>
-                <DayAttendanceRow
-                  shifts={shifts}
-                  getShiftStatus={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.status}
-                  getShiftSource={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.source}
-                  onSetShiftStatus={(slotKey, status) => handleSetStatus(item.dateStr, slotKey, status)}
-                  isOnLeave={isDateOnLeave(item.dateStr)}
-                  onToggleLeave={() => handleToggleLeave(item.dateStr)}
-                  otHours={getDayOtHours(item.dateStr)}
-                  onOpenOt={() => setOtModalDate(item.dateStr)}
-                />
-              </View>
+              <DayAttendanceRow
+                shifts={shifts}
+                getShiftStatus={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.status}
+                getShiftSource={(slotKey) => attendanceByDateSlot.get(`${item.dateStr}:${slotKey}`)?.source}
+                onSetShiftStatus={(slotKey, status) => handleSetStatus(item.dateStr, slotKey, status)}
+                isOnLeave={isDateOnLeave(item.dateStr)}
+                onToggleLeave={() => handleToggleLeave(item.dateStr)}
+                otHours={getDayOtHours(item.dateStr)}
+                onOpenOt={() => setOtModalDate(item.dateStr)}
+              />
             </View>
           );
         }}
@@ -446,15 +444,17 @@ const styles = StyleSheet.create({
   tableHeaderRow: { flexDirection: "row", paddingHorizontal: spacing.md, marginTop: spacing.lg, marginBottom: spacing.xs },
   tableHeaderCell: { fontSize: 11, fontWeight: "700", color: colors.muted, textTransform: "uppercase" },
   dayRow: {
-    flexDirection: "row",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.fieldBg,
   },
   dayRowToday: { backgroundColor: colors.tealLight },
-  dateCol: { flex: 1, justifyContent: "center" },
+  // Full-width tile row directly under a compact date header, not a
+  // side-by-side column split -- squeezing the tiles into a narrow
+  // column (flex: 2 of 3) was forcing them to wrap onto a second line,
+  // which read as an oversized gap between the date and the shifts.
+  dateRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.xs, marginBottom: spacing.xs },
   dateNumber: { fontSize: 15, fontWeight: "700", color: colors.navy },
   dateWeekday: { fontSize: 11, color: colors.muted },
-  chipsCol: { flex: 2 },
 });

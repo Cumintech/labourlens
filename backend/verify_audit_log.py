@@ -85,19 +85,19 @@ print("A manual wage-rate entry produces a wage_rate_set audit row with the figu
 
 # --- Wage rate: auto-created from a WorkerType default on assignment ---
 worker4 = client.post("/workers", headers=headers, json={"name": "Type Default Worker", "aadhaar_number": "999900001111"}).json()
-wtype = client.post("/worker-types", headers=headers, json={"name": "Electrician", "default_rate_type": "daily", "default_rate": 800}).json()
+wtype = client.post("/worker-types", headers=headers, json={"name": "Electrician Test Type", "default_rate_type": "daily", "default_rate": 800}).json()
 assign = client.put(f"/workers/{worker4['id']}/worker-type", headers=headers, json={"worker_type_id": wtype["id"]})
 assert assign.status_code == 200, assign.text
 rows4 = audit_rows(worker4["id"])
 assert [r.action for r in rows4] == ["wage_rate_set"], f"expected one wage_rate_set row, got {[r.action for r in rows4]}"
-assert "Electrician" in (rows4[0].reason or ""), f"expected the worker type's name in the audit reason, got {rows4[0].reason!r}"
+assert "Electrician Test Type" in (rows4[0].reason or ""), f"expected the worker type's name in the audit reason, got {rows4[0].reason!r}"
 print("A WorkerType-auto-created default wage rate produces its own wage_rate_set audit row: PASSED")
 
 # Assigning a type to a worker who already has their own rate must NOT
 # fabricate a second wage_rate_set row -- nothing about their wage
 # actually changed (see assign_worker_type's own "already has a rate
 # keeps it" rule).
-wtype2 = client.post("/worker-types", headers=headers, json={"name": "Plumber", "default_rate_type": "daily", "default_rate": 900}).json()
+wtype2 = client.post("/worker-types", headers=headers, json={"name": "Plumber Test Type", "default_rate_type": "daily", "default_rate": 900}).json()
 reassign = client.put(f"/workers/{worker4['id']}/worker-type", headers=headers, json={"worker_type_id": wtype2["id"]})
 assert reassign.status_code == 200, reassign.text
 rows4_after = audit_rows(worker4["id"])

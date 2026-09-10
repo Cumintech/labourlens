@@ -9,6 +9,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+import { workerLabel } from "../workerLabel";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WageRateWorkers">;
 
@@ -110,7 +111,7 @@ export default function WageRateWorkersScreen({ navigation }: Props) {
             onPress={() => navigation.navigate("WageRateWorkerDetail", { workerId: item.id, workerName: item.name })}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{item.name}</Text>
+              <Text style={styles.name}>{workerLabel(item)}</Text>
               <Text style={styles.meta}>{type ? type.name : "No type assigned"}</Text>
               <Text style={styles.meta}>
                 {rate ? `₹${rate.basic} / ${rate.rate_type === "daily" ? "day" : "month"}` : "No wage rate set"}

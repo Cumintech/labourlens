@@ -7,6 +7,7 @@ import { DashboardSummary, getDashboard, listLeaveForDate } from "../api/client"
 import { isoDate } from "../components/DateField";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { trialBannerText } from "../planStatus";
 import { colors, radius, spacing } from "../theme";
 
 // Rendered as the "Home" tab's content inside MainTabs -- navigation
@@ -68,11 +69,7 @@ export default function HomeScreen({ navigation }: Props) {
 
       {owner?.plan_status === "trial" && (
         <View style={styles.trialBanner}>
-          <Text style={styles.trialBannerText}>
-            {owner.trial_days_remaining && owner.trial_days_remaining > 0
-              ? `Free trial -- ${owner.trial_days_remaining} day${owner.trial_days_remaining === 1 ? "" : "s"} left`
-              : "Your free trial has ended -- contact us to move to a paid plan"}
-          </Text>
+          <Text style={styles.trialBannerText}>{trialBannerText(owner)}</Text>
         </View>
       )}
 
@@ -82,39 +79,39 @@ export default function HomeScreen({ navigation }: Props) {
       >
         <Text style={styles.bigTileEmoji}>📋</Text>
         <View style={styles.tileTextWrap}>
-          <Text style={[styles.bigTileTitle, { color: "#0F6E56" }]}>Labour Attendance</Text>
+          <Text style={[styles.bigTileTitle, { color: colors.tealDark }]}>Labour Attendance</Text>
           <Text style={styles.tileSubtitle}>
             {summary
               ? `${summary.present_today}/${summary.total_workers} present today${leaveCount ? ` · ${leaveCount} on leave` : ""}`
               : "Mark today's shifts, leave, and overtime"}
           </Text>
         </View>
-        <Text style={[styles.tileArrow, { color: "#0F6E56" }]}>›</Text>
+        <Text style={[styles.tileArrow, { color: colors.tealDark }]}>›</Text>
       </TouchableOpacity>
 
       <View style={styles.smallRow}>
         <TouchableOpacity
-          style={[styles.smallTile, { backgroundColor: colors.skyBlueLight }]}
+          style={[styles.smallTile, { backgroundColor: colors.tealLight }]}
           onPress={() => navigation.navigate("NewWorkerScan")}
         >
           <Text style={styles.smallTileEmoji}>👷</Text>
-          <Text style={[styles.smallTileTitle, { color: colors.skyBlue }]}>Add Worker</Text>
+          <Text style={[styles.smallTileTitle, { color: colors.tealDark }]}>Add Worker</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.smallTile, { backgroundColor: colors.coralLight }]}
+          style={[styles.smallTile, { backgroundColor: colors.tealLight }]}
           onPress={() => navigation.navigate("WageRateWorkers")}
         >
           <Text style={styles.smallTileEmoji}>💰</Text>
-          <Text style={[styles.smallTileTitle, { color: colors.coral }]}>Wage Rate</Text>
+          <Text style={[styles.smallTileTitle, { color: colors.tealDark }]}>Wage Rate</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.smallTile, { backgroundColor: colors.amberLight }]}
+          style={[styles.smallTile, { backgroundColor: colors.tealLight }]}
           onPress={() => navigation.navigate("ShiftSettings")}
         >
           <Text style={styles.smallTileEmoji}>⚙️</Text>
-          <Text style={[styles.smallTileTitle, { color: "#8A5A14" }]}>Shifts & Profile</Text>
+          <Text style={[styles.smallTileTitle, { color: colors.tealDark }]}>Shifts & Profile</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -144,7 +141,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm + 4,
     marginBottom: spacing.md,
   },
-  trialBannerText: { color: "#8A5A14", fontSize: 13, fontWeight: "700", textAlign: "center" },
+  trialBannerText: { color: colors.amberDark, fontSize: 13, fontWeight: "700", textAlign: "center" },
   bigTile: {
     flexDirection: "row",
     alignItems: "center",

@@ -15,6 +15,9 @@ export type Owner = {
   factory_name: string;
   factory_address: string | null;
   factory_licence_no: string | null;
+  // Which state's statutory forms apply -- drives the Forms & Reports
+  // state selector's default. Free text, matching the backend column.
+  state: string | null;
   // "trial" | "active" | "payment_overdue" | "suspended" | "churned" --
   // informational only, never blocks anything in this app.
   plan_status: string;
@@ -26,11 +29,29 @@ export function updateFactoryProfile(
   factoryName: string | undefined,
   factoryAddress: string | undefined,
   factoryLicenceNo: string | undefined,
+  state: string | undefined,
 ): Promise<Owner> {
   return request<Owner>("/owners/me/factory-profile", {
     method: "PUT",
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ factory_name: factoryName, factory_address: factoryAddress, factory_licence_no: factoryLicenceNo }),
+    body: JSON.stringify({
+      factory_name: factoryName,
+      factory_address: factoryAddress,
+      factory_licence_no: factoryLicenceNo,
+      state,
+    }),
+  });
+}
+
+export type FormTemplate = {
+  form_code: string;
+  label: string;
+  is_available: boolean;
+};
+
+export function listFormTemplates(token: string, state: string): Promise<FormTemplate[]> {
+  return request<FormTemplate[]>(`/form-templates?state=${encodeURIComponent(state)}`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
 }
 
@@ -126,6 +147,10 @@ export type Worker = {
   deactivated_reason: string | null;
   worker_type_id: number | null;
   numeric_employee_code: string | null;
+  // A confirmed device mapping, if any -- null means "Not mapped", not
+  // an error. Never the direct-employee-code enrollment path (that has
+  // no separate confirmation record to show here).
+  device_user_id: string | null;
   created_at: string;
 };
 
@@ -593,6 +618,7 @@ export function recordWagePayment(token: string, workerId: number, input: WagePa
 export type WorkerWage = {
   worker_id: number;
   worker_name: string;
+  numeric_employee_code: string | null;
   has_rate: boolean;
   days_worked: number;
   days_absent: number;
@@ -640,6 +666,7 @@ export function getWageSummary(token: string, month: number, year: number): Prom
 export type DailyWorkerWage = {
   worker_id: number;
   worker_name: string;
+  numeric_employee_code: string | null;
   has_rate: boolean;
   present: boolean;
   daily_cost: number;
@@ -658,7 +685,10 @@ export function getDailyWageSummary(token: string, date: string): Promise<DailyW
   });
 }
 
-export type FormCode = "attendance" | "form25" | "form25b" | "form12" | "form15" | "wageslip";
+// No longer a closed union -- which form_codes exist is state-dependent
+// now (form_templates on the backend), so a Karnataka code like "form11"
+// is just as valid a string here as "form25" ever was.
+export type FormCode = string;
 
 // Generic download picker (any employee, any form) -- backs
 // StatutoryFormsScreen, which also folds the Attendance Report in as

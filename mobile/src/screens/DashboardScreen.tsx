@@ -30,6 +30,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+import { workerLabel } from "../workerLabel";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Dashboard">;
 
@@ -37,9 +38,9 @@ type Props = NativeStackScreenProps<RootStackParamList, "Dashboard">;
 // than colors -- purely visual, so the summary row reads at a glance
 // instead of every shift looking identical.
 const SLOT_ACCENTS = [
-  { bg: colors.tealLight, fg: "#0F6E56" },
+  { bg: colors.tealLight, fg: colors.tealDark },
   { bg: colors.skyBlueLight, fg: colors.skyBlue },
-  { bg: colors.amberLight, fg: "#8A5A14" },
+  { bg: colors.amberLight, fg: colors.amberDark },
   { bg: colors.violetLight, fg: colors.violet },
   { bg: colors.coralLight, fg: colors.coral },
 ];
@@ -419,8 +420,8 @@ export default function DashboardScreen({ navigation }: Props) {
                     );
                   })}
                   <View style={[styles.slotBox, { backgroundColor: colors.amberLight }]}>
-                    <Text style={[styles.slotBoxLabel, { color: "#8A5A14" }]}>Leave</Text>
-                    <Text style={[styles.slotBoxValue, { color: "#8A5A14" }]}>{leave.length}</Text>
+                    <Text style={[styles.slotBoxLabel, { color: colors.amberDark }]}>Leave</Text>
+                    <Text style={[styles.slotBoxValue, { color: colors.amberDark }]}>{leave.length}</Text>
                   </View>
                 </View>
               </View>
@@ -501,8 +502,10 @@ export default function DashboardScreen({ navigation }: Props) {
                     })
                   }
                 >
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.meta}>Aadhaar •••• •••• {item.aadhaar_last4}</Text>
+                  <Text style={styles.name}>{workerLabel(item)}</Text>
+                  <Text style={styles.meta}>
+                    Device ID: {item.device_user_id ?? "Not mapped"} · Aadhaar •••• •••• {item.aadhaar_last4}
+                  </Text>
                 </TouchableOpacity>
                 {isActive ? (
                   <TouchableOpacity onPress={() => handleDeactivate(item)}>
@@ -567,31 +570,31 @@ const styles = StyleSheet.create({
   summaryCard: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.sm + 6, marginTop: spacing.md },
   summaryTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   summaryNumber: { color: colors.navy, fontSize: 26, fontWeight: "700" },
-  summaryLabel: { color: "#0F6E56", fontSize: 12, fontWeight: "700" },
+  summaryLabel: { color: colors.tealDark, fontSize: 12, fontWeight: "700" },
   slotRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.sm, flexWrap: "wrap" },
   slotBox: { flexGrow: 1, flexBasis: "30%", borderRadius: radius.sm, padding: spacing.xs + 4 },
   slotBoxLabel: { fontSize: 11 },
   slotBoxValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
-  bulkRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+  bulkRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
   bulkButton: {
     flex: 1,
     backgroundColor: colors.teal,
     borderRadius: radius.sm,
-    paddingVertical: spacing.sm + 4,
+    paddingVertical: spacing.sm,
     alignItems: "center",
   },
-  bulkButtonText: { color: colors.white, fontSize: 13, fontWeight: "700" },
+  bulkButtonText: { color: colors.white, fontSize: 12, fontWeight: "700" },
   bulkButtonGhost: {
     flex: 1,
     backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: radius.sm,
-    paddingVertical: spacing.sm + 4,
+    paddingVertical: spacing.sm,
     alignItems: "center",
   },
-  bulkButtonGhostText: { color: colors.white, fontSize: 13, fontWeight: "700" },
+  bulkButtonGhostText: { color: colors.white, fontSize: 12, fontWeight: "700" },
   sundayNote: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: spacing.sm, textAlign: "center" },
   complianceBanner: {
-    backgroundColor: "#FFF8EC",
+    backgroundColor: colors.amberPale,
     borderColor: colors.amber,
     borderWidth: 1,
     borderRadius: radius.sm,

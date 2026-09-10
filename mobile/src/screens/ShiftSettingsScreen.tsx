@@ -21,9 +21,11 @@ import {
 } from "../api/client";
 import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
+import SelectField from "../components/SelectField";
 import { ListSkeleton } from "../components/Skeleton";
 import TimeField from "../components/TimeField";
 import { useAuth } from "../context/AuthContext";
+import { INDIAN_STATE_OPTIONS } from "../indianStates";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 
@@ -42,6 +44,7 @@ export default function ShiftSettingsScreen({}: Props) {
   const [factoryName, setFactoryName] = useState(owner?.factory_name ?? "");
   const [factoryAddress, setFactoryAddress] = useState(owner?.factory_address ?? "");
   const [factoryLicenceNo, setFactoryLicenceNo] = useState(owner?.factory_licence_no ?? "");
+  const [state, setState] = useState(owner?.state ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -90,6 +93,7 @@ export default function ShiftSettingsScreen({}: Props) {
         factoryName.trim(),
         factoryAddress.trim() || undefined,
         factoryLicenceNo.trim() || undefined,
+        state || undefined,
       );
       await updateOwner(updated);
       Alert.alert("Saved", "Factory profile updated.");
@@ -203,6 +207,13 @@ export default function ShiftSettingsScreen({}: Props) {
         placeholder="e.g. TN/MDU/1234"
         placeholderTextColor={colors.muted}
         autoCapitalize="characters"
+      />
+      <SelectField
+        label="State (for statutory forms)"
+        value={state || null}
+        options={INDIAN_STATE_OPTIONS}
+        onChange={setState}
+        placeholder="Select your factory's state"
       />
       <TouchableOpacity
         style={[styles.button, savingProfile && styles.buttonDisabled]}

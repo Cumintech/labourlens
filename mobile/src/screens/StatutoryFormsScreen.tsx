@@ -5,16 +5,18 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 // package's own type definitions rather than assumed from memory.
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { FormCode, Worker, emailForm, getFormDownloadUrl, listWorkers } from "../api/client";
+import { FormTemplate, Worker, emailForm, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
 import { useAuth } from "../context/AuthContext";
+import { INDIAN_STATE_OPTIONS } from "../indianStates";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+import { workerLabel } from "../workerLabel";
 
 // Registered both as a flat screen on the root stack ("StatutoryForms")
 // and as the Forms & Reports tab's content inside MainTabs -- it only
@@ -22,29 +24,21 @@ import { colors, radius, spacing } from "../theme";
 // access, so a plain root-stack nav prop type covers both mount points.
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
-// Attendance Report is just another Form Type here now, not a separate
-// screen -- workerFilterable=false forms are true factory-wide
-// registers by real government design (every worker is a row; there's
-// no "just this worker" variant of the document), so the Worker picker
-// below is shown but locked to "All workers" for them. Form 12 is the
-// one exception: it's a running register but does have a real
-// per-worker narrowing endpoint, so it's filterable despite having no
-// period. Everything else with hasPeriod is a genuine start/end range
-// on the backend now, not a single month -- see client.ts.
-const FORM_OPTIONS: {
-  code: FormCode;
-  label: string;
-  hasPeriod: boolean;
-  workerFilterable: boolean;
-  workerRequired: boolean;
-}[] = [
-  { code: "attendance", label: "Attendance Report (all workers)", hasPeriod: true, workerFilterable: false, workerRequired: false },
-  { code: "form25", label: "Form 25 — Muster Roll (all workers)", hasPeriod: true, workerFilterable: false, workerRequired: false },
-  { code: "form25b", label: "Form 25-B — Time Card", hasPeriod: true, workerFilterable: true, workerRequired: true },
-  { code: "form12", label: "Form 12 — Register of Adult Workers", hasPeriod: false, workerFilterable: true, workerRequired: false },
-  { code: "form15", label: "Form 15 — Wage Register (all workers)", hasPeriod: true, workerFilterable: false, workerRequired: false },
-  { code: "wageslip", label: "Wage Slip", hasPeriod: true, workerFilterable: true, workerRequired: true },
-];
+// UI behavior per form_code -- genuinely static (which forms have a
+// period, which accept/require a worker), unlike the label/availability
+// list itself, which now comes from the backend's form_templates table
+// per selected state (see loadTemplates below). A form_code with no
+// entry here (a brand-new state's forms before this map is updated)
+// falls back to the safest default: period-scoped, not worker-specific.
+const FORM_METADATA: Record<string, { hasPeriod: boolean; workerFilterable: boolean; workerRequired: boolean }> = {
+  attendance: { hasPeriod: true, workerFilterable: false, workerRequired: false },
+  form25: { hasPeriod: true, workerFilterable: false, workerRequired: false },
+  form25b: { hasPeriod: true, workerFilterable: true, workerRequired: true },
+  form12: { hasPeriod: false, workerFilterable: true, workerRequired: false },
+  form15: { hasPeriod: true, workerFilterable: false, workerRequired: false },
+  wageslip: { hasPeriod: true, workerFilterable: true, workerRequired: true },
+};
+const DEFAULT_FORM_METADATA = { hasPeriod: true, workerFilterable: false, workerRequired: false };
 
 type PeriodPreset = "current_month" | "last_3_months" | "last_6_months" | "current_year" | "last_year" | "custom";
 
@@ -99,10 +93,12 @@ function rangeForPreset(preset: PeriodPreset, today: Date): { start: string; end
 // relevant, download or email it. PDF only -- Excel export was removed
 // from every form per explicit request.
 export default function StatutoryFormsScreen({}: Props) {
-  const { token } = useAuth();
+  const { token, owner } = useAuth();
   const today = useMemo(() => new Date(), []);
   const [workers, setWorkers] = useState<Worker[]>([]);
-  const [formCode, setFormCode] = useState<FormCode>("attendance");
+  const [state, setState] = useState(owner?.state ?? INDIAN_STATE_OPTIONS[0].value);
+  const [templates, setTemplates] = useState<FormTemplate[]>([]);
+  const [formCode, setFormCode] = useState<string>("attendance");
   const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
   const [preset, setPreset] = useState<PeriodPreset>("current_month");
   const [customStart, setCustomStart] = useState(dateStr(today.getFullYear(), today.getMonth() + 1, 1));
@@ -120,10 +116,43 @@ export default function StatutoryFormsScreen({}: Props) {
     }, [token]),
   );
 
-  const formOption = FORM_OPTIONS.find((f) => f.code === formCode)!;
+  // Which Form Types show up is state-dependent (see form_templates on
+  // the backend) -- re-fetched whenever the state selector changes, and
+  // the selected form_code is reset if it's no longer in the new list
+  // (e.g. switching from Tamil Nadu to Karnataka).
+  useEffect(() => {
+    if (!token) return;
+    listFormTemplates(token, state)
+      .then((fetched) => {
+        setTemplates(fetched);
+        // Stubbed (e.g. Karnataka) templates stay in the list -- their
+        // "(coming soon)" label already says what to expect, and
+        // attempting one surfaces the backend's real 501 message rather
+        // than hiding that the state's forms exist at all.
+        if (!fetched.some((t) => t.form_code === formCode)) {
+          setFormCode(fetched[0]?.form_code ?? "");
+          setSelectedWorkerId(null);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when state changes, not on every formCode change
+  }, [token, state]);
+
+  const availableForms = templates.map((t) => ({
+    code: t.form_code,
+    label: t.label,
+    isAvailable: t.is_available,
+    ...(FORM_METADATA[t.form_code] ?? DEFAULT_FORM_METADATA),
+  }));
+  const formOption =
+    availableForms.find((f) => f.code === formCode) ?? availableForms[0] ?? { code: "", label: "", isAvailable: true, ...DEFAULT_FORM_METADATA };
   const computed = preset === "custom" ? { start: customStart, end: customEnd } : rangeForPreset(preset, today)!;
 
   function validateSelection(): boolean {
+    if (!formOption.isAvailable) {
+      Alert.alert("Not available yet", `${formOption.label} isn't available yet.`);
+      return false;
+    }
     if (formOption.hasPeriod && computed.end < computed.start) {
       Alert.alert("Check the dates", "The end date is before the start date.");
       return false;
@@ -202,7 +231,7 @@ export default function StatutoryFormsScreen({}: Props) {
   const workerOptions = [
     { label: "All workers", value: "all" },
     ...workers.map((w) => ({
-      label: w.status === "active" ? w.name : `${w.name} (Deactivated)`,
+      label: workerLabel(w),
       value: String(w.id),
     })),
   ];
@@ -212,19 +241,17 @@ export default function StatutoryFormsScreen({}: Props) {
       <Text style={styles.title}>Forms & Reports</Text>
       <Text style={styles.subtitle}>Download or email any statutory form or report, for any period, for any worker.</Text>
 
-      <Text style={styles.sectionLabel}>Period</Text>
-      <View style={[styles.presetGrid, !formOption.hasPeriod && styles.sectionDisabled]}>
-        {PRESETS.map((p) => (
-          <TouchableOpacity
-            key={p.key}
-            style={[styles.presetOption, preset === p.key && styles.presetOptionActive]}
-            onPress={() => formOption.hasPeriod && setPreset(p.key)}
-            disabled={!formOption.hasPeriod}
-          >
-            <Text style={[styles.presetText, preset === p.key && styles.presetTextActive]}>{p.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <Text style={styles.sectionLabel}>State</Text>
+      <SelectField label="" value={state} options={INDIAN_STATE_OPTIONS} onChange={setState} />
+
+      <Text style={styles.sectionLabel}>Time Period</Text>
+      <SelectField
+        label=""
+        value={preset}
+        options={PRESETS.map((p) => ({ label: p.label, value: p.key }))}
+        onChange={(v) => setPreset(v as PeriodPreset)}
+        disabled={!formOption.hasPeriod}
+      />
       {!formOption.hasPeriod ? (
         <Text style={styles.helper}>{formOption.label} isn't scoped to a period.</Text>
       ) : preset === "custom" ? (
@@ -243,15 +270,19 @@ export default function StatutoryFormsScreen({}: Props) {
       )}
 
       <Text style={styles.sectionLabel}>Form Type</Text>
-      <SelectField
-        label=""
-        value={formCode}
-        options={FORM_OPTIONS.map((o) => ({ label: o.label, value: o.code }))}
-        onChange={(v) => {
-          setFormCode(v as FormCode);
-          setSelectedWorkerId(null);
-        }}
-      />
+      {availableForms.length === 0 ? (
+        <Text style={styles.empty}>No forms available for this state yet.</Text>
+      ) : (
+        <SelectField
+          label=""
+          value={formCode}
+          options={availableForms.map((o) => ({ label: o.label, value: o.code }))}
+          onChange={(v) => {
+            setFormCode(v);
+            setSelectedWorkerId(null);
+          }}
+        />
+      )}
 
       <Text style={styles.sectionLabel}>Worker</Text>
       {!formOption.workerFilterable ? (
@@ -272,19 +303,21 @@ export default function StatutoryFormsScreen({}: Props) {
       </TouchableOpacity>
 
       <Text style={styles.sectionLabel}>Or email it</Text>
-      <TextInput
-        style={styles.input}
-        value={recipientEmail}
-        onChangeText={setRecipientEmail}
-        placeholder="owner@example.com"
-        placeholderTextColor={colors.muted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="email-address"
-      />
-      <TouchableOpacity style={[styles.buttonGhost, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
-        {emailing ? <ActivityIndicator color={colors.teal} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
-      </TouchableOpacity>
+      <View style={styles.emailRow}>
+        <TextInput
+          style={[styles.input, styles.emailInput]}
+          value={recipientEmail}
+          onChangeText={setRecipientEmail}
+          placeholder="owner@example.com"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+        />
+        <TouchableOpacity style={[styles.buttonGhost, styles.emailButton, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
+          {emailing ? <ActivityIndicator color={colors.teal} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
+        </TouchableOpacity>
+      </View>
     </KeyboardScreen>
   );
 }
@@ -294,19 +327,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
   sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs, textTransform: "uppercase" },
-  sectionDisabled: { opacity: 0.5 },
   empty: { fontSize: 13, color: colors.muted },
   helper: { fontSize: 12, color: colors.muted },
-  presetGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
-  presetOption: {
-    backgroundColor: colors.fieldBg,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.sm + 2,
-  },
-  presetOptionActive: { backgroundColor: colors.teal },
-  presetText: { color: colors.navy, fontSize: 13, fontWeight: "600" },
-  presetTextActive: { color: colors.white },
   customRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
   rangePreview: { fontSize: 13, color: colors.muted, marginTop: spacing.sm },
   input: {
@@ -335,4 +357,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   buttonGhostText: { color: colors.teal, fontSize: 14, fontWeight: "700" },
+  emailRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
+  emailInput: { flex: 1 },
+  emailButton: { marginTop: 0, paddingHorizontal: spacing.md },
 });

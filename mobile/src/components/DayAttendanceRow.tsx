@@ -37,16 +37,30 @@ export default function DayAttendanceRow({
   return (
     <View style={styles.row}>
       {shifts.map((shift) => {
-        const isPresent = getShiftStatus(shift.slot_key) === "present";
+        // A slot with no attendance row yet (never marked) is a real
+        // third state, not the same as explicitly marked Absent -- the
+        // backend only ever stores "present"|"absent" (see
+        // Attendance.status), so "never marked" is representable only as
+        // the row's absence, and this is the one place that distinction
+        // must not get collapsed into a color. Tapping an unmarked or
+        // absent tile marks it present; tapping present marks it absent
+        // -- there's no tap gesture back to "unmarked" once set, matching
+        // existing behavior before this fix.
+        const status = getShiftStatus(shift.slot_key);
+        const isPresent = status === "present";
+        const isAbsent = status === "absent";
         const isBiometric = isPresent && getShiftSource?.(shift.slot_key) === "biometric";
+        const tileStyle = isPresent ? styles.tilePresent : isAbsent ? styles.tileAbsent : styles.tileNeutral;
+        const textStyle = isPresent ? styles.textPresent : isAbsent ? styles.textAbsent : styles.textNeutral;
+        const letter = isPresent ? "P" : isAbsent ? "A" : "—";
         return (
           <TouchableOpacity
             key={shift.slot_key}
-            style={[styles.tile, isPresent ? styles.tilePresent : styles.tileAbsent]}
+            style={[styles.tile, tileStyle]}
             onPress={() => onSetShiftStatus(shift.slot_key, isPresent ? "absent" : "present")}
           >
-            <Text style={[styles.tileText, isPresent ? styles.textPresent : styles.textAbsent]} numberOfLines={1}>
-              {shift.label} {isPresent ? "P" : "A"}
+            <Text style={[styles.tileText, textStyle]} numberOfLines={1}>
+              {shift.label} {letter}
               {isBiometric ? " 👆" : ""}
             </Text>
           </TouchableOpacity>
@@ -73,13 +87,16 @@ const styles = StyleSheet.create({
   tile: { flexGrow: 1, flexBasis: "22%", borderRadius: radius.sm, paddingVertical: spacing.sm + 2, alignItems: "center" },
   tileText: { fontSize: 12, fontWeight: "700" },
   tilePresent: { backgroundColor: colors.tealLight },
-  textPresent: { color: "#0F6E56" },
+  textPresent: { color: colors.tealDark },
   tileAbsent: { backgroundColor: colors.dangerLight },
   textAbsent: { color: colors.danger },
   tileLeave: { backgroundColor: colors.amberLight },
-  textLeave: { color: "#8A5A14" },
+  textLeave: { color: colors.amberDark },
   tileOt: { backgroundColor: colors.violetLight },
   textOt: { color: colors.violet },
-  tileNeutral: { backgroundColor: colors.fieldBg },
-  textNeutral: { color: colors.muted },
+  // Not yet marked / no data -- a real status (see the 3-state switch
+  // above), not a generic field background, so it gets its own token
+  // rather than reusing fieldBg/muted.
+  tileNeutral: { backgroundColor: colors.neutralLight },
+  textNeutral: { color: colors.neutral },
 });

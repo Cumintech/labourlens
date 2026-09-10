@@ -21,7 +21,7 @@ type Mode = "daily" | "monthly";
 
 const SLICE_COLORS = [
   colors.teal, colors.skyBlue, colors.violet, colors.amber,
-  colors.coral, colors.danger, "#0F6E56", "#8A5A14", "#2B4C7E",
+  colors.coral, colors.danger, colors.tealDark, colors.amberDark, "#2B4C7E",
 ];
 
 const MONTH_NAMES = [
@@ -142,13 +142,25 @@ export default function WageCalculationScreen() {
       return monthlySummary.workers
         .filter((w) => w.has_rate)
         .sort((a, b) => b.net_wage - a.net_wage)
-        .map((w) => ({ workerId: w.worker_id, workerName: w.worker_name, amount: w.net_wage, hasRate: true, paid: w.paid }));
+        .map((w) => ({
+          workerId: w.worker_id,
+          workerName: `${w.worker_name} (${w.numeric_employee_code ? `#${w.numeric_employee_code}` : "no code yet"})`,
+          amount: w.net_wage,
+          hasRate: true,
+          paid: w.paid,
+        }));
     }
     if (mode === "daily" && dailySummary) {
       return dailySummary.workers
         .filter((w) => w.present)
         .sort((a, b) => b.daily_cost - a.daily_cost)
-        .map((w) => ({ workerId: w.worker_id, workerName: w.worker_name, amount: w.daily_cost, hasRate: w.has_rate, present: w.present }));
+        .map((w) => ({
+          workerId: w.worker_id,
+          workerName: `${w.worker_name} (${w.numeric_employee_code ? `#${w.numeric_employee_code}` : "no code yet"})`,
+          amount: w.daily_cost,
+          hasRate: w.has_rate,
+          present: w.present,
+        }));
     }
     return [];
   }, [mode, monthlySummary, dailySummary]);
@@ -335,7 +347,7 @@ export default function WageCalculationScreen() {
 
               <View style={styles.daysRow}>
                 <View style={[styles.dayStat, { backgroundColor: colors.tealLight }]}>
-                  <Text style={[styles.dayStatValue, { color: "#0F6E56" }]}>{detailTarget.days_worked}</Text>
+                  <Text style={[styles.dayStatValue, { color: colors.tealDark }]}>{detailTarget.days_worked}</Text>
                   <Text style={styles.dayStatLabel}>Days Worked</Text>
                 </View>
                 <View style={[styles.dayStat, { backgroundColor: colors.dangerLight }]}>
@@ -475,7 +487,7 @@ const styles = StyleSheet.create({
   detailLabelBold: { fontSize: 14, color: colors.navy, fontWeight: "700" },
   detailValueBold: { fontSize: 14, color: colors.navy, fontWeight: "700" },
   paidBadge: { backgroundColor: colors.tealLight, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
-  paidBadgeText: { color: "#0F6E56", fontSize: 12, fontWeight: "700" },
+  paidBadgeText: { color: colors.tealDark, fontSize: 12, fontWeight: "700" },
   recordButton: { backgroundColor: colors.teal, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
   recordButtonText: { color: colors.white, fontSize: 12, fontWeight: "700" },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },

@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
   optionSelected: { backgroundColor: colors.tealLight },
   optionText: { fontSize: 15, color: colors.navy },
-  optionTextSelected: { color: "#0F6E56", fontWeight: "700" },
+  optionTextSelected: { color: colors.tealDark, fontWeight: "700" },
   cancelButton: { paddingVertical: 14, alignItems: "center", marginTop: spacing.xs },
   cancelText: { color: colors.muted, fontWeight: "700" },
 });

@@ -26,6 +26,7 @@ from schemas import (
     DailyWorkerWageOut,
     DashboardOut,
     FactoryProfileIn,
+    FormTemplateOut,
     FormEmailIn,
     HealthOut,
     LeaveEntryIn,
@@ -190,6 +191,13 @@ def signup(body: OwnerSignupIn, db: Session = Depends(get_db)):
     for slot_key, label, sort_order in (("AM", "AM", 0), ("PM", "PM", 1), ("Evening", "Evening", 2)):
         db.add(models.ShiftConfig(owner_id=owner.id, slot_key=slot_key, label=label, sort_order=sort_order))
 
+    # Sensible starting defaults for the Wage Rate feature -- fully
+    # editable/removable like any owner-created type, seeded once at
+    # signup (not lazily whenever the list is empty) so a deliberate
+    # delete-all by the owner later is respected, not silently reappearing.
+    for name, default_rate in (("Plumber", 1000), ("Electrician", 1000), ("Helper", 500)):
+        db.add(models.WorkerType(owner_id=owner.id, name=name, default_rate_type="daily", default_rate=default_rate))
+
     # Every Owner is one factory for admin-portal purposes -- auto-create
     # the matching Factory row here rather than requiring the admin to
     # manually re-enter every factory that's already signed up. Starts
@@ -237,6 +245,7 @@ def update_factory_profile(
         owner.factory_name = body.factory_name.strip()
     owner.factory_address = body.factory_address
     owner.factory_licence_no = body.factory_licence_no
+    owner.state = body.state
     db.commit()
     db.refresh(owner)
     return _owner_out(db, owner)
@@ -305,12 +314,25 @@ def list_workers(
 ):
     # Multi-tenant boundary: scoped to the authenticated owner at the
     # query level, never trusting an owner_id from client input.
-    return (
+    workers = (
         db.query(models.Worker)
         .filter(models.Worker.owner_id == owner.id)
         .order_by(models.Worker.created_at.desc())
         .all()
     )
+    # One extra query for every worker's confirmed device mapping (if
+    # any), scoped to this owner's own devices -- not a per-worker N+1,
+    # and not the direct-employee-code path (see WorkerOut.device_user_id).
+    mapping_by_worker_id = dict(
+        db.query(models.DeviceUserMapping.worker_id, models.DeviceUserMapping.device_user_id)
+        .join(models.BiometricDevice, models.BiometricDevice.id == models.DeviceUserMapping.device_id)
+        .filter(models.BiometricDevice.owner_id == owner.id)
+        .all()
+    )
+    return [
+        WorkerOut(**w.__dict__, device_user_id=mapping_by_worker_id.get(w.id))
+        for w in workers
+    ]
 
 
 @app.get("/workers/missing-compliance", response_model=list[WorkerOut])
@@ -814,10 +836,20 @@ def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:
     per-worker wage-computation endpoint and the factory-wide summary so
     both always agree on the same breakdown."""
     if wage is None:
-        return WorkerWageOut(worker_id=worker.id, worker_name=worker.name, has_rate=False, days_worked=0, gross_wage=0, net_wage=0, paid=False)
+        return WorkerWageOut(
+            worker_id=worker.id,
+            worker_name=worker.name,
+            numeric_employee_code=worker.numeric_employee_code,
+            has_rate=False,
+            days_worked=0,
+            gross_wage=0,
+            net_wage=0,
+            paid=False,
+        )
     return WorkerWageOut(
         worker_id=worker.id,
         worker_name=worker.name,
+        numeric_employee_code=worker.numeric_employee_code,
         has_rate=True,
         days_worked=wage["summary"]["days_worked"],
         days_absent=wage["summary"]["days_absent"],
@@ -904,6 +936,7 @@ def get_daily_wage_summary(
             DailyWorkerWageOut(
                 worker_id=worker.id,
                 worker_name=worker.name,
+                numeric_employee_code=worker.numeric_employee_code,
                 has_rate=daily["has_rate"],
                 present=daily["present"],
                 daily_cost=daily["daily_cost"],
@@ -1189,6 +1222,26 @@ def _log_form_generation(
     db.commit()
 
 
+@app.get("/form-templates", response_model=list[FormTemplateOut])
+def list_form_templates(
+    state: str,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Which Form Types show up in Forms & Reports for the selected
+    state -- reference data (not owner-scoped), seeded via migration.
+    A state with no rows yet (anything beyond Tamil Nadu/Karnataka today)
+    returns an empty list rather than an error -- the frontend already
+    handles "no form types available" the same way it handles "no
+    workers yet"."""
+    return (
+        db.query(models.FormTemplate)
+        .filter(models.FormTemplate.state == state)
+        .order_by(models.FormTemplate.id)
+        .all()
+    )
+
+
 def _generate_form_content(
     db: Session,
     owner: models.Owner,
@@ -1216,6 +1269,12 @@ def _generate_form_content(
     if form_code == "wageslip":
         worker = _get_owned_worker(worker_id, owner, db)
         return forms.build_wageslip(db, owner, worker, start_date, end_date)
+    # A stubbed form_templates row (Karnataka today) is listed so the
+    # owner knows it's coming, but has no build_* implementation yet --
+    # a real "not built yet" response, not the same as a typo'd form_code.
+    template = db.query(models.FormTemplate).filter(models.FormTemplate.form_code == form_code).first()
+    if template is not None and not template.is_available:
+        raise HTTPException(status_code=501, detail=f"{template.label} isn't available yet.")
     raise HTTPException(status_code=404, detail=f"Unknown form_code {form_code!r}")
 
 

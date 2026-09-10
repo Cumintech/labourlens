@@ -28,6 +28,7 @@ class OwnerOut(BaseModel):
     factory_name: str
     factory_address: str | None = None
     factory_licence_no: str | None = None
+    state: str | None = None
     # Mirrors the admin-portal Factory row's status -- "trial" /
     # "active" / "payment_overdue" / "suspended" / "churned".
     # trial_days_remaining is only meaningful while plan_status ==
@@ -41,6 +42,13 @@ class FactoryProfileIn(BaseModel):
     factory_name: str | None = None
     factory_address: str | None = None
     factory_licence_no: str | None = None
+    state: str | None = None
+
+
+class FormTemplateOut(BaseModel):
+    form_code: str
+    label: str
+    is_available: bool
 
 
 class TokenOut(BaseModel):
@@ -92,6 +100,11 @@ class WorkerOut(BaseModel):
     deactivated_reason: str | None
     worker_type_id: int | None
     numeric_employee_code: str | None = None
+    # A confirmed DeviceUserMapping row for this worker, on any of the
+    # owner's devices -- None means not explicitly mapped, even if their
+    # numeric_employee_code could theoretically be used as a direct
+    # device ID (that path has no confirmation record to point to).
+    device_user_id: str | None = None
     created_at: datetime
 
 
@@ -308,6 +321,7 @@ class WagePaymentOut(BaseModel):
 class WorkerWageOut(BaseModel):
     worker_id: int
     worker_name: str
+    numeric_employee_code: str | None = None
     has_rate: bool  # False = no WageProfile set yet, every figure below is 0
     days_worked: float
     days_absent: float = 0
@@ -345,6 +359,7 @@ class WageSummaryOut(BaseModel):
 class DailyWorkerWageOut(BaseModel):
     worker_id: int
     worker_name: str
+    numeric_employee_code: str | None = None
     has_rate: bool
     present: bool
     daily_cost: float

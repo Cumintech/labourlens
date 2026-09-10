@@ -26,6 +26,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+import { workerLabel } from "../workerLabel";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AttendanceRange">;
 
@@ -102,7 +103,7 @@ function DayBlock({
       <Text style={styles.dayTitle}>{formatDateLabel(date)}</Text>
       {workers.map((worker) => (
         <View key={worker.id} style={styles.workerRow}>
-          <Text style={styles.workerName}>{worker.name}</Text>
+          <Text style={styles.workerName}>{workerLabel(worker)}</Text>
           <DayAttendanceRow
             shifts={shifts}
             getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.status}

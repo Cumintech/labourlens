@@ -19,16 +19,51 @@ from reports.py's 6-month report).
 
 import calendar
 import io
+import os
 from datetime import date, timedelta
 
 from reportlab.lib import colors as pdf_colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 
 import models
+
+# Only Form 25 and Form 25-B's REAL government references are bilingual
+# (English + Tamil) -- confirmed by inspecting the actual scanned forms
+# this app was built from, not assumed. Form 12, Form 15, and the Wage
+# Slip's real references are English-only, so no Tamil is added there --
+# printing invented Tamil on a form that was never bilingual would be
+# its own inaccuracy. ReportLab's built-in fonts (Helvetica etc.) have
+# no Tamil glyphs at all, so a real Unicode font has to be embedded;
+# Noto Sans Tamil (SIL Open Font License, Google's Noto family) is the
+# standard choice and is bundled here rather than assumed present on
+# whatever machine renders the PDF (Render's Linux containers included).
+_TAMIL_FONT_PATH = os.path.join(os.path.dirname(__file__), "fonts", "NotoSansTamil-Regular.ttf")
+pdfmetrics.registerFont(TTFont("NotoSansTamil", _TAMIL_FONT_PATH))
+
+
+def _bi(english: str, tamil: str, size: float = 5) -> str:
+    """English label with its real Tamil translation on the line below,
+    transcribed directly from the actual scanned Form 25/25-B references
+    (not machine-translated) -- see the module-level note above on why
+    only these two forms get this treatment. Default size matches the
+    small table-cell text (6.5pt English); pass a larger size for titles
+    set in a bigger style so the Tamil line isn't disproportionately
+    tiny underneath it."""
+    return f'{english}<br/><font name="NotoSansTamil" size="{size}">{tamil}</font>'
+
+
+def _bi_label(english: str, tamil: str, size: float = 9) -> str:
+    """Same real-Tamil-transcription rule as _bi(), but slash-separated
+    on one line rather than stacked -- for a "Label: value" row (Form
+    25-B's identity block) where the value already needs the line, not
+    a two-row table header cell with room to spare underneath."""
+    return f'{english} / <font name="NotoSansTamil" size="{size}">{tamil}</font>'
 
 # Neither of these is a confirmed current statutory figure -- both are
 # assumptions flagged in PHASE3_STATUTORY_FORMS_PLAN.md's Day 3 section.
@@ -478,22 +513,22 @@ def _paginated_register_elements(
 
 
 FORM25_HEADER = [
-    "Sl.No.",
-    "Sl.No. in Register of Adult Workers and Young Persons",
-    "Name of the Worker",
-    "Workers Identity Number",
-    "Time at which work commenced",
-    "Rest Interval",
-    "Time at which work ends",
-    "Scheme of Shifts",
+    _bi("Sl.No.", "வரிசை எண்"),
+    _bi("Sl.No. in Register of Adult Workers and Young Persons", "வயதுவந்த தொழிலாளர்கள் மற்றும் இளைஞர்களின் பதிவு எண்"),
+    _bi("Name of the Worker", "தொழிலாளரின் பெயர்"),
+    _bi("Workers Identity Number", "தொழிலாளர் அடையாள எண்"),
+    _bi("Time at which work commenced", "வேலை தொடங்கும் நேரம்"),
+    _bi("Rest Interval", "ஓய்வு இடைவேளை"),
+    _bi("Time at which work ends", "வேலை முடிவடையும் நேரம்"),
+    _bi("Scheme of Shifts", "மாற்றுவேளைகளின் திட்டம்"),
 ]
 FORM25_TRAILER = [
-    "Total Days Worked",
-    "Total Hours Worked",
-    "No. of Days on Loss of Pay",
-    "Benefits Availed for Working on National Holiday",
-    "Benefits Availed for Working on Festival Holiday",
-    "Remarks",
+    _bi("Total Days Worked", "வேலை செய்த மொத்த நாட்கள்"),
+    _bi("Total Hours Worked", "வேலை செய்த மொத்த நேரம்"),
+    _bi("No. of Days on Loss of Pay", "ஊதியம் இழப்பு நாட்களின் எண்ணிக்கை"),
+    _bi("Benefits Availed for Working on National Holiday", "தேசிய விடுமுறையில் பணிபுரிந்ததால் பெறப்பட்ட சலுகைகள்"),
+    _bi("Benefits Availed for Working on Festival Holiday", "பண்டிகை விடுமுறையில் பணிபுரிந்ததால் பெறப்பட்ட சலுகைகள்"),
+    _bi("Remarks", "குறிப்புகள்"),
 ]
 
 
@@ -571,7 +606,12 @@ def _form25_month_elements(db: Session, owner: models.Owner, styles, month: int,
     days_in_month = end_date.day
     col_widths_cm = header_widths_cm + [day_width_cm] * days_in_month + trailer_widths_cm
 
-    elements = _header_elements(owner, styles, "Form 25 -- Muster Roll and Register", period_label)
+    elements = _header_elements(
+        owner,
+        styles,
+        _bi("Form 25 -- Muster Roll and Register", "படிவம் எண் 25 -- வருகைப் பட்டியல் மற்றும் பதிவேடு", size=12),
+        period_label,
+    )
     elements.append(
         Paragraph(
             "Register of Compensatory Holidays, and Benefits Availed for Working on National/Festival Holiday: "
@@ -686,28 +726,59 @@ def _form25b_month_elements(
     elements.append(PageBreak())
 
     # Page 2 -- identity block + Additional Particulars + signature.
-    elements.extend(_header_elements(owner, styles, "Form 25-B -- Time Card", period_label))
-    elements.append(Paragraph(f"Name of the Worker: {worker.name}", styles["Normal"]))
-    elements.append(Paragraph(f"Father's Name: {compliance.father_or_spouse_name if compliance else '-'}", styles["Normal"]))
-    elements.append(Paragraph(f"Ticket No. or Token No.: {compliance.worker_code if compliance else '-'}", styles["Normal"]))
-    elements.append(
-        Paragraph(f"Designation or Occupation: {compliance.designation_or_nature_of_work if compliance else '-'}", styles["Normal"])
+    # Only these identity fields carry Tamil, matching the real scanned
+    # Form 25-B exactly -- its "ADDITIONAL PARTICULARS" section (days
+    # absent / leave / counted-for-wages) is English-only in the actual
+    # reference, so those stay untranslated below rather than inventing
+    # Tamil the real form doesn't have.
+    elements.extend(
+        _header_elements(
+            owner, styles, _bi("Form 25-B -- Time Card", "வருகை பதிவேட்டின் கூடுதல் விபரம்", size=12), period_label
+        )
     )
+    elements.append(Paragraph(f"{_bi_label('Name of the Worker', 'தொழிலாளரின் பெயர்')}: {worker.name}", styles["Normal"]))
+    fathers_name_label = _bi_label("Father's Name", "தகப்பனாரின் பெயர்")
     elements.append(
         Paragraph(
-            f"Date of Entry into Service: {compliance.date_of_joining.isoformat() if compliance and compliance.date_of_joining else '-'}",
+            f"{fathers_name_label}: {compliance.father_or_spouse_name if compliance else '-'}",
             styles["Normal"],
         )
     )
     elements.append(
-        Paragraph(f"No. of days attendance during the month: {summary['days_worked']}", styles["Normal"])
+        Paragraph(
+            f"{_bi_label('Ticket No. or Token No.', 'சீட்டு எண் அல்லது அடையாள எண்')}: {compliance.worker_code if compliance else '-'}",
+            styles["Normal"],
+        )
+    )
+    elements.append(
+        Paragraph(
+            f"{_bi_label('Designation or Occupation', 'பதவியின் பெயர் அல்லது வேலை')}: "
+            f"{compliance.designation_or_nature_of_work if compliance else '-'}",
+            styles["Normal"],
+        )
+    )
+    elements.append(
+        Paragraph(
+            f"{_bi_label('Date of Entry into Service', 'பணியில் சேர்ந்த நாள்')}: "
+            f"{compliance.date_of_joining.isoformat() if compliance and compliance.date_of_joining else '-'}",
+            styles["Normal"],
+        )
+    )
+    elements.append(
+        Paragraph(
+            f"{_bi_label('No. of days attendance during the month', 'இந்த மாதத்தில் பணி புரிந்த நாட்களின் எண்ணிக்கை')}: "
+            f"{summary['days_worked']}",
+            styles["Normal"],
+        )
     )
     elements.append(Spacer(1, 0.4 * cm))
     elements.append(Paragraph("ADDITIONAL PARTICULARS", styles["Heading3"]))
     for label, value in summary_rows:
         elements.append(Paragraph(f"{label}: {value}", styles["Normal"]))
     elements.append(Spacer(1, 0.8 * cm))
-    elements.append(Paragraph("Date & Signature of the Manager: ____________________", styles["Normal"]))
+    elements.append(
+        Paragraph(f"{_bi_label('Date & Signature of the Manager', 'மேலாளரின் கையெழுத்தும், தேதியும்')}: ____________________", styles["Normal"])
+    )
     return elements
 
 

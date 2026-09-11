@@ -27,6 +27,18 @@ playwright==1.62.0
 openpyxl==3.1.5
 reportlab==4.2.5
 
+# Tamil text on Form 25/25-B (see forms.py) -- ReportLab's own TrueType
+# font embedding has a confirmed glyph-substitution bug for this font
+# (verified by extracting the embedded subset font and comparing glyph
+# outlines byte-for-byte against the original -- ReportLab silently
+# embeds the wrong glyph for some codepoints). Tamil labels are shaped
+# with HarfBuzz and rasterized with FreeType into images instead of
+# being drawn as ReportLab native text, which sidesteps that bug
+# entirely and also gets correct script shaping (vowel-sign reordering)
+# for free, which ReportLab never does regardless of the font bug.
+uharfbuzz==0.56.1
+freetype-py==2.5.1
+
 # Biometric attendance sync (see biometric.py) -- deliberately NOT
 # installed today. ZKTecoConnector imports it lazily inside a try/except
 # specifically so nothing here needs it: every real usage right now is

@@ -22,12 +22,16 @@ import io
 import os
 from datetime import date, timedelta
 
+import freetype
+import uharfbuzz as hb
+from PIL import Image as PILImage
 from reportlab.lib import colors as pdf_colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Image as RLImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 
@@ -47,15 +51,222 @@ _TAMIL_FONT_PATH = os.path.join(os.path.dirname(__file__), "fonts", "NotoSansTam
 pdfmetrics.registerFont(TTFont("NotoSansTamil", _TAMIL_FONT_PATH))
 
 
-def _bi(english: str, tamil: str, size: float = 5) -> str:
-    """English label with its real Tamil translation on the line below,
-    transcribed directly from the actual scanned Form 25/25-B references
-    (not machine-translated) -- see the module-level note above on why
-    only these two forms get this treatment. Default size matches the
-    small table-cell text (6.5pt English); pass a larger size for titles
-    set in a bigger style so the Tamil line isn't disproportionately
-    tiny underneath it."""
-    return f'{english}<br/><font name="NotoSansTamil" size="{size}">{tamil}</font>'
+_TAMIL_PRE_E = "ெ"  # vowel sign E ( ெ )
+_TAMIL_PRE_EE = "ே"  # vowel sign EE ( ே )
+_TAMIL_SPLIT_O = "ொ"  # vowel sign O ( ொ ) = pre-base E + post-base AA
+_TAMIL_SPLIT_OO = "ோ"  # vowel sign OO ( ோ ) = pre-base EE + post-base AA
+_TAMIL_AA = "ா"  # vowel sign AA ( ா )
+
+
+def _tamil_reorder(tamil: str) -> str:
+    """ReportLab draws each Unicode codepoint's glyph in strict logical
+    (storage) order -- it has no HarfBuzz-style shaping engine, so it
+    never reorders Tamil's pre-base vowel signs. In real Tamil script,
+    ெ/ே visually attach to the LEFT of the consonant they follow in
+    storage order (so "வேலை" == வ + ே + ல + ை must draw as vே-lai, not
+    v-la-e-i), and ொ/ோ are two-part signs (a pre-base E/EE half plus a
+    post-base ா half). Left uncorrected, ReportLab renders all of these
+    in raw storage order, producing garbled output (confirmed by
+    rasterizing a generated PDF and comparing against the reference
+    scan) even though the underlying Tamil text is itself correct.
+    This swaps each consonant/pre-base-vowel pair into visual order
+    before the text reaches ReportLab."""
+    out: list[str] = []
+    for ch in tamil:
+        if ch in (_TAMIL_PRE_E, _TAMIL_PRE_EE) and out:
+            prev = out.pop()
+            out.append(ch)
+            out.append(prev)
+        elif ch == _TAMIL_SPLIT_O and out:
+            prev = out.pop()
+            out.append(_TAMIL_PRE_E)
+            out.append(prev)
+            out.append(_TAMIL_AA)
+        elif ch == _TAMIL_SPLIT_OO and out:
+            prev = out.pop()
+            out.append(_TAMIL_PRE_EE)
+            out.append(prev)
+            out.append(_TAMIL_AA)
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+class _Bilingual:
+    """English label paired with its real Tamil translation, transcribed
+    directly from the actual scanned Form 25/25-B references (not
+    machine-translated). Kept as a small object rather than a plain
+    string because Form 25's Tamil is rendered as an IMAGE (see
+    _shape_tamil_to_image below), not as ReportLab native text -- callers
+    (_wrap_row, _header_elements) need to tell a bilingual header/title
+    apart from an ordinary string cell."""
+
+    __slots__ = ("english", "tamil", "size", "max_width_pt")
+
+    def __init__(self, english: str, tamil: str, size: float, max_width_pt: float | None):
+        self.english = english
+        self.tamil = tamil
+        self.size = size
+        self.max_width_pt = max_width_pt
+
+    def __str__(self) -> str:  # defensive fallback if ever stringified by mistake
+        return self.english
+
+
+_tamil_hb_face = hb.Face(open(_TAMIL_FONT_PATH, "rb").read())
+_tamil_ft_face = freetype.Face(_TAMIL_FONT_PATH)
+_TAMIL_RENDER_PX = 200  # internal rasterization size; downscaled to the requested point size afterward for crisp output
+_tamil_png_cache: dict[tuple, tuple[bytes, int, int]] = {}  # (text, color) -> (png_bytes, px_width, px_height)
+
+
+def _shape_and_rasterize_tamil_line(text: str, color: str) -> tuple[bytes, int, int] | None:
+    """Shapes one line of Tamil with HarfBuzz (correct glyph selection,
+    correct vowel-sign reordering/positioning -- everything ReportLab's
+    own TTF text drawing does NOT do for this font, see the module note
+    above) and rasterizes it with FreeType. Returns (png_bytes, px_width,
+    px_height), or None for an empty/whitespace-only line."""
+    cache_key = (text, color)
+    cached = _tamil_png_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    if not text.strip():
+        return None
+
+    font = hb.Font(_tamil_hb_face)
+    font.scale = (_TAMIL_RENDER_PX * 64, _TAMIL_RENDER_PX * 64)
+    buf = hb.Buffer()
+    buf.add_str(text)
+    buf.guess_segment_properties()
+    hb.shape(font, buf)
+
+    _tamil_ft_face.set_char_size(_TAMIL_RENDER_PX * 64)
+
+    pen_x = 0.0
+    pen_y = 0.0
+    glyph_renders = []
+    max_ascent = 0.0
+    max_descent = 0.0
+    for info, pos in zip(buf.glyph_infos, buf.glyph_positions):
+        _tamil_ft_face.load_glyph(info.codepoint, freetype.FT_LOAD_RENDER)
+        bitmap = _tamil_ft_face.glyph.bitmap
+        top = _tamil_ft_face.glyph.bitmap_top
+        left = _tamil_ft_face.glyph.bitmap_left
+        glyph_img = None
+        if bitmap.width > 0 and bitmap.rows > 0:
+            glyph_img = PILImage.frombytes("L", (bitmap.width, bitmap.rows), bytes(bitmap.buffer))
+            max_ascent = max(max_ascent, top)
+            max_descent = max(max_descent, bitmap.rows - top)
+        x = pen_x + (pos.x_offset / 64.0) + left
+        y = pen_y - (pos.y_offset / 64.0) - top
+        glyph_renders.append((glyph_img, x, y))
+        pen_x += pos.x_advance / 64.0
+        pen_y += pos.y_advance / 64.0
+
+    if pen_x <= 0 or (max_ascent + max_descent) <= 0:
+        return None
+
+    pad = 6
+    canvas_w = int(pen_x) + pad * 2
+    canvas_h = int(max_ascent + max_descent) + pad * 2
+    canvas = PILImage.new("LA", (canvas_w, canvas_h), (0, 0))
+    baseline_y = int(max_ascent) + pad
+    fill = 255 if color == "white" else 0
+    for glyph_img, x, y in glyph_renders:
+        if glyph_img is None:
+            continue
+        solid = PILImage.new("L", glyph_img.size, fill)
+        layer = PILImage.merge("LA", (solid, glyph_img))
+        canvas.paste(layer, (int(round(x)) + pad, int(round(baseline_y + y))), glyph_img)
+
+    buf_io = io.BytesIO()
+    canvas.save(buf_io, format="PNG")
+    result = (buf_io.getvalue(), canvas_w, canvas_h)
+    _tamil_png_cache[cache_key] = result
+    return result
+
+
+def _tamil_line_width_pt(text: str, size_pt: float) -> float:
+    """Measures one line's shaped width in points at the given font size,
+    used to greedily word-wrap long Tamil labels to a column's width.
+    Every line is rasterized at the same fixed em-size (_TAMIL_RENDER_PX),
+    so converting to an equivalent width at `size_pt` is one uniform
+    scale factor -- the same relationship as rendering the real font
+    smaller, not a derived/approximate one."""
+    rendered = _shape_and_rasterize_tamil_line(text, "black")
+    if rendered is None:
+        return 0.0
+    _, px_w, _ = rendered
+    return px_w * (size_pt / _TAMIL_RENDER_PX)
+
+
+def _wrap_tamil_lines(tamil: str, size_pt: float, max_width_pt: float | None) -> list[str]:
+    if not max_width_pt:
+        return [tamil]
+    words = tamil.split(" ")
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and _tamil_line_width_pt(candidate, size_pt) > max_width_pt:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines or [tamil]
+
+
+def _render_tamil_image(tamil: str, size_pt: float, color: str = "black", max_width_pt: float | None = None) -> RLImage | None:
+    """Renders (possibly word-wrapped) Tamil text to a ReportLab Image
+    flowable via HarfBuzz shaping + FreeType rasterization, sidestepping
+    ReportLab's own TrueType text drawing entirely -- verified by
+    extracting a ReportLab-generated PDF's embedded font subset and
+    comparing glyph outlines byte-for-byte against the original font:
+    ReportLab silently embeds the WRONG glyph for some Tamil codepoints
+    (confirmed root cause, not a guess), corrupting rendered text even
+    though the source Tamil string is correct. Returns None for empty
+    input so callers can skip adding a flowable entirely."""
+    lines = _wrap_tamil_lines(tamil, size_pt, max_width_pt)
+    rendered_lines = [_shape_and_rasterize_tamil_line(line, color) for line in lines]
+    rendered_lines = [r for r in rendered_lines if r is not None]
+    if not rendered_lines:
+        return None
+
+    # Every line was rasterized at the SAME fixed em-size
+    # (_TAMIL_RENDER_PX), so stacking the raw pixel bitmaps directly
+    # (no per-line resizing) and converting the combined canvas to
+    # points with one uniform scale factor at the end is both simpler
+    # and more correct than rescaling each line individually.
+    gap_px = int(_TAMIL_RENDER_PX * 0.12)
+    combined_w_px = max(px_w for _, px_w, _ in rendered_lines)
+    combined_h_px = sum(px_h for _, _, px_h in rendered_lines) + gap_px * (len(rendered_lines) - 1)
+    combined = PILImage.new("LA", (combined_w_px, combined_h_px), (0, 0))
+    y_px = 0
+    for png_bytes, px_w, px_h in rendered_lines:
+        line_img = PILImage.open(io.BytesIO(png_bytes)).convert("LA")
+        combined.paste(line_img, (0, y_px), line_img)
+        y_px += px_h + gap_px
+
+    buf_io = io.BytesIO()
+    combined.save(buf_io, format="PNG")
+    buf_io.seek(0)
+
+    scale = size_pt / _TAMIL_RENDER_PX
+    return RLImage(buf_io, width=combined_w_px * scale, height=combined_h_px * scale)
+
+
+def _bi(english: str, tamil: str, size: float = 5, max_width_pt: float | None = 55) -> _Bilingual:
+    """English label with its real Tamil translation rendered as an
+    image beneath it (see _render_tamil_image) -- transcribed directly
+    from the actual scanned Form 25/25-B references (not
+    machine-translated). See the module-level note above on why only
+    these two forms get this treatment. Default size matches the small
+    table-cell text (6.5pt English); pass a larger size for titles set
+    in a bigger style. max_width_pt word-wraps long labels to fit a
+    narrow table column (Form 25's narrowest real columns are ~45-60pt
+    wide) -- pass None for the wide-page title, which needs no wrap."""
+    return _Bilingual(english, tamil, size, max_width_pt)
 
 
 def _bi_label(english: str, tamil: str, size: float = 9) -> str:
@@ -63,6 +274,7 @@ def _bi_label(english: str, tamil: str, size: float = 9) -> str:
     on one line rather than stacked -- for a "Label: value" row (Form
     25-B's identity block) where the value already needs the line, not
     a two-row table header cell with room to spare underneath."""
+    tamil = _tamil_reorder(tamil)
     return f'{english} / <font name="NotoSansTamil" size="{size}">{tamil}</font>'
 
 # Neither of these is a confirmed current statutory figure -- both are
@@ -402,8 +614,14 @@ def compute_daily_wage(db: Session, worker_id: int, target_date: date) -> dict:
     return {"present": True, "has_rate": True, "daily_cost": daily_rate + ot_wages}
 
 
-def _header_elements(owner: models.Owner, styles, form_title: str, period_label: str | None = None) -> list:
-    elements = [Paragraph(form_title, styles["Title"])]
+def _header_elements(owner: models.Owner, styles, form_title, period_label: str | None = None) -> list:
+    if isinstance(form_title, _Bilingual):
+        elements = [Paragraph(form_title.english, styles["Title"])]
+        tamil_image = _render_tamil_image(form_title.tamil, form_title.size, color="black", max_width_pt=form_title.max_width_pt)
+        if tamil_image is not None:
+            elements.append(tamil_image)
+    else:
+        elements = [Paragraph(form_title, styles["Title"])]
     elements.append(Paragraph(owner.factory_name, styles["Normal"]))
     if owner.factory_address:
         elements.append(Paragraph(owner.factory_address, styles["Normal"]))
@@ -423,9 +641,23 @@ def _wrap_row(values: list, header: bool = False) -> list:
     """Wraps every cell in a Paragraph so long header labels and
     free-text values (addresses, bank details) wrap within their column
     instead of overflowing -- plain strings in a reportlab Table never
-    wrap on their own."""
+    wrap on their own. A _Bilingual cell (Form 25's headers) becomes a
+    two-flowable cell instead: the English Paragraph plus a separately
+    rendered Tamil image stacked underneath (see _render_tamil_image) --
+    reportlab table cells accept a list of flowables for exactly this."""
     style = _SMALL_HEADER_STYLE if header else _SMALL_CELL_STYLE
-    return [Paragraph(str(v), style) for v in values]
+    color = "white" if header else "black"
+    cells: list = []
+    for v in values:
+        if isinstance(v, _Bilingual):
+            cell_flowables: list = [Paragraph(v.english, style)]
+            tamil_image = _render_tamil_image(v.tamil, v.size, color=color, max_width_pt=v.max_width_pt)
+            if tamil_image is not None:
+                cell_flowables.append(tamil_image)
+            cells.append(cell_flowables)
+        else:
+            cells.append(Paragraph(str(v), style))
+    return cells
 
 
 def _style_table(table: Table) -> None:
@@ -512,23 +744,56 @@ def _paginated_register_elements(
 # --------------------------------------------------------------------------
 
 
+# Real column widths (cm) -- shared between FORM25_HEADER/TRAILER's
+# _bi() calls (so each Tamil label word-wraps to the width of the
+# column it actually lands in) and _form25_month_elements's Table
+# colWidths. Kept as one module-level source of truth instead of two
+# separately-hand-copied lists, since letting them drift silently
+# reintroduces the header/column-width mismatch this was fixed for.
+FORM25_HEADER_WIDTHS_CM = [1.0, 2.2, 2.8, 1.8, 1.8, 1.6, 1.8, 1.8]
+FORM25_TRAILER_WIDTHS_CM = [1.7, 1.7, 1.6, 2.1, 2.1, 1.7]
+
+
+def _cm_to_wrap_pt(width_cm: float) -> float:
+    """Converts a column's width to a safe word-wrap budget in points,
+    leaving headroom for the table cell's own padding/border so the
+    rendered Tamil image doesn't overflow into the next column."""
+    return width_cm * cm - 6
+
+
 FORM25_HEADER = [
-    _bi("Sl.No.", "வரிசை எண்"),
-    _bi("Sl.No. in Register of Adult Workers and Young Persons", "வயதுவந்த தொழிலாளர்கள் மற்றும் இளைஞர்களின் பதிவு எண்"),
-    _bi("Name of the Worker", "தொழிலாளரின் பெயர்"),
-    _bi("Workers Identity Number", "தொழிலார் அடையாள எண்"),
-    _bi("Time at which work commenced", "வேலை தொடங்கும் நேரம்"),
-    _bi("Rest Interval", "ஓய்வு இடைவேளை"),
-    _bi("Time at which work ends", "வேலை முடிவடையும் நேரம்"),
-    _bi("Scheme of Shifts", "மாற்றங்களின் திட்டம்"),
+    _bi("Sl.No.", "வரிசை எண்", max_width_pt=_cm_to_wrap_pt(FORM25_HEADER_WIDTHS_CM[0])),
+    _bi(
+        "Sl.No. in Register of Adult Workers and Young Persons",
+        "வயதுவந்த தொழிலாளர்கள் மற்றும் இளைஞர்களின் பதிவு எண்",
+        max_width_pt=_cm_to_wrap_pt(FORM25_HEADER_WIDTHS_CM[1]),
+    ),
+    _bi("Name of the Worker", "தொழிலாளரின் பெயர்", max_width_pt=_cm_to_wrap_pt(FORM25_HEADER_WIDTHS_CM[2])),
+    _bi("Workers Identity Number", "தொழிலார் அடையாள எண்", max_width_pt=_cm_to_wrap_pt(FORM25_HEADER_WIDTHS_CM[3])),
+    _bi("Time at which work commenced", "வேலை தொடங்கும் நேரம்", max_width_pt=_cm_to_wrap_pt(FORM25_HEADER_WIDTHS_CM[4])),
+    _bi("Rest Interval", "ஓய்வு இடைவேளை", max_width_pt=_cm_to_wrap_pt(FORM25_HEADER_WIDTHS_CM[5])),
+    _bi("Time at which work ends", "வேலை முடிவடையும் நேரம்", max_width_pt=_cm_to_wrap_pt(FORM25_HEADER_WIDTHS_CM[6])),
+    _bi("Scheme of Shifts", "மாற்றங்களின் திட்டம்", max_width_pt=_cm_to_wrap_pt(FORM25_HEADER_WIDTHS_CM[7])),
 ]
 FORM25_TRAILER = [
-    _bi("Total Days Worked", "வேலை செய்த மொத்த நாட்கள்"),
-    _bi("Total Hours Worked", "வேலை செய்த மொத்த நேரம்"),
-    _bi("No. of Days on Loss of Pay", "ஊதிய இழப்பு நாட்களில் எண்ணிக்கை"),
-    _bi("Benefits Availed for Working on National Holiday", "தேசிய விடுமுறையில் வேலை செய்தால் கிடைக்கும் நன்மை"),
-    _bi("Benefits Availed for Working on Festival Holiday", "பண்டிகை விடுமுறையில் வேலை செய்தால் கிடைக்கும் நன்மை"),
-    _bi("Remarks", "கருத்துக்கள்"),
+    _bi("Total Days Worked", "வேலை செய்த மொத்த நாட்கள்", max_width_pt=_cm_to_wrap_pt(FORM25_TRAILER_WIDTHS_CM[0])),
+    _bi("Total Hours Worked", "வேலை செய்த மொத்த நேரம்", max_width_pt=_cm_to_wrap_pt(FORM25_TRAILER_WIDTHS_CM[1])),
+    _bi(
+        "No. of Days on Loss of Pay",
+        "ஊதிய இழப்பு நாட்களில் எண்ணிக்கை",
+        max_width_pt=_cm_to_wrap_pt(FORM25_TRAILER_WIDTHS_CM[2]),
+    ),
+    _bi(
+        "Benefits Availed for Working on National Holiday",
+        "தேசிய விடுமுறையில் வேலை செய்தால் கிடைக்கும் நன்மை",
+        max_width_pt=_cm_to_wrap_pt(FORM25_TRAILER_WIDTHS_CM[3]),
+    ),
+    _bi(
+        "Benefits Availed for Working on Festival Holiday",
+        "பண்டிகை விடுமுறையில் வேலை செய்தால் கிடைக்கும் நன்மை",
+        max_width_pt=_cm_to_wrap_pt(FORM25_TRAILER_WIDTHS_CM[4]),
+    ),
+    _bi("Remarks", "கருத்துக்கள்", max_width_pt=_cm_to_wrap_pt(FORM25_TRAILER_WIDTHS_CM[5])),
 ]
 
 
@@ -600,16 +865,14 @@ def _form25_month_elements(db: Session, owner: models.Owner, styles, month: int,
     # columns to fit on one printable page, so they're split into groups
     # below (_paginated_register_elements) rather than one custom
     # oversized page a real printer can't handle.
-    header_widths_cm = [1.0, 2.2, 2.8, 1.8, 1.8, 1.6, 1.8, 1.8]
     day_width_cm = 0.85
-    trailer_widths_cm = [1.7, 1.7, 1.6, 2.1, 2.1, 1.7]
     days_in_month = end_date.day
-    col_widths_cm = header_widths_cm + [day_width_cm] * days_in_month + trailer_widths_cm
+    col_widths_cm = FORM25_HEADER_WIDTHS_CM + [day_width_cm] * days_in_month + FORM25_TRAILER_WIDTHS_CM
 
     elements = _header_elements(
         owner,
         styles,
-        _bi("Form 25 -- Muster Roll and Register", "படிவம் எண் 25 -- வருகைப் பட்டியல் மற்றும் பதிவேடு", size=12),
+        _bi("Form 25 -- Muster Roll and Register", "படிவம் எண் 25 -- வருகைப் பட்டியல் மற்றும் பதிவேடு", size=12, max_width_pt=None),
         period_label,
     )
     elements.append(
@@ -733,7 +996,7 @@ def _form25b_month_elements(
     # Tamil the real form doesn't have.
     elements.extend(
         _header_elements(
-            owner, styles, _bi("Form 25-B -- Time Card", "வருகை பதிவேட்டின் கூடுதல் விபரம்", size=12), period_label
+            owner, styles, _bi("Form 25-B -- Time Card", "வருகை பதிவேட்டின் கூடுதல் விபரம்", size=12, max_width_pt=None), period_label
         )
     )
     elements.append(Paragraph(f"{_bi_label('Name of the Worker', 'தொழிலாளரின் பெயர்')}: {worker.name}", styles["Normal"]))

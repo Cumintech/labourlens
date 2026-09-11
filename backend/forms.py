@@ -516,19 +516,19 @@ FORM25_HEADER = [
     _bi("Sl.No.", "வரிசை எண்"),
     _bi("Sl.No. in Register of Adult Workers and Young Persons", "வயதுவந்த தொழிலாளர்கள் மற்றும் இளைஞர்களின் பதிவு எண்"),
     _bi("Name of the Worker", "தொழிலாளரின் பெயர்"),
-    _bi("Workers Identity Number", "தொழிலாளர் அடையாள எண்"),
+    _bi("Workers Identity Number", "தொழிலார் அடையாள எண்"),
     _bi("Time at which work commenced", "வேலை தொடங்கும் நேரம்"),
     _bi("Rest Interval", "ஓய்வு இடைவேளை"),
     _bi("Time at which work ends", "வேலை முடிவடையும் நேரம்"),
-    _bi("Scheme of Shifts", "மாற்றுவேளைகளின் திட்டம்"),
+    _bi("Scheme of Shifts", "மாற்றங்களின் திட்டம்"),
 ]
 FORM25_TRAILER = [
     _bi("Total Days Worked", "வேலை செய்த மொத்த நாட்கள்"),
     _bi("Total Hours Worked", "வேலை செய்த மொத்த நேரம்"),
-    _bi("No. of Days on Loss of Pay", "ஊதியம் இழப்பு நாட்களின் எண்ணிக்கை"),
-    _bi("Benefits Availed for Working on National Holiday", "தேசிய விடுமுறையில் பணிபுரிந்ததால் பெறப்பட்ட சலுகைகள்"),
-    _bi("Benefits Availed for Working on Festival Holiday", "பண்டிகை விடுமுறையில் பணிபுரிந்ததால் பெறப்பட்ட சலுகைகள்"),
-    _bi("Remarks", "குறிப்புகள்"),
+    _bi("No. of Days on Loss of Pay", "ஊதிய இழப்பு நாட்களில் எண்ணிக்கை"),
+    _bi("Benefits Availed for Working on National Holiday", "தேசிய விடுமுறையில் வேலை செய்தால் கிடைக்கும் நன்மை"),
+    _bi("Benefits Availed for Working on Festival Holiday", "பண்டிகை விடுமுறையில் வேலை செய்தால் கிடைக்கும் நன்மை"),
+    _bi("Remarks", "கருத்துக்கள்"),
 ]
 
 

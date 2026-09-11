@@ -22,7 +22,7 @@ import io
 from datetime import date, timedelta
 
 from reportlab.lib import colors as pdf_colors
-from reportlab.lib.pagesizes import A3, A4, landscape
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -408,14 +408,17 @@ def _style_table(table: Table) -> None:
     )
 
 
-# Landscape A3 -- an actual standard, printable paper size (unlike the
-# 50-85cm custom pages these registers used before, which no printer can
-# handle: the print driver either clips columns past its real paper
-# width or shrinks the whole page down until it's illegible). 38cm is
-# the safe usable width inside 1cm margins with a little headroom for
-# cell padding/borders.
-REGISTER_PAGESIZE = landscape(A3)
-REGISTER_PAGE_BUDGET_CM = 38.0
+# Sized to fit Form 25/12/15's full column count (~52cm) on ONE page,
+# not standard office paper -- confirmed with the owner that these print
+# on oversized/continuous stationery (the real-world norm for a register
+# this wide), not an A3 printer. An earlier version of this constant was
+# landscape A3 (38cm budget) specifically because A3 WAS the printing
+# target at the time; that's no longer the constraint, so the page grew
+# to match the content instead of the content being split to fit a page
+# size nobody's actually printing on. 54cm budget leaves ~2cm headroom
+# over the ~52cm real column-width total for cell padding/borders.
+REGISTER_PAGESIZE = (58 * cm, 29.7 * cm)
+REGISTER_PAGE_BUDGET_CM = 54.0
 
 
 def _paginated_register_elements(

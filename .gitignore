@@ -10,6 +10,10 @@ __pycache__/
 venv/
 *.db
 
+# generated at runtime by forms.py's Tamil rendering (deterministic
+# from the hardcoded Tamil strings -- regenerates on first use)
+backend/fonts/_tamil_img_cache/
+
 # node / expo
 node_modules/
 .expo/

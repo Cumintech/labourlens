@@ -18,6 +18,7 @@ from reports.py's 6-month report).
 """
 
 import calendar
+import hashlib
 import io
 import os
 from datetime import date, timedelta
@@ -29,8 +30,6 @@ from reportlab.lib import colors as pdf_colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
@@ -42,54 +41,23 @@ import models
 # this app was built from, not assumed. Form 12, Form 15, and the Wage
 # Slip's real references are English-only, so no Tamil is added there --
 # printing invented Tamil on a form that was never bilingual would be
-# its own inaccuracy. ReportLab's built-in fonts (Helvetica etc.) have
-# no Tamil glyphs at all, so a real Unicode font has to be embedded;
-# Noto Sans Tamil (SIL Open Font License, Google's Noto family) is the
-# standard choice and is bundled here rather than assumed present on
-# whatever machine renders the PDF (Render's Linux containers included).
+# its own inaccuracy.
+#
+# Tamil is NOT drawn as ReportLab native text (ReportLab's built-in
+# fonts have no Tamil glyphs at all, and embedding a real Unicode TTF
+# doesn't fix it either -- confirmed by extracting a ReportLab-generated
+# PDF's embedded font subset and comparing glyph outlines byte-for-byte
+# against the original Noto Sans Tamil font: ReportLab silently embeds
+# the WRONG glyph for some codepoints, and separately never performs
+# Indic script shaping, so pre-base vowel signs render in the wrong
+# visual position even where the glyph is right). Both bugs are
+# invisible to text-layer extraction -- the underlying Unicode string
+# is always correct -- and only show up when the rendered pixels are
+# inspected. Every Tamil label is instead shaped with HarfBuzz and
+# rasterized with FreeType into an image (see _shape_and_rasterize_tamil_line
+# and _render_tamil_image / _tamil_inline_image_tag below), sidestepping
+# ReportLab's text drawing entirely rather than working around it.
 _TAMIL_FONT_PATH = os.path.join(os.path.dirname(__file__), "fonts", "NotoSansTamil-Regular.ttf")
-pdfmetrics.registerFont(TTFont("NotoSansTamil", _TAMIL_FONT_PATH))
-
-
-_TAMIL_PRE_E = "ெ"  # vowel sign E ( ெ )
-_TAMIL_PRE_EE = "ே"  # vowel sign EE ( ே )
-_TAMIL_SPLIT_O = "ொ"  # vowel sign O ( ொ ) = pre-base E + post-base AA
-_TAMIL_SPLIT_OO = "ோ"  # vowel sign OO ( ோ ) = pre-base EE + post-base AA
-_TAMIL_AA = "ா"  # vowel sign AA ( ா )
-
-
-def _tamil_reorder(tamil: str) -> str:
-    """ReportLab draws each Unicode codepoint's glyph in strict logical
-    (storage) order -- it has no HarfBuzz-style shaping engine, so it
-    never reorders Tamil's pre-base vowel signs. In real Tamil script,
-    ெ/ே visually attach to the LEFT of the consonant they follow in
-    storage order (so "வேலை" == வ + ே + ல + ை must draw as vே-lai, not
-    v-la-e-i), and ொ/ோ are two-part signs (a pre-base E/EE half plus a
-    post-base ா half). Left uncorrected, ReportLab renders all of these
-    in raw storage order, producing garbled output (confirmed by
-    rasterizing a generated PDF and comparing against the reference
-    scan) even though the underlying Tamil text is itself correct.
-    This swaps each consonant/pre-base-vowel pair into visual order
-    before the text reaches ReportLab."""
-    out: list[str] = []
-    for ch in tamil:
-        if ch in (_TAMIL_PRE_E, _TAMIL_PRE_EE) and out:
-            prev = out.pop()
-            out.append(ch)
-            out.append(prev)
-        elif ch == _TAMIL_SPLIT_O and out:
-            prev = out.pop()
-            out.append(_TAMIL_PRE_E)
-            out.append(prev)
-            out.append(_TAMIL_AA)
-        elif ch == _TAMIL_SPLIT_OO and out:
-            prev = out.pop()
-            out.append(_TAMIL_PRE_EE)
-            out.append(prev)
-            out.append(_TAMIL_AA)
-        else:
-            out.append(ch)
-    return "".join(out)
 
 
 class _Bilingual:
@@ -269,13 +237,40 @@ def _bi(english: str, tamil: str, size: float = 5, max_width_pt: float | None = 
     return _Bilingual(english, tamil, size, max_width_pt)
 
 
+_TAMIL_IMG_CACHE_DIR = os.path.join(os.path.dirname(__file__), "fonts", "_tamil_img_cache")
+os.makedirs(_TAMIL_IMG_CACHE_DIR, exist_ok=True)
+
+
+def _tamil_inline_image_tag(tamil: str, size_pt: float, color: str = "black") -> str:
+    """Renders `tamil` via HarfBuzz+FreeType (see _render_tamil_image's
+    docstring for why -- ReportLab's own TrueType text drawing is
+    confirmed buggy for this font) and returns a ReportLab Paragraph
+    <img> tag referencing a cached PNG on disk, for embedding Tamil
+    text INLINE within a larger Paragraph string (_bi_label's "English
+    / Tamil: value" one-line layout, where a separate Image flowable
+    isn't an option because Paragraph markup only accepts images by
+    file path, not an in-memory buffer). The cache is keyed by content
+    and kept forever -- the set of Tamil labels used across all forms
+    is small and fixed, not user data, so there's nothing to evict."""
+    rendered = _shape_and_rasterize_tamil_line(tamil, color)
+    if rendered is None:
+        return ""
+    png_bytes, px_w, px_h = rendered
+    cache_key = hashlib.sha1(f"{tamil}|{color}".encode("utf-8")).hexdigest()
+    path = os.path.join(_TAMIL_IMG_CACHE_DIR, f"{cache_key}.png")
+    if not os.path.exists(path):
+        with open(path, "wb") as f:
+            f.write(png_bytes)
+    scale = size_pt / _TAMIL_RENDER_PX
+    return f'<img src="{path}" width="{px_w * scale:.2f}" height="{px_h * scale:.2f}" valign="middle"/>'
+
+
 def _bi_label(english: str, tamil: str, size: float = 9) -> str:
     """Same real-Tamil-transcription rule as _bi(), but slash-separated
     on one line rather than stacked -- for a "Label: value" row (Form
     25-B's identity block) where the value already needs the line, not
     a two-row table header cell with room to spare underneath."""
-    tamil = _tamil_reorder(tamil)
-    return f'{english} / <font name="NotoSansTamil" size="{size}">{tamil}</font>'
+    return f'{english} / {_tamil_inline_image_tag(tamil, size, color="black")}'
 
 # Neither of these is a confirmed current statutory figure -- both are
 # assumptions flagged in PHASE3_STATUTORY_FORMS_PLAN.md's Day 3 section.
@@ -1009,13 +1004,13 @@ def _form25b_month_elements(
     )
     elements.append(
         Paragraph(
-            f"{_bi_label('Ticket No. or Token No.', 'சீட்டு எண் அல்லது அடையாள எண்')}: {compliance.worker_code if compliance else '-'}",
+            f"{_bi_label('Ticket No. or Token No.', 'சீட்டு [அ] அடையாள வில்லையின் எண்')}: {compliance.worker_code if compliance else '-'}",
             styles["Normal"],
         )
     )
     elements.append(
         Paragraph(
-            f"{_bi_label('Designation or Occupation', 'பதவியின் பெயர் அல்லது வேலை')}: "
+            f"{_bi_label('Designation or Occupation', 'பதவியின் பெயர் [அ] வேலை')}: "
             f"{compliance.designation_or_nature_of_work if compliance else '-'}",
             styles["Normal"],
         )

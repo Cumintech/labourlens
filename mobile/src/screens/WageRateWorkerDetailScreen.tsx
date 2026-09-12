@@ -18,8 +18,8 @@ import {
   updateWorkerCompliance,
 } from "../api/client";
 import ErrorState from "../components/ErrorState";
-import SelectField from "../components/SelectField";
 import { ListSkeleton } from "../components/Skeleton";
+import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -101,12 +101,11 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
   const age = useMemo(() => ageFromDob(worker?.dob ?? null), [worker]);
   const currentRate = wageHistory[0]; // getWageProfileHistory returns newest-first
 
-  async function handleAssignType(typeId: string) {
+  async function handleAssignType(typeId: number | null) {
     if (!token) return;
     setAssigning(true);
     try {
-      const id = typeId === "none" ? null : parseInt(typeId, 10);
-      const updated = await assignWorkerType(token, workerId, id);
+      const updated = await assignWorkerType(token, workerId, typeId);
       setWorker(updated);
       await load(); // an auto-created wage profile from the type's default may now exist
     } catch (e) {
@@ -153,9 +152,6 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
     );
   }
 
-  const typeOptions = [{ label: "No type assigned", value: "none" }, ...workerTypes.map((t) => ({ label: `${t.name} (₹${t.default_rate}/${t.default_rate_type})`, value: String(t.id) }))];
-  const currentTypeValue = worker.worker_type_id ? String(worker.worker_type_id) : "none";
-
   return (
     <ScrollView
       style={styles.container}
@@ -191,11 +187,14 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
       </View>
 
       <Text style={styles.sectionLabel}>Worker Type</Text>
-      <SelectField
+      <WorkerTypeSelect
         label=""
-        value={currentTypeValue}
-        options={typeOptions}
+        token={token ?? ""}
+        workerTypes={workerTypes}
+        value={worker.worker_type_id}
         onChange={handleAssignType}
+        onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
+        noneLabel="No type assigned"
         disabled={assigning}
       />
       <Text style={styles.helper}>Assigning a type sets this worker's rate to the type's default, unless they already have one.</Text>

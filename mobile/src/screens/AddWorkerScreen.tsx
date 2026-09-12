@@ -26,6 +26,7 @@ import {
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
+import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -76,6 +77,11 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const { token } = useAuth();
 
   // --- Scan ---
+  // Manual entry starts with the scan UI hidden -- it was previously
+  // always shown even for an owner who explicitly chose to skip
+  // scanning and type everything in by hand, which made the scan boxes
+  // and "Scan Now" button irrelevant clutter on top of the real form.
+  const [manualEntry, setManualEntry] = useState(false);
   const [frontUri, setFrontUri] = useState<string | null>(null);
   const [backUri, setBackUri] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -248,16 +254,27 @@ export default function AddWorkerScreen({ navigation }: Props) {
     <KeyboardScreen contentContainerStyle={styles.container}>
       <Text style={styles.title}>Add Worker</Text>
 
-      <TouchableOpacity style={styles.scanBox} onPress={() => captureImage(setFrontUri)}>
-        {frontUri ? <Image source={{ uri: frontUri }} style={styles.preview} /> : <Text style={styles.scanBoxLabel}>Scan Front</Text>}
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.scanBox} onPress={() => captureImage(setBackUri)}>
-        {backUri ? <Image source={{ uri: backUri }} style={styles.preview} /> : <Text style={styles.scanBoxLabel}>Scan Back</Text>}
-      </TouchableOpacity>
-      <Text style={styles.hint}>Position the card within the frame. Both sides help extraction, but only the front is required.</Text>
-      <TouchableOpacity style={[styles.scanButton, (scanning || !frontUri) && styles.buttonDisabled]} onPress={handleScanNow} disabled={scanning || !frontUri}>
-        {scanning ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Scan Now</Text>}
-      </TouchableOpacity>
+      {manualEntry ? (
+        <TouchableOpacity style={styles.switchToScanLink} onPress={() => setManualEntry(false)}>
+          <Text style={styles.switchLinkText}>Scan Aadhaar instead</Text>
+        </TouchableOpacity>
+      ) : (
+        <>
+          <TouchableOpacity style={styles.scanBox} onPress={() => captureImage(setFrontUri)}>
+            {frontUri ? <Image source={{ uri: frontUri }} style={styles.preview} /> : <Text style={styles.scanBoxLabel}>Scan Front</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.scanBox} onPress={() => captureImage(setBackUri)}>
+            {backUri ? <Image source={{ uri: backUri }} style={styles.preview} /> : <Text style={styles.scanBoxLabel}>Scan Back</Text>}
+          </TouchableOpacity>
+          <Text style={styles.hint}>Position the card within the frame. Both sides help extraction, but only the front is required.</Text>
+          <TouchableOpacity style={[styles.scanButton, (scanning || !frontUri) && styles.buttonDisabled]} onPress={handleScanNow} disabled={scanning || !frontUri}>
+            {scanning ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Scan Now</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.switchToManualLink} onPress={() => setManualEntry(true)}>
+            <Text style={styles.switchLinkText}>Enter details manually instead</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       <Text style={styles.sectionLabelTeal}>Worker details</Text>
       <Field label="Name" value={name} onChangeText={setName} needsReview={ocrMissed.name} />
@@ -298,12 +315,14 @@ export default function AddWorkerScreen({ navigation }: Props) {
       </TouchableOpacity>
       {wageOpen && (
         <View style={styles.sectionBody}>
-          <SelectField
+          <WorkerTypeSelect
             label="Worker Type"
-            value={selectedWorkerTypeId !== null ? String(selectedWorkerTypeId) : null}
-            options={workerTypes.map((t) => ({ label: `${t.name} (₹${t.default_rate}/${t.default_rate_type === "daily" ? "day" : "month"})`, value: String(t.id) }))}
-            onChange={(v) => setSelectedWorkerTypeId(parseInt(v, 10))}
-            placeholder="No type -- set a custom rate below"
+            token={token ?? ""}
+            workerTypes={workerTypes}
+            value={selectedWorkerTypeId}
+            onChange={setSelectedWorkerTypeId}
+            onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
+            noneLabel="No type -- set a custom rate below"
           />
           <View style={styles.toggleRow}>
             {(["daily", "monthly"] as const).map((option) => (
@@ -377,6 +396,9 @@ const styles = StyleSheet.create({
   preview: { width: "100%", height: "100%" },
   hint: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm, textAlign: "center" },
   scanButton: { backgroundColor: colors.teal, borderRadius: radius.sm, padding: 14, alignItems: "center", marginBottom: spacing.md },
+  switchToManualLink: { alignItems: "center", paddingVertical: spacing.xs, marginBottom: spacing.sm },
+  switchToScanLink: { alignItems: "center", paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  switchLinkText: { color: colors.teal, fontWeight: "700", fontSize: 13 },
   sectionLabelTeal: { fontSize: 12, fontWeight: "700", color: colors.teal, marginTop: spacing.sm, marginBottom: spacing.sm, textTransform: "uppercase" },
   sectionLabelAmber: { fontSize: 12, fontWeight: "700", color: colors.amber, marginTop: spacing.sm, marginBottom: spacing.sm, textTransform: "uppercase" },
   sectionToggle: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: spacing.sm + 4, marginTop: spacing.md },

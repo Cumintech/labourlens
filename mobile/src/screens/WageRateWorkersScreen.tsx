@@ -94,12 +94,20 @@ export default function WageRateWorkersScreen({ navigation }: Props) {
       keyExtractor={(w) => String(w.id)}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
       ListHeaderComponent={
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>Wage Rate</Text>
-          <TouchableOpacity style={styles.typesLink} onPress={() => navigation.navigate("WorkerTypes")}>
-            <Text style={styles.typesLinkText}>Worker Types →</Text>
-          </TouchableOpacity>
-        </View>
+        <>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>Wage Rate</Text>
+            <TouchableOpacity style={styles.typesLink} onPress={() => navigation.navigate("WorkerTypes")}>
+              <Text style={styles.typesLinkText}>Worker Types →</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.infoNote}>
+            <Text style={styles.infoNoteText}>
+              If a worker's device ID isn't mapped yet, their attendance won't be clocked automatically from the fingerprint
+              machine — map them from the Biometric Mapping screen.
+            </Text>
+          </View>
+        </>
       }
       ListEmptyComponent={<Text style={styles.empty}>No active workers yet.</Text>}
       renderItem={({ item }) => {
@@ -116,7 +124,7 @@ export default function WageRateWorkersScreen({ navigation }: Props) {
               <Text style={styles.meta}>
                 {rate ? `₹${rate.basic} / ${rate.rate_type === "daily" ? "day" : "month"}` : "No wage rate set"}
               </Text>
-              <Text style={styles.meta}>Aadhaar •••• •••• {item.aadhaar_last4}</Text>
+              <Text style={styles.meta}>Device ID: {item.device_user_id ?? "(no device id mapped yet)"}</Text>
             </View>
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
@@ -129,10 +137,12 @@ export default function WageRateWorkersScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.md },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
   title: { fontSize: 22, fontWeight: "700", color: colors.navy },
   typesLink: { paddingVertical: spacing.xs },
   typesLinkText: { color: colors.teal, fontSize: 13, fontWeight: "700" },
+  infoNote: { backgroundColor: colors.tealLight, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
+  infoNoteText: { color: colors.tealDark, fontSize: 12, lineHeight: 17 },
   empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
   row: {
     flexDirection: "row",

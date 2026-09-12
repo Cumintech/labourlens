@@ -40,10 +40,11 @@ const FORM_METADATA: Record<string, { hasPeriod: boolean; workerFilterable: bool
 };
 const DEFAULT_FORM_METADATA = { hasPeriod: true, workerFilterable: false, workerRequired: false };
 
-type PeriodPreset = "current_month" | "last_3_months" | "last_6_months" | "current_year" | "last_year" | "custom";
+type PeriodPreset = "current_month" | "last_month" | "last_3_months" | "last_6_months" | "current_year" | "last_year" | "custom";
 
 const PRESETS: { key: PeriodPreset; label: string }[] = [
   { key: "current_month", label: "Current Month" },
+  { key: "last_month", label: "Last Month" },
   { key: "last_3_months", label: "Last 3 Months" },
   { key: "last_6_months", label: "Last 6 Months" },
   { key: "current_year", label: "Current Year" },
@@ -68,6 +69,18 @@ function rangeForPreset(preset: PeriodPreset, today: Date): { start: string; end
   switch (preset) {
     case "current_month":
       return { start: dateStr(y, m, 1), end: dateStr(y, m, d) };
+    case "last_month": {
+      // Full previous calendar month (1st to last day), not a rolling
+      // 30-day window -- month 0 in JS Date's day-0 trick returns the
+      // last day of the PREVIOUS month, which for m=1 (January) rolls
+      // back to December of the prior year automatically.
+      const lastDayOfPrevMonth = new Date(y, m - 1, 0).getDate();
+      const prevMonthDate = new Date(y, m - 2, 1);
+      return {
+        start: dateStr(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 1),
+        end: dateStr(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, lastDayOfPrevMonth),
+      };
+    }
     case "current_year":
       return { start: dateStr(y, 1, 1), end: dateStr(y, m, d) };
     case "last_3_months": {
@@ -173,31 +186,34 @@ export default function StatutoryFormsScreen({}: Props) {
         startDate: formOption.hasPeriod ? computed.start : undefined,
         endDate: formOption.hasPeriod ? computed.end : undefined,
       });
-      const destination = new File(Paths.cache, `${formCode}_${Date.now()}.pdf`);
-      const downloaded = await File.downloadFileAsync(url, destination, {
-        headers: { Authorization: `Bearer ${token}` },
-        idempotent: true,
-      });
-      // downloadFileAsync doesn't surface an HTTP status code -- every
-      // failure this backend can return is a small JSON body starting
-      // with "{", while a real PDF never does, so that's the signal
-      // used to tell a failed download from a real one.
-      const text = await downloaded.text().catch(() => "");
-      if (text.trimStart().startsWith("{")) {
-        let detail = "Download failed.";
+      // Fetching first (rather than handing the URL straight to
+      // File.downloadFileAsync) is deliberate: per expo-file-system's own
+      // docs, a non-2xx response makes downloadFileAsync reject outright
+      // with an opaque native "UnableToDownload" error and never write a
+      // file at all -- there's no body left afterward to inspect for a
+      // JSON error detail the way this code used to try to. fetch() gives
+      // a real response.status/response.ok to check before ever touching
+      // the filesystem, and a clean error message either way.
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        let detail = `Download failed (${response.status}).`;
         try {
-          detail = JSON.parse(text).detail ?? detail;
+          const body = await response.json();
+          detail = body.detail ?? detail;
         } catch {
-          // not parseable JSON after all -- keep the generic message
+          // not a JSON error body -- keep the generic message
         }
-        downloaded.delete();
         Alert.alert("Download failed", detail);
         return;
       }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const destination = new File(Paths.cache, `${formCode}_${Date.now()}.pdf`);
+      destination.create({ overwrite: true });
+      destination.write(bytes);
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(downloaded.uri);
+        await Sharing.shareAsync(destination.uri);
       } else {
-        Alert.alert("Downloaded", `Saved to ${downloaded.uri}`);
+        Alert.alert("Downloaded", `Saved to ${destination.uri}`);
       }
     } catch (e: any) {
       Alert.alert("Download failed", e?.message ?? "Couldn't reach the server.");

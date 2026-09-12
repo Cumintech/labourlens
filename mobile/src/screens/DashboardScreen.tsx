@@ -503,9 +503,7 @@ export default function DashboardScreen({ navigation }: Props) {
                   }
                 >
                   <Text style={styles.name}>{workerLabel(item)}</Text>
-                  <Text style={styles.meta}>
-                    Device ID: {item.device_user_id ?? "Not mapped"} · Aadhaar •••• •••• {item.aadhaar_last4}
-                  </Text>
+                  <Text style={styles.meta}>Device ID: {item.device_user_id ?? "(no device id mapped yet)"}</Text>
                 </TouchableOpacity>
                 {isActive ? (
                   <TouchableOpacity onPress={() => handleDeactivate(item)}>

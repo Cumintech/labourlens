@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import {
   ApiError,
   WageProfile,
@@ -10,10 +10,12 @@ import {
   WorkerCompliance,
   WorkerType,
   assignWorkerType,
+  createWorkerCompliance,
   getWageProfileHistory,
   getWorker,
   getWorkerCompliance,
   listWorkerTypes,
+  updateWorkerCompliance,
 } from "../api/client";
 import ErrorState from "../components/ErrorState";
 import SelectField from "../components/SelectField";
@@ -51,6 +53,8 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [designation, setDesignation] = useState("");
+  const [savingDesignation, setSavingDesignation] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -63,9 +67,12 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
     setWorkerTypes(types);
     setWageHistory(history);
     try {
-      setCompliance(await getWorkerCompliance(token, workerId));
+      const c = await getWorkerCompliance(token, workerId);
+      setCompliance(c);
+      setDesignation(c.designation_or_nature_of_work ?? "");
     } catch {
       setCompliance(null); // no Form 12 details on file yet -- not an error
+      setDesignation("");
     }
   }, [token, workerId]);
 
@@ -110,6 +117,26 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
     }
   }
 
+  // designation_or_nature_of_work lives on WorkerCompliance (Form 12),
+  // not Worker -- a worker created without filling in the optional
+  // Compliance section during Add Worker has no WorkerCompliance row
+  // yet at all, so this creates one on first save rather than assuming
+  // update always applies.
+  async function handleSaveDesignation() {
+    if (!token) return;
+    setSavingDesignation(true);
+    try {
+      const save = compliance ? updateWorkerCompliance : createWorkerCompliance;
+      const updated = await save(token, workerId, { designation_or_nature_of_work: designation.trim() });
+      setCompliance(updated);
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't reach the server.";
+      Alert.alert("Could not save designation", message);
+    } finally {
+      setSavingDesignation(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -141,8 +168,26 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
         <ProfileRow label="Age" value={age !== null ? `${age} years` : "-"} />
         <ProfileRow label="Gender" value={worker.gender ?? "-"} />
         <ProfileRow label="Mobile" value={worker.mobile ?? "-"} />
-        <ProfileRow label="Designation" value={compliance?.designation_or_nature_of_work ?? "-"} />
-        <ProfileRow label="Aadhaar" value={`•••• •••• ${worker.aadhaar_last4}`} />
+        <ProfileRow label="Device ID" value={worker.device_user_id ?? "(no device id mapped yet)"} />
+        <View style={styles.designationRow}>
+          <Text style={styles.profileLabel}>Designation</Text>
+          <View style={styles.designationEditRow}>
+            <TextInput
+              style={styles.designationInput}
+              value={designation}
+              onChangeText={setDesignation}
+              placeholder="e.g. Electrician"
+              placeholderTextColor={colors.muted}
+            />
+            <TouchableOpacity
+              style={[styles.designationSaveButton, savingDesignation && styles.buttonDisabled]}
+              onPress={handleSaveDesignation}
+              disabled={savingDesignation || designation.trim() === (compliance?.designation_or_nature_of_work ?? "")}
+            >
+              {savingDesignation ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.designationSaveText}>Save</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <Text style={styles.sectionLabel}>Worker Type</Text>
@@ -194,6 +239,12 @@ const styles = StyleSheet.create({
   profileRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
   profileLabel: { fontSize: 13, color: colors.muted },
   profileValue: { fontSize: 13, fontWeight: "700", color: colors.navy },
+  designationRow: { paddingVertical: 6 },
+  designationEditRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: 4 },
+  designationInput: { flex: 1, backgroundColor: colors.white, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: colors.navy },
+  designationSaveButton: { backgroundColor: colors.teal, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 8 },
+  designationSaveText: { color: colors.white, fontSize: 12, fontWeight: "700" },
+  buttonDisabled: { opacity: 0.6 },
   sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs, textTransform: "uppercase" },
   helper: { fontSize: 11, color: colors.muted, marginTop: -spacing.sm, marginBottom: spacing.sm },
   rateCard: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.sm + 4 },

@@ -1,7 +1,7 @@
-import DateTimePicker, { DateTimePickerChangeEvent } from "@react-native-community/datetimepicker";
 import React, { useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";
+import YearMonthDayPicker from "./YearMonthDayPicker";
 
 export function isoDate(d: Date): string {
   const yyyy = d.getFullYear();
@@ -33,12 +33,14 @@ function toValidIso(day: string, month: string, year: string): string | null {
 
 // Replaces a free-typed "YYYY-MM-DD" text field -- a typo'd or
 // ambiguous hand-typed date was real feedback from the first
-// real-device pass. Direct Day/Month/Year entry (real feedback: the
-// native picker's own year scroller makes reaching an old DOB like
-// 1984 painfully slow, one increment at a time) is now the primary way
-// to set a date; the calendar button next to it still opens the native
-// picker for whenever browsing a nearby date is more convenient than
-// typing it.
+// real-device pass. Direct Day/Month/Year entry is the primary way to
+// set a date; the calendar button next to it opens YearMonthDayPicker
+// (a fully custom, in-app year/month/day picker) for browsing instead
+// of typing -- switched off the native OS calendar/spinner entirely
+// after real-device feedback confirmed its year-jump behavior still
+// isn't reliably reachable in one tap even in "calendar"/"inline" mode
+// (that's ultimately up to the phone's own OEM skin, not something a
+// JS library option can fully guarantee).
 export default function DateField({
   label,
   value,
@@ -92,22 +94,11 @@ export default function DateField({
     updatePart({ year: digits });
   }
 
-  // `onChange` is deprecated in the installed library version in favor
-  // of `onValueChange`/`onDismiss`/`onNeutralButtonPress` -- confirmed
-  // against the installed package's own type definitions, not assumed.
-  function handlePickerChange(_event: DateTimePickerChangeEvent, selected: Date) {
-    // Android's picker is a modal dialog that closes itself; iOS's is an
-    // inline spinner that stays open until the field is tapped again --
-    // hiding unconditionally after any change only closes it where that
-    // dismissal is expected.
-    if (Platform.OS === "android") setShowPicker(false);
+  function handlePickerSelect(selected: Date) {
+    setShowPicker(false);
     const iso = isoDate(selected);
     setParts(parseIso(iso));
     onChange(iso);
-  }
-
-  function handleDismiss() {
-    if (Platform.OS === "android") setShowPicker(false);
   }
 
   return (
@@ -159,25 +150,12 @@ export default function DateField({
       {!value && !parts.day && !parts.month && !parts.year && (
         <Text style={styles.placeholderHint}>{placeholder}</Text>
       )}
-      {showPicker && !disabled && (
-        <DateTimePicker
-          value={value ? new Date(value) : new Date()}
-          mode="date"
-          // "default" on Android can fall back to the one-unit-at-a-time
-          // spinner style on some OEM skins (Samsung's stock theme, real
-          // feedback) instead of the classic calendar view, which is the
-          // one that has a tappable month/year header opening a
-          // scrollable year list -- "calendar" forces that mode
-          // explicitly rather than leaving it to the device's theme.
-          // iOS's "spinner" has no year-jump at all (a real DOB like 1994
-          // means scrolling one year at a time) -- "inline" is iOS 14+'s
-          // full calendar-grid style with the same tappable month/year
-          // header Android's "calendar" mode has.
-          display={Platform.OS === "ios" ? "inline" : "calendar"}
-          onValueChange={handlePickerChange}
-          onDismiss={handleDismiss}
-        />
-      )}
+      <YearMonthDayPicker
+        visible={showPicker && !disabled}
+        initialDate={value ? new Date(value) : new Date()}
+        onSelect={handlePickerSelect}
+        onClose={() => setShowPicker(false)}
+      />
     </View>
   );
 }

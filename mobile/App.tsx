@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import React from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppLockProvider, useAppLock } from "./src/context/AppLockContext";
 import { AuthProvider } from "./src/context/AuthContext";
 import RootNavigator from "./src/navigation/RootNavigator";
@@ -14,13 +15,21 @@ function Gate() {
   return isLocked ? <AppLockScreen /> : <RootNavigator />;
 }
 
+// GestureHandlerRootView is required at the app root for
+// react-native-gesture-handler v2 to work at all -- the Drawer
+// navigator (AppDrawer.tsx) depends on it for the swipe-to-open/close
+// gesture. Without it, gestures inside the drawer either don't fire or
+// only work inside a small default-sized view instead of the whole
+// screen, per the library's own documented requirement.
 export default function App() {
   return (
-    <AuthProvider>
-      <AppLockProvider>
-        <Gate />
-        <StatusBar style="auto" />
-      </AppLockProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <AppLockProvider>
+          <Gate />
+          <StatusBar style="auto" />
+        </AppLockProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

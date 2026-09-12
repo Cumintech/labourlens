@@ -18,10 +18,12 @@ import { colors, radius, spacing } from "../theme";
 // walking up to the parent stack automatically.
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
-// Labour Attendance stays the one big, prominent entry point (it's the
-// daily task); Add Worker and Shifts & Profile are lower-frequency
-// actions, so they sit together as a smaller icon row underneath
-// instead of matching it in size. Logout moved to the Settings tab.
+// Home shows exactly two primary cards -- Labour Attendance (the daily
+// task) and Biometric Mapping -- per explicit request to declutter a
+// Home page that had 6 competing actions. Everything else that used to
+// live here as a small tile (Add Worker, Wage Rate, Shifts & Profile)
+// moved to the left drawer (see AppDrawer.tsx), reachable via the menu
+// button below. Logout is on the Settings tab.
 export default function HomeScreen({ navigation }: Props) {
   const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
@@ -57,9 +59,18 @@ export default function HomeScreen({ navigation }: Props) {
     >
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
-          <Text style={styles.heroEmoji}>🏭</Text>
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>FACTORY</Text>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => navigation.dispatch({ type: "OPEN_DRAWER" })}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.menuButtonText}>☰</Text>
+          </TouchableOpacity>
+          <View style={styles.heroTopRowRight}>
+            <Text style={styles.heroEmoji}>🏭</Text>
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>FACTORY</Text>
+            </View>
           </View>
         </View>
         <Text style={styles.factoryName}>{owner?.factory_name ?? "Labour Lens"}</Text>
@@ -89,31 +100,17 @@ export default function HomeScreen({ navigation }: Props) {
         <Text style={[styles.tileArrow, { color: colors.tealDark }]}>›</Text>
       </TouchableOpacity>
 
-      <View style={styles.smallRow}>
-        <TouchableOpacity
-          style={[styles.smallTile, { backgroundColor: colors.tealLight }]}
-          onPress={() => navigation.navigate("NewWorkerScan")}
-        >
-          <Text style={styles.smallTileEmoji}>👷</Text>
-          <Text style={[styles.smallTileTitle, { color: colors.tealDark }]}>Add Worker</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallTile, { backgroundColor: colors.tealLight }]}
-          onPress={() => navigation.navigate("WageRateWorkers")}
-        >
-          <Text style={styles.smallTileEmoji}>💰</Text>
-          <Text style={[styles.smallTileTitle, { color: colors.tealDark }]}>Wage Rate</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallTile, { backgroundColor: colors.tealLight }]}
-          onPress={() => navigation.navigate("ShiftSettings")}
-        >
-          <Text style={styles.smallTileEmoji}>⚙️</Text>
-          <Text style={[styles.smallTileTitle, { color: colors.tealDark }]}>Shifts & Profile</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={[styles.bigTile, { backgroundColor: colors.tealLight }]}
+        onPress={() => navigation.navigate("BiometricDevices")}
+      >
+        <Text style={styles.bigTileEmoji}>🖐️</Text>
+        <View style={styles.tileTextWrap}>
+          <Text style={[styles.bigTileTitle, { color: colors.tealDark }]}>Biometric Mapping</Text>
+          <Text style={styles.tileSubtitle}>Devices, sync, and worker-to-device mapping</Text>
+        </View>
+        <Text style={[styles.tileArrow, { color: colors.tealDark }]}>›</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -128,7 +125,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     overflow: "hidden",
   },
-  heroTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  heroTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  menuButton: { padding: 4 },
+  menuButtonText: { fontSize: 24, color: colors.white },
+  heroTopRowRight: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   heroEmoji: { fontSize: 32 },
   heroBadge: { backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   heroBadgeText: { color: colors.tealPale, fontSize: 10, fontWeight: "700", letterSpacing: 1 },
@@ -154,13 +154,4 @@ const styles = StyleSheet.create({
   bigTileTitle: { fontSize: 17, fontWeight: "700" },
   tileSubtitle: { fontSize: 12, color: colors.muted, marginTop: 2 },
   tileArrow: { fontSize: 28, fontWeight: "700", marginLeft: spacing.sm },
-  smallRow: { flexDirection: "row", gap: spacing.sm },
-  smallTile: {
-    flex: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm + 2,
-    alignItems: "center",
-  },
-  smallTileEmoji: { fontSize: 22, marginBottom: 4 },
-  smallTileTitle: { fontSize: 11, fontWeight: "700", textAlign: "center" },
 });

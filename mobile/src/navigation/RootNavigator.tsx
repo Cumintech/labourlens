@@ -22,7 +22,7 @@ import WorkerAttendanceScreen from "../screens/WorkerAttendanceScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
 import WorkerTypesScreen from "../screens/WorkerTypesScreen";
 import { colors } from "../theme";
-import MainTabs from "./MainTabs";
+import AppDrawer from "./AppDrawer";
 
 export type RootStackParamList = {
   Home: undefined;
@@ -100,7 +100,7 @@ export default function RootNavigator() {
           headerTintColor: colors.teal,
         }}
       >
-        <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
+        <Stack.Screen name="Home" component={AppDrawer} options={{ headerShown: false }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Labour Attendance" }} />
         <Stack.Screen name="AttendanceRange" component={AttendanceRangeScreen} options={{ title: "Edit Multiple Days" }} />
         <Stack.Screen name="NewWorkerScan" component={AddWorkerScreen} options={{ title: "Add Worker" }} />

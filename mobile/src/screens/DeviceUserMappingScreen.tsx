@@ -43,6 +43,7 @@ export default function DeviceUserMappingScreen({ route }: Props) {
   const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [verifyOpen, setVerifyOpen] = useState(false);
   const [verifyDeviceUserId, setVerifyDeviceUserId] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
@@ -193,7 +194,8 @@ export default function DeviceUserMappingScreen({ route }: Props) {
         mappings.map((m) => (
           <View key={m.id} style={styles.mappingRow}>
             <Text style={styles.mappingLine}>
-              {m.worker_employee_code ? `#${m.worker_employee_code}` : m.worker_name}
+              {m.worker_name}
+              {m.worker_employee_code ? ` (#${m.worker_employee_code})` : ""}
               <Text style={styles.mappingArrow}>  →  </Text>
               {m.device_user_id}
             </Text>
@@ -204,22 +206,29 @@ export default function DeviceUserMappingScreen({ route }: Props) {
         ))
       )}
 
-      <Text style={styles.sectionLabel}>Verify a punch</Text>
-      <Text style={styles.helper}>
-        After enrolling someone on the physical device, have them punch once and check it resolves to the right person
-        before moving to the next worker.
-      </Text>
-      <TextInput
-        style={styles.input}
-        value={verifyDeviceUserId}
-        onChangeText={setVerifyDeviceUserId}
-        placeholder="Device user ID just enrolled"
-        placeholderTextColor={colors.muted}
-      />
-      <TouchableOpacity style={[styles.buttonGhost, verifying && styles.buttonDisabled]} onPress={handleVerify} disabled={verifying}>
-        {verifying ? <ActivityIndicator color={colors.teal} /> : <Text style={styles.buttonGhostText}>Check latest punch</Text>}
+      <TouchableOpacity style={styles.collapsibleHead} onPress={() => setVerifyOpen((v) => !v)}>
+        <Text style={styles.collapsibleHeadText}>Verify a punch</Text>
+        <Text style={styles.collapsibleChevron}>{verifyOpen ? "‹" : "›"}</Text>
       </TouchableOpacity>
-      {verifyMessage && <Text style={styles.verifyMessage}>{verifyMessage}</Text>}
+      {verifyOpen && (
+        <View style={styles.collapsibleBody}>
+          <Text style={styles.helper}>
+            After enrolling someone on the physical device, have them punch once and check it resolves to the right
+            person before moving to the next worker.
+          </Text>
+          <TextInput
+            style={styles.input}
+            value={verifyDeviceUserId}
+            onChangeText={setVerifyDeviceUserId}
+            placeholder="Device user ID just enrolled"
+            placeholderTextColor={colors.muted}
+          />
+          <TouchableOpacity style={[styles.buttonGhost, verifying && styles.buttonDisabled]} onPress={handleVerify} disabled={verifying}>
+            {verifying ? <ActivityIndicator color={colors.teal} /> : <Text style={styles.buttonGhostText}>Check latest punch</Text>}
+          </TouchableOpacity>
+          {verifyMessage && <Text style={styles.verifyMessage}>{verifyMessage}</Text>}
+        </View>
+      )}
     </KeyboardScreen>
   );
 }
@@ -242,6 +251,18 @@ const styles = StyleSheet.create({
   mappingLine: { fontSize: 14, fontWeight: "700", color: colors.navy, flexShrink: 1 },
   mappingArrow: { color: colors.teal, fontWeight: "700" },
   removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700", marginLeft: spacing.sm },
+  collapsibleHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.sm + 4,
+    marginTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.fieldBg,
+  },
+  collapsibleHeadText: { fontSize: 13, fontWeight: "700", color: colors.navy },
+  collapsibleChevron: { fontSize: 16, color: colors.muted },
+  collapsibleBody: { paddingTop: spacing.xs },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
   input: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 15, color: colors.navy, marginBottom: spacing.md },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },

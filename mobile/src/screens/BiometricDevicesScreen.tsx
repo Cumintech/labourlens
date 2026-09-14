@@ -145,19 +145,25 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
         <View style={styles.leadStat}>
           <Text style={styles.leadStatNumber}>{unmappedWorkerCount}</Text>
           <Text style={styles.leadStatLabel}>worker{unmappedWorkerCount === 1 ? "" : "s"} not mapped yet</Text>
+          {unmappedCount > 0 && (
+            <TouchableOpacity style={styles.punchLinkRow} onPress={() => navigation.navigate("UnmappedPunches")}>
+              <Text style={styles.punchLinkText}>
+                {unmappedCount} unmapped punch{unmappedCount === 1 ? "" : "es"} need attention ›
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <View style={styles.leadStatOk}>
           <Text style={styles.leadStatOkText}>All active workers are mapped to a device</Text>
+          {unmappedCount > 0 && (
+            <TouchableOpacity onPress={() => navigation.navigate("UnmappedPunches")}>
+              <Text style={styles.warningText}>
+                {unmappedCount} unmapped punch{unmappedCount === 1 ? "" : "es"} need attention →
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
-      )}
-
-      {unmappedCount > 0 && (
-        <TouchableOpacity style={styles.warningBanner} onPress={() => navigation.navigate("UnmappedPunches")}>
-          <Text style={styles.warningText}>
-            {unmappedCount} unmapped punch{unmappedCount === 1 ? "" : "es"} need attention →
-          </Text>
-        </TouchableOpacity>
       )}
 
       {devices.length === 0 ? (
@@ -242,8 +248,16 @@ const styles = StyleSheet.create({
   leadStatLabel: { fontSize: 13, fontWeight: "600", color: colors.amberDark, marginTop: 2 },
   leadStatOk: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, alignItems: "center" },
   leadStatOkText: { fontSize: 13, fontWeight: "700", color: colors.tealDark },
-  warningBanner: { backgroundColor: colors.amberLight, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
-  warningText: { color: colors.amberDark, fontWeight: "700", fontSize: 13 },
+  punchLinkRow: {
+    marginTop: spacing.sm + 2,
+    paddingTop: spacing.sm + 2,
+    borderTopWidth: 1,
+    borderTopColor: "#F0D6A8",
+    width: "100%",
+    alignItems: "center",
+  },
+  punchLinkText: { color: colors.amberDark, fontWeight: "700", fontSize: 12.5 },
+  warningText: { color: colors.amberDark, fontWeight: "700", fontSize: 13, marginTop: spacing.sm },
   deviceCard: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
   deviceHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   deviceName: { fontSize: 16, fontWeight: "700", color: colors.navy },

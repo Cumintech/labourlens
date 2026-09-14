@@ -408,37 +408,41 @@ export default function DashboardScreen({ navigation }: Props) {
               </View>
             </View>
 
-            {/* A2: one-line stat strip -- dot + label/count per shift,
-                plus Leave and Total, replacing the old 3-box colored
-                summary panel with the same underlying counts. The Copy
-                Yesterday action (previously a full-width button) now
-                lives here as a small icon chip (A3). */}
-            <View style={styles.statStrip}>
-              <View style={styles.statStripScrollRow}>
-                <View style={styles.statDot}>
-                  <View style={[styles.dot, { backgroundColor: colors.teal }]} />
-                  <Text style={styles.statText}>
-                    Present {summary?.present_today ?? 0}/{summary?.total_workers ?? 0}
+            {/* Section 6 (settings-mockup.html) -- two-line stat block,
+                supersedes the earlier one-line dot strip. Line 1 is
+                Total & Present, the two headline numbers, set larger
+                and bolder; line 2 is the per-shift + Leave breakdown as
+                a lighter secondary line below. Same underlying counts
+                as before, layout only. Copy Yesterday stays a small
+                icon chip alongside the block. */}
+            <View style={styles.statBlock}>
+              <View style={styles.statBlockText}>
+                <View style={styles.statPrimaryRow}>
+                  <Text style={styles.statPrimaryItem}>
+                    {summary?.total_workers ?? 0}
+                    <Text style={styles.statPrimaryLabel}> Total</Text>
+                  </Text>
+                  <Text style={styles.statPrimaryItem}>
+                    {summary?.present_today ?? 0}
+                    <Text style={styles.statPrimaryLabel}> Present</Text>
                   </Text>
                 </View>
-                {(summary?.slots ?? []).map((s, i) => {
-                  const accent = SLOT_ACCENTS[i % SLOT_ACCENTS.length];
-                  return (
-                    <View key={s.slot} style={styles.statDot}>
-                      <View style={[styles.dot, { backgroundColor: accent.dot }]} />
-                      <Text style={styles.statText}>
-                        {s.slot} {s.present}/{s.total}
-                      </Text>
-                    </View>
-                  );
-                })}
-                <View style={styles.statDot}>
-                  <View style={[styles.dot, { backgroundColor: colors.amber }]} />
-                  <Text style={styles.statText}>Leave {leave.length}</Text>
-                </View>
-                <View style={styles.statDot}>
-                  <View style={[styles.dot, { backgroundColor: colors.neutral }]} />
-                  <Text style={styles.statText}>Total {summary?.total_workers ?? 0}</Text>
+                <View style={styles.statSecondaryRow}>
+                  {(summary?.slots ?? []).map((s, i) => {
+                    const accent = SLOT_ACCENTS[i % SLOT_ACCENTS.length];
+                    return (
+                      <View key={s.slot} style={styles.statDot}>
+                        <View style={[styles.dot, { backgroundColor: accent.dot }]} />
+                        <Text style={styles.statSecondaryText}>
+                          {s.slot} {s.present}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                  <View style={styles.statDot}>
+                    <View style={[styles.dot, { backgroundColor: colors.amber }]} />
+                    <Text style={styles.statSecondaryText}>Leave {leave.length}</Text>
+                  </View>
                 </View>
               </View>
               <TouchableOpacity style={styles.copyChip} onPress={handleCopyYesterday} disabled={bulkBusy}>
@@ -564,19 +568,23 @@ const styles = StyleSheet.create({
   dateNavField: { flex: 1 },
   todayLink: { paddingHorizontal: spacing.sm, paddingVertical: 5, backgroundColor: colors.teal, borderRadius: radius.sm },
   todayLinkText: { color: colors.white, fontSize: 11, fontWeight: "700" },
-  statStrip: {
+  statBlock: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm + 2,
     borderBottomWidth: 1,
     borderBottomColor: colors.fieldBg,
     gap: spacing.sm,
   },
-  statStripScrollRow: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: spacing.sm + 2, rowGap: 4 },
+  statBlockText: { flex: 1 },
+  statPrimaryRow: { flexDirection: "row", gap: spacing.md, alignItems: "baseline" },
+  statPrimaryItem: { fontSize: 18, fontWeight: "800", color: colors.navy },
+  statPrimaryLabel: { fontSize: 12, fontWeight: "600", color: colors.muted },
+  statSecondaryRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm + 2, rowGap: 4, marginTop: 6 },
   statDot: { flexDirection: "row", alignItems: "center", gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  statText: { fontSize: 11.5, fontWeight: "600", color: colors.navy },
+  statSecondaryText: { fontSize: 12, fontWeight: "600", color: colors.navy },
   copyChip: {
     width: 30,
     height: 30,

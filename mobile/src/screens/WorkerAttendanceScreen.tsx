@@ -384,6 +384,22 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
                 otHours={getDayOtHours(item.dateStr)}
                 onOpenOt={() => setOtModalDate(item.dateStr)}
               />
+              {/* Section 7 (settings-mockup.html) -- a compact, read-only
+                  Morning/Evening-style summary of which shift(s) "Present"
+                  came from that day, as a small secondary row under the
+                  tiles above (which is where that status is actually set).
+                  Additive only -- doesn't change DayAttendanceRow's own
+                  behavior or data. */}
+              <View style={styles.shiftTagsRow}>
+                {shifts.map((shift) => {
+                  const on = attendanceByDateSlot.get(`${item.dateStr}:${shift.slot_key}`)?.status === "present";
+                  return (
+                    <View key={shift.slot_key} style={[styles.shiftTag, on ? styles.shiftTagOn : styles.shiftTagOff]}>
+                      <Text style={[styles.shiftTagText, on ? styles.shiftTagTextOn : styles.shiftTagTextOff]}>{shift.label}</Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           );
         }}
@@ -457,4 +473,11 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.xs, marginBottom: spacing.xs },
   dateNumber: { fontSize: 15, fontWeight: "700", color: colors.navy },
   dateWeekday: { fontSize: 11, color: colors.muted },
+  shiftTagsRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.xs },
+  shiftTag: { paddingHorizontal: spacing.xs + 2, paddingVertical: 3, borderRadius: 6 },
+  shiftTagOn: { backgroundColor: colors.navy },
+  shiftTagOff: { backgroundColor: colors.fieldBg },
+  shiftTagText: { fontSize: 9.5, fontWeight: "800" },
+  shiftTagTextOn: { color: colors.white },
+  shiftTagTextOff: { color: colors.neutral },
 });

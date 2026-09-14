@@ -32,12 +32,7 @@ import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
-
-// Mirrors backend main.py's DEFAULT_PF_RATE_PERCENT -- EPF's statutory
-// employee contribution rate, used here purely for the auto-fill
-// convenience below (still an editable field afterward, same as the
-// backend's own auto-created default). Keep both in sync if it changes.
-const DEFAULT_PF_RATE_PERCENT = "12";
+import { autofillFromWorkerType } from "../workerTypeAutofill";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WageProfile">;
 
@@ -124,9 +119,10 @@ export default function WageProfileScreen({ route, navigation }: Props) {
       await assignWorkerType(token, workerId, typeId);
       const type = workerTypes.find((t) => t.id === typeId);
       if (type) {
-        setRateType(type.default_rate_type);
-        if (!basic.trim() || toNumber(basic) === 0) setBasic(String(type.default_rate));
-        if (!pfRate.trim() || toNumber(pfRate) === 0) setPfRate(DEFAULT_PF_RATE_PERCENT);
+        const filled = autofillFromWorkerType(type, { basic, pfRate });
+        setRateType(filled.rateType);
+        setBasic(filled.basic);
+        setPfRate(filled.pfRate);
       }
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Couldn't reach the server.";

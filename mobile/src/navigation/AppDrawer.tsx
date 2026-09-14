@@ -1,10 +1,19 @@
 import { DrawerContentComponentProps, createDrawerNavigator } from "@react-navigation/drawer";
-import { CommonActions } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing } from "../theme";
 import MainTabs from "./MainTabs";
+import { RootStackParamList } from "./RootNavigator";
+
+// Every drawer destination is a root-stack screen taking no params --
+// typed against RootStackParamList (the same cross-navigator-resolution
+// pattern HomeScreen's own nav prop uses) instead of the untyped object
+// form, which is both unnecessary here and the literal cause of React
+// Navigation's "Passing an object as the argument to 'navigate' is
+// deprecated" warning on every drawer tap.
+type DrawerDestination = "NewWorkerScan" | "WorkerTypes" | "WageRateWorkers" | "ShiftSettings";
 
 const Drawer = createDrawerNavigator();
 
@@ -27,9 +36,10 @@ const Drawer = createDrawerNavigator();
 // or how any other screen already navigates to them.
 function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
+  const rootNavigation = navigation as unknown as NativeStackNavigationProp<RootStackParamList>;
 
-  function go(route: string, params?: object) {
-    navigation.dispatch(CommonActions.navigate({ name: route, params }));
+  function go(route: DrawerDestination) {
+    rootNavigation.navigate(route);
     navigation.closeDrawer();
   }
 

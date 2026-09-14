@@ -372,24 +372,39 @@ def verify_punch(
 # cohesion with the rest of the biometric feature) ---
 
 
-@router.post("/workers/{worker_id}/employee-code", response_model=EmployeeCodeOut)
-def get_or_create_employee_code(worker_id: int, owner: models.Owner = Depends(get_current_owner), db: Session = Depends(get_db)):
-    """Idempotent: returns the existing code if the worker already has
-    one, otherwise generates the next one for this owner. Generated
-    once, never reused -- even a later-deactivated worker keeps theirs,
-    so the next generated code always increments past every code ever
-    issued, not just the ones currently in use."""
-    worker = _get_owned_worker(worker_id, owner, db)
+def assign_employee_code_if_missing(worker: models.Worker, owner_id: int, db: Session) -> None:
+    """Idempotent: no-ops if the worker already has a code, otherwise
+    generates the next one for this owner. Generated once, never
+    reused -- even a later-deactivated worker keeps theirs, so the next
+    generated code always increments past every code ever issued, not
+    just the ones currently in use. Shared by worker creation (main.py)
+    and the manual generate-code endpoint below, so every worker gets
+    one automatically at registration instead of only when an owner
+    happens to visit the biometric mapping screen and asks for one --
+    confirmed via investigation (item 17) that this was the actual gap:
+    numeric_employee_code was never set at creation at all, not a
+    generation bug. Does not commit -- the caller controls the
+    transaction (create_worker already has one in flight)."""
     if worker.numeric_employee_code:
-        return EmployeeCodeOut(worker_id=worker.id, numeric_employee_code=worker.numeric_employee_code)
-
+        return
     existing_codes = (
         db.query(models.Worker.numeric_employee_code)
-        .filter(models.Worker.owner_id == owner.id, models.Worker.numeric_employee_code.isnot(None))
+        .filter(models.Worker.owner_id == owner_id, models.Worker.numeric_employee_code.isnot(None))
         .all()
     )
     max_code = max((int(c[0]) for c in existing_codes if c[0].isdigit()), default=0)
     worker.numeric_employee_code = str(max_code + 1).zfill(4)
+
+
+@router.post("/workers/{worker_id}/employee-code", response_model=EmployeeCodeOut)
+def get_or_create_employee_code(worker_id: int, owner: models.Owner = Depends(get_current_owner), db: Session = Depends(get_db)):
+    """Kept as a manual fallback/correction path even though worker
+    creation now assigns a code automatically (see
+    assign_employee_code_if_missing) -- still useful for the backfill
+    case (workers created before this fix) and as a safety net if
+    creation's own assignment ever fails silently."""
+    worker = _get_owned_worker(worker_id, owner, db)
+    assign_employee_code_if_missing(worker, owner.id, db)
     db.commit()
     db.refresh(worker)
     return EmployeeCodeOut(worker_id=worker.id, numeric_employee_code=worker.numeric_employee_code)

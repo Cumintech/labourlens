@@ -122,11 +122,8 @@ export default function SettingsScreen({ navigation }: Props) {
 
       <Text style={styles.sectionLabel}>General</Text>
       <View style={styles.card}>
-        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("BiometricDevices")}>
-          <Text style={styles.rowIcon}>👆</Text>
-          <Text style={styles.rowValue}>Biometric Devices</Text>
-        </TouchableOpacity>
-        <View style={styles.divider} />
+        {/* Biometric Devices moved to its own Home page card (Batch 1) --
+            removed here so it doesn't exist as a duplicate entry point. */}
         <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("PrivacyPolicy")}>
           <Text style={styles.rowIcon}>📄</Text>
           <Text style={styles.rowValue}>Privacy Policy</Text>

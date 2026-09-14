@@ -61,6 +61,15 @@ ATTENDANCE_STATUSES = ("present", "absent", "leave")
 
 MAX_WORKERS_PER_OWNER = 50
 
+# EPF's statutory employee contribution rate under Indian law -- the
+# sensible default for a wage profile auto-created from a worker type
+# assignment (which otherwise leaves pf_rate at WageProfile's own
+# column default of 0). A convenience default only: still an ordinary
+# editable/overridable field on WageProfile once set, same as basic or
+# rate_type. The mobile app's WageProfileScreen mirrors this exact
+# value for its own auto-fill UI -- keep both in sync if this changes.
+DEFAULT_PF_RATE_PERCENT = 12.0
+
 # Factories Act minimum working age -- stricter than the 18-year
 # adult/young_person split below. Warn-only per PHASE3_STATUTORY_FORMS_PLAN.md:
 # this app never blocks registration on it, just surfaces a banner.
@@ -296,6 +305,15 @@ def create_worker(
         bank_ifsc=body.bank_ifsc,
     )
     db.add(worker)
+    db.commit()
+    db.refresh(worker)
+
+    # Assigned immediately at creation rather than only when an owner
+    # happens to visit the biometric mapping screen and asks for one --
+    # confirmed via investigation that workers going indefinitely
+    # without a code (showing "no code yet" everywhere) was this gap,
+    # not a bug in the generation logic itself.
+    biometric_api.assign_employee_code_if_missing(worker, owner.id, db)
     db.commit()
     db.refresh(worker)
 
@@ -706,6 +724,12 @@ def assign_worker_type(
                     created_by=owner.id,
                     rate_type=worker_type.default_rate_type,
                     basic=worker_type.default_rate,
+                    # EPF's statutory employee contribution rate -- WageProfile.pf_rate
+                    # defaults to 0 otherwise, silently leaving PF unset on every
+                    # auto-created profile. Still just a default: the owner can
+                    # override it same as basic/rate_type, per DEFAULT_PF_RATE_PERCENT's
+                    # own docstring below.
+                    pf_rate=DEFAULT_PF_RATE_PERCENT,
                     effective_from=date_.today(),
                 )
             )

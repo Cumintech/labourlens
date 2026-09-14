@@ -11,14 +11,33 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ApiError, WageProfile, WageRateType, createWageProfile, getWageProfile, getWageProfileHistory } from "../api/client";
+import {
+  ApiError,
+  WageProfile,
+  WageRateType,
+  Worker,
+  WorkerType,
+  assignWorkerType,
+  createWageProfile,
+  getWageProfile,
+  getWageProfileHistory,
+  getWorker,
+  listWorkerTypes,
+} from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
 import { ListSkeleton } from "../components/Skeleton";
+import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+
+// Mirrors backend main.py's DEFAULT_PF_RATE_PERCENT -- EPF's statutory
+// employee contribution rate, used here purely for the auto-fill
+// convenience below (still an editable field afterward, same as the
+// backend's own auto-created default). Keep both in sync if it changes.
+const DEFAULT_PF_RATE_PERCENT = "12";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WageProfile">;
 
@@ -37,6 +56,10 @@ export default function WageProfileScreen({ route, navigation }: Props) {
   const { token } = useAuth();
   const [history, setHistory] = useState<WageProfile[]>([]);
   const [currentRate, setCurrentRate] = useState<WageProfile | null>(null);
+  const [worker, setWorker] = useState<Worker | null>(null);
+  const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
+  const [selectedWorkerTypeId, setSelectedWorkerTypeId] = useState<number | null>(null);
+  const [assigningType, setAssigningType] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -69,17 +92,49 @@ export default function WageProfileScreen({ route, navigation }: Props) {
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [fullHistory, current] = await Promise.all([
+    const [fullHistory, current, w, types] = await Promise.all([
       getWageProfileHistory(token, workerId),
       getWageProfile(token, workerId).catch((e) => {
         if (e instanceof ApiError && e.status === 404) return null; // no rate set yet -- not an error
         throw e;
       }),
+      getWorker(token, workerId),
+      listWorkerTypes(token),
     ]);
     setHistory(fullHistory);
     setCurrentRate(current);
+    setWorker(w);
+    setWorkerTypes(types);
+    setSelectedWorkerTypeId(w.worker_type_id);
     prefillFrom(current);
   }, [token, workerId]);
+
+  // Selecting a type here both assigns it to the worker (so it behaves
+  // identically to picking one on WageRateWorkerDetailScreen -- one
+  // worker type master list, used consistently everywhere it appears)
+  // and auto-fills the rate/PF fields below from its defaults, still
+  // fully editable afterward. Only pre-fills fields that are currently
+  // blank/zero, so picking a type after already typing a custom basic
+  // wage doesn't clobber it.
+  async function handleSelectWorkerType(typeId: number | null) {
+    if (!token) return;
+    setSelectedWorkerTypeId(typeId);
+    setAssigningType(true);
+    try {
+      await assignWorkerType(token, workerId, typeId);
+      const type = workerTypes.find((t) => t.id === typeId);
+      if (type) {
+        setRateType(type.default_rate_type);
+        if (!basic.trim() || toNumber(basic) === 0) setBasic(String(type.default_rate));
+        if (!pfRate.trim() || toNumber(pfRate) === 0) setPfRate(DEFAULT_PF_RATE_PERCENT);
+      }
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't reach the server.";
+      Alert.alert("Could not assign worker type", message);
+    } finally {
+      setAssigningType(false);
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -224,6 +279,18 @@ export default function WageProfileScreen({ route, navigation }: Props) {
         This adds a new version effective from the date below -- it never changes past rates, so wage slips
         already issued for earlier months stay correct.
       </Text>
+
+      <WorkerTypeSelect
+        label="Worker Type"
+        token={token ?? ""}
+        workerTypes={workerTypes}
+        value={selectedWorkerTypeId}
+        onChange={handleSelectWorkerType}
+        onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
+        noneLabel="No type -- set a custom rate below"
+        disabled={assigningType}
+      />
+      <Text style={styles.helper}>Selecting a type fills in its default rate and PF % below -- both stay editable.</Text>
 
       <View style={styles.toggleRow}>
         {(["daily", "monthly"] as const).map((option) => (

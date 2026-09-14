@@ -147,38 +147,28 @@ export default function DeviceUserMappingScreen({ route }: Props) {
 
   // Never name alone -- a worker list disambiguated by employee code
   // (and "(Deactivated)" for anyone no longer active), same rule as
-  // every other worker picker in the app.
-  const workerOptions = workers.map((w) => ({
-    label: workerLabel(w),
-    value: String(w.id),
-  }));
+  // every other worker picker in the app. Excludes workers who already
+  // have a mapping on THIS device -- they belong in Current Mappings
+  // below, not offered again as if unmapped.
+  const mappedWorkerIds = new Set(mappings.map((m) => m.worker_id));
+  const workerOptions = workers
+    .filter((w) => !mappedWorkerIds.has(w.id))
+    .map((w) => ({ label: workerLabel(w), value: String(w.id) }));
 
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
       <Text style={styles.title}>{deviceName}</Text>
       <Text style={styles.subtitle}>Map device users to workers, or generate a direct employee code instead.</Text>
 
-      <Text style={styles.sectionLabel}>Current mappings</Text>
-      {mappings.length === 0 ? (
-        <Text style={styles.empty}>No manual mappings yet on this device.</Text>
-      ) : (
-        mappings.map((m) => (
-          <View key={m.id} style={styles.mappingRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.mappingWorker}>
-                {m.worker_name}
-                {m.worker_employee_code ? ` (#${m.worker_employee_code})` : ""}
-              </Text>
-              <Text style={styles.mappingDeviceId}>Device user ID: {m.device_user_id}</Text>
-            </View>
-            <TouchableOpacity onPress={() => handleRemoveMapping(m)}>
-              <Text style={styles.removeLink}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-        ))
-      )}
-
       <Text style={styles.sectionLabel}>Add a manual mapping</Text>
+      <SelectField
+        label="Worker"
+        value={selectedWorkerId !== null ? String(selectedWorkerId) : null}
+        options={workerOptions}
+        onChange={(v) => setSelectedWorkerId(parseInt(v, 10))}
+        placeholder={workerOptions.length === 0 ? "All workers already mapped" : "Choose a worker"}
+        disabled={workerOptions.length === 0}
+      />
       <Text style={styles.label}>Device user ID</Text>
       <TextInput
         style={styles.input}
@@ -187,13 +177,6 @@ export default function DeviceUserMappingScreen({ route }: Props) {
         placeholder="ID shown on the device at enrollment"
         placeholderTextColor={colors.muted}
       />
-      <SelectField
-        label="Worker"
-        value={selectedWorkerId !== null ? String(selectedWorkerId) : null}
-        options={workerOptions}
-        onChange={(v) => setSelectedWorkerId(parseInt(v, 10))}
-        placeholder="Choose a worker"
-      />
       <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleCreateMapping} disabled={saving}>
         {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Save mapping</Text>}
       </TouchableOpacity>
@@ -201,6 +184,24 @@ export default function DeviceUserMappingScreen({ route }: Props) {
         <TouchableOpacity onPress={() => handleGenerateCode(selectedWorkerId)}>
           <Text style={styles.altLink}>Or generate a direct employee code for this worker instead →</Text>
         </TouchableOpacity>
+      )}
+
+      <Text style={styles.sectionLabel}>Current mappings</Text>
+      {mappings.length === 0 ? (
+        <Text style={styles.empty}>No manual mappings yet on this device.</Text>
+      ) : (
+        mappings.map((m) => (
+          <View key={m.id} style={styles.mappingRow}>
+            <Text style={styles.mappingLine}>
+              {m.worker_employee_code ? `#${m.worker_employee_code}` : m.worker_name}
+              <Text style={styles.mappingArrow}>  →  </Text>
+              {m.device_user_id}
+            </Text>
+            <TouchableOpacity onPress={() => handleRemoveMapping(m)}>
+              <Text style={styles.removeLink}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        ))
       )}
 
       <Text style={styles.sectionLabel}>Verify a punch</Text>
@@ -232,14 +233,15 @@ const styles = StyleSheet.create({
   mappingRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: colors.fieldBg,
     borderRadius: radius.sm,
     padding: spacing.sm + 4,
     marginBottom: spacing.xs,
   },
-  mappingWorker: { fontSize: 14, fontWeight: "700", color: colors.navy },
-  mappingDeviceId: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700" },
+  mappingLine: { fontSize: 14, fontWeight: "700", color: colors.navy, flexShrink: 1 },
+  mappingArrow: { color: colors.teal, fontWeight: "700" },
+  removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700", marginLeft: spacing.sm },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
   input: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 15, color: colors.navy, marginBottom: spacing.md },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },

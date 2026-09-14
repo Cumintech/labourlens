@@ -34,12 +34,17 @@ gender keyword, and no address text at all):
 - Address extraction is new -- previously owner-entered only.
 """
 
+from __future__ import annotations
+
 import io
 import re
 import unicodedata
+from typing import TYPE_CHECKING
 
-import easyocr
 from PIL import Image
+
+if TYPE_CHECKING:
+    import easyocr
 
 _reader: easyocr.Reader | None = None
 
@@ -65,6 +70,16 @@ def _resize_for_ocr(image_bytes: bytes) -> bytes:
 
 
 def _get_reader() -> easyocr.Reader:
+    # easyocr (and the torch it pulls in) is imported here, not at module
+    # level -- merely importing torch costs real resident memory on its
+    # own, before any model is ever loaded, and OCR_WARM_UP=false (see
+    # main.py's lifespan) is meant to keep that cost off the startup path
+    # entirely on a memory-constrained host. A module-level import would
+    # undo that: the cost would land at app-import time regardless of the
+    # flag, every time. Python caches the import after the first call, so
+    # this has no repeat cost on later scans.
+    import easyocr
+
     # Loaded once and reused -- each Reader() call loads real models into
     # memory, far too expensive to do per-request.
     global _reader

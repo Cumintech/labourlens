@@ -32,6 +32,7 @@ export default function WorkerTypesScreen({}: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const [name, setName] = useState("");
   const [rateType, setRateType] = useState<"daily" | "monthly">("daily");
@@ -68,6 +69,7 @@ export default function WorkerTypesScreen({}: Props) {
     setName("");
     setRateType("daily");
     setRate("");
+    setSheetOpen(false);
   }
 
   function startEdit(type: WorkerType) {
@@ -75,6 +77,15 @@ export default function WorkerTypesScreen({}: Props) {
     setName(type.name);
     setRateType(type.default_rate_type);
     setRate(String(type.default_rate));
+    setSheetOpen(true);
+  }
+
+  function startAdd() {
+    setEditingId(null);
+    setName("");
+    setRateType("daily");
+    setRate("");
+    setSheetOpen(true);
   }
 
   async function handleSave() {
@@ -112,6 +123,7 @@ export default function WorkerTypesScreen({}: Props) {
           if (!token) return;
           try {
             await deleteWorkerType(token, type.id);
+            resetForm();
             await load();
           } catch {
             Alert.alert("Could not remove", "Please try again.");
@@ -149,72 +161,87 @@ export default function WorkerTypesScreen({}: Props) {
         <Text style={styles.empty}>No worker types yet -- add one below.</Text>
       ) : (
         types.map((type) => (
-          <View key={type.id} style={styles.typeRow}>
+          <TouchableOpacity key={type.id} style={styles.typeRow} onPress={() => startEdit(type)}>
             <View style={{ flex: 1 }}>
               <Text style={styles.typeName}>{type.name}</Text>
               <Text style={styles.typeRate}>
                 ₹{type.default_rate} / {type.default_rate_type === "daily" ? "day" : "month"}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => startEdit(type)}>
-              <Text style={styles.editLink}>Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(type)}>
-              <Text style={styles.removeLink}>Remove</Text>
-            </TouchableOpacity>
-          </View>
+            <Text style={styles.chev}>›</Text>
+          </TouchableOpacity>
         ))
       )}
 
-      <Text style={styles.sectionLabel}>{editingId ? "Edit type" : "Add a type"}</Text>
-      <View style={styles.fieldWrap}>
-        <Text style={styles.label}>Name</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Skilled"
-          placeholderTextColor={colors.muted}
-        />
-      </View>
-      <SelectField
-        label="Rate type"
-        value={rateType}
-        options={[
-          { label: "Daily rate", value: "daily" },
-          { label: "Monthly rate", value: "monthly" },
-        ]}
-        onChange={(v) => setRateType(v as "daily" | "monthly")}
-      />
-      <SelectField
-        label="Default rate -- quick pick"
-        value={RATE_PRESETS.includes(rate) ? rate : null}
-        options={RATE_PRESET_OPTIONS}
-        onChange={setRate}
-        placeholder="Choose a common rate, or type your own below"
-      />
-      <View style={styles.fieldWrap}>
-        <Text style={styles.label}>Default rate -- or type your own</Text>
-        <TextInput
-          style={styles.input}
-          value={rate}
-          onChangeText={setRate}
-          placeholder="700"
-          placeholderTextColor={colors.muted}
-          keyboardType="numeric"
-        />
-      </View>
-
-      <View style={styles.buttonRow}>
-        {editingId && (
-          <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity style={[styles.saveButton, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.saveText}>{editingId ? "Save changes" : "Add type"}</Text>}
+      {!sheetOpen && (
+        <TouchableOpacity style={styles.button} onPress={startAdd}>
+          <Text style={styles.buttonText}>+ Add worker type</Text>
         </TouchableOpacity>
-      </View>
+      )}
+
+      {sheetOpen && (
+        <View style={styles.sheet}>
+          <Text style={styles.sectionLabel}>{editingId ? "Edit type" : "Add a type"}</Text>
+          <View style={styles.fieldWrap}>
+            <Text style={styles.label}>Name</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Skilled"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+          <SelectField
+            label="Rate type"
+            value={rateType}
+            options={[
+              { label: "Daily rate", value: "daily" },
+              { label: "Monthly rate", value: "monthly" },
+            ]}
+            onChange={(v) => setRateType(v as "daily" | "monthly")}
+          />
+          <SelectField
+            label="Default rate -- quick pick"
+            value={RATE_PRESETS.includes(rate) ? rate : null}
+            options={RATE_PRESET_OPTIONS}
+            onChange={setRate}
+            placeholder="Choose a common rate, or type your own below"
+          />
+          <View style={styles.fieldWrap}>
+            <Text style={styles.label}>Default rate -- or type your own</Text>
+            <TextInput
+              style={styles.input}
+              value={rate}
+              onChangeText={setRate}
+              placeholder="700"
+              placeholderTextColor={colors.muted}
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.saveButton, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
+              {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.saveText}>{editingId ? "Save changes" : "Add type"}</Text>}
+            </TouchableOpacity>
+          </View>
+
+          {editingId && (
+            <TouchableOpacity
+              style={styles.removeTypeLink}
+              onPress={() => {
+                const type = types.find((t) => t.id === editingId);
+                if (type) handleDelete(type);
+              }}
+            >
+              <Text style={styles.removeLink}>Remove this type</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </KeyboardScreen>
   );
 }
@@ -227,16 +254,20 @@ const styles = StyleSheet.create({
   typeRow: { flexDirection: "row", alignItems: "center", backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.xs, gap: spacing.sm },
   typeName: { fontSize: 14, fontWeight: "700", color: colors.navy },
   typeRate: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  editLink: { color: colors.teal, fontSize: 12, fontWeight: "700" },
+  chev: { color: colors.muted, fontSize: 18 },
   removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700" },
-  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginTop: spacing.lg, marginBottom: spacing.sm },
+  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
+  sheet: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
   fieldWrap: { marginBottom: spacing.md },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
-  input: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.navy },
+  input: { backgroundColor: colors.white, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.navy },
   buttonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
-  cancelButton: { flex: 1, paddingVertical: 16, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
+  cancelButton: { flex: 1, paddingVertical: 16, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.white },
   cancelText: { color: colors.muted, fontWeight: "700" },
   saveButton: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, padding: 16, alignItems: "center" },
   buttonDisabled: { opacity: 0.6 },
   saveText: { color: colors.white, fontSize: 16, fontWeight: "700" },
+  button: { backgroundColor: colors.teal, borderRadius: radius.sm, padding: 16, alignItems: "center", marginTop: spacing.sm },
+  buttonText: { color: colors.white, fontSize: 15, fontWeight: "700" },
+  removeTypeLink: { alignItems: "center", marginTop: spacing.md },
 });

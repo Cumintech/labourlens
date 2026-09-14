@@ -29,6 +29,7 @@ class OwnerOut(BaseModel):
     factory_address: str | None = None
     factory_licence_no: str | None = None
     state: str | None = None
+    industry: str | None = None
     # Mirrors the admin-portal Factory row's status -- "trial" /
     # "active" / "payment_overdue" / "suspended" / "churned".
     # trial_days_remaining is only meaningful while plan_status ==
@@ -43,6 +44,7 @@ class FactoryProfileIn(BaseModel):
     factory_address: str | None = None
     factory_licence_no: str | None = None
     state: str | None = None
+    industry: str | None = None
 
 
 class FormTemplateOut(BaseModel):

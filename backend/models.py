@@ -25,6 +25,12 @@ class Owner(Base):
     # enum/FK) since the set of supported states is small and changes
     # rarely; the mobile app hardcodes the option list for now.
     state: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Drives the Home screen's background pattern on the mobile app
+    # (item 19) -- free text like state, same reasoning: a small,
+    # rarely-changing option list the mobile app hardcodes rather than
+    # a DB-enforced enum/FK. Not set defaults to a generic pattern on
+    # the client rather than left blank.
+    industry: Mapped[str | None] = mapped_column(String, nullable=True)
     # DPDP consent -- signup is blocked server-side (not just a UI
     # checkbox) unless this was explicitly given; the timestamp is the
     # actual evidence of consent, not just a boolean flag, in case it's

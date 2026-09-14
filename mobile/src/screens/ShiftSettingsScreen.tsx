@@ -26,6 +26,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import TimeField from "../components/TimeField";
 import { useAuth } from "../context/AuthContext";
 import { INDIAN_STATE_OPTIONS } from "../indianStates";
+import { INDUSTRY_OPTIONS } from "../industries";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 
@@ -45,6 +46,7 @@ export default function ShiftSettingsScreen({}: Props) {
   const [factoryAddress, setFactoryAddress] = useState(owner?.factory_address ?? "");
   const [factoryLicenceNo, setFactoryLicenceNo] = useState(owner?.factory_licence_no ?? "");
   const [state, setState] = useState(owner?.state ?? "");
+  const [industry, setIndustry] = useState(owner?.industry ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -94,6 +96,7 @@ export default function ShiftSettingsScreen({}: Props) {
         factoryAddress.trim() || undefined,
         factoryLicenceNo.trim() || undefined,
         state || undefined,
+        industry || undefined,
       );
       await updateOwner(updated);
       Alert.alert("Saved", "Factory profile updated.");
@@ -214,6 +217,13 @@ export default function ShiftSettingsScreen({}: Props) {
         options={INDIAN_STATE_OPTIONS}
         onChange={setState}
         placeholder="Select your factory's state"
+      />
+      <SelectField
+        label="Industry (sets your Home screen's background)"
+        value={industry || null}
+        options={INDUSTRY_OPTIONS}
+        onChange={setIndustry}
+        placeholder="Select your factory's industry"
       />
       <TouchableOpacity
         style={[styles.button, savingProfile && styles.buttonDisabled]}

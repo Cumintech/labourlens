@@ -255,6 +255,7 @@ def update_factory_profile(
     owner.factory_address = body.factory_address
     owner.factory_licence_no = body.factory_licence_no
     owner.state = body.state
+    owner.industry = body.industry
     db.commit()
     db.refresh(owner)
     return _owner_out(db, owner)

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { DashboardSummary, getDashboard, listLeaveForDate } from "../api/client";
 import { isoDate } from "../components/DateField";
+import HomeBackground from "../components/HomeBackground";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { trialBannerText } from "../planStatus";
@@ -52,11 +53,13 @@ export default function HomeScreen({ navigation }: Props) {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
-    >
+    <View style={styles.container}>
+      <HomeBackground industry={owner?.industry} />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+      >
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
           <TouchableOpacity
@@ -111,7 +114,8 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
         <Text style={[styles.tileArrow, { color: colors.tealDark }]}>›</Text>
       </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 

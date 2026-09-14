@@ -18,6 +18,9 @@ export type Owner = {
   // Which state's statutory forms apply -- drives the Forms & Reports
   // state selector's default. Free text, matching the backend column.
   state: string | null;
+  // Drives the Home screen's background pattern -- free text, matching
+  // the backend column, same reasoning as state above.
+  industry: string | null;
   // "trial" | "active" | "payment_overdue" | "suspended" | "churned" --
   // informational only, never blocks anything in this app.
   plan_status: string;
@@ -30,6 +33,7 @@ export function updateFactoryProfile(
   factoryAddress: string | undefined,
   factoryLicenceNo: string | undefined,
   state: string | undefined,
+  industry: string | undefined,
 ): Promise<Owner> {
   return request<Owner>("/owners/me/factory-profile", {
     method: "PUT",
@@ -39,6 +43,7 @@ export function updateFactoryProfile(
       factory_address: factoryAddress,
       factory_licence_no: factoryLicenceNo,
       state,
+      industry,
     }),
   });
 }

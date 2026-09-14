@@ -22,27 +22,27 @@ import {
   listWorkersMissingCompliance,
   markAttendance,
 } from "../api/client";
+import AttendanceRowCard from "../components/AttendanceRowCard";
 import DateField, { isoDate } from "../components/DateField";
-import DayAttendanceRow from "../components/DayAttendanceRow";
 import ErrorState from "../components/ErrorState";
 import OtHoursModal from "../components/OtHoursModal";
 import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
-import { workerLabel } from "../workerLabel";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Dashboard">;
 
-// A different accent per shift box, cycling if there are more shifts
-// than colors -- purely visual, so the summary row reads at a glance
-// instead of every shift looking identical.
+// A different accent per shift dot, cycling if there are more shifts
+// than colors -- purely visual, so the stat strip and row toggle read
+// at a glance instead of every shift looking identical. Same palette
+// used by AttendanceRowCard's segmented toggle (teal = present there,
+// so the strip's dots stay consistent with what a filled segment means).
 const SLOT_ACCENTS = [
-  { bg: colors.tealLight, fg: colors.tealDark },
-  { bg: colors.skyBlueLight, fg: colors.skyBlue },
-  { bg: colors.amberLight, fg: colors.amberDark },
-  { bg: colors.violetLight, fg: colors.violet },
-  { bg: colors.coralLight, fg: colors.coral },
+  { dot: colors.teal, fg: colors.tealDark },
+  { dot: colors.skyBlue, fg: colors.skyBlue },
+  { dot: colors.violet, fg: colors.violet },
+  { dot: colors.coral, fg: colors.coral },
 ];
 
 // Local device date, not UTC -- "today" for attendance means the day the
@@ -364,18 +364,28 @@ export default function DashboardScreen({ navigation }: Props) {
   }
 
   return (
-    <>
+    <View style={styles.container}>
       <FlatList
-        style={styles.container}
+        style={{ flex: 1 }}
         data={filtered}
         keyExtractor={(w) => String(w.id)}
-        contentContainerStyle={{ paddingBottom: spacing.xl * 2 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: spacing.xl * 3 + insets.bottom }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
         ListHeaderComponent={
           <View>
+            {/* A1: header collapsed to factory name + one compact date-nav
+                row + the "Edit multiple days" link -- the old separate
+                colored summary panel underneath is gone, replaced by the
+                one-line dot strip below (A2). */}
             <View style={styles.headerCard}>
-              <Text style={styles.factoryName}>{owner?.factory_name ?? "Dashboard"}</Text>
-
+              <View style={styles.headerTopRow}>
+                <Text style={styles.factoryName} numberOfLines={1}>
+                  {owner?.factory_name ?? "Dashboard"}
+                </Text>
+                <TouchableOpacity onPress={() => navigation.navigate("AttendanceRange")}>
+                  <Text style={styles.rangeLink}>Edit multiple days →</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.dateNavRow}>
                 <TouchableOpacity style={styles.dateNavButton} onPress={() => setSelectedDate((d) => addDays(d, -1))}>
                   <Text style={styles.dateNavButtonText}>‹</Text>
@@ -396,59 +406,57 @@ export default function DashboardScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 )}
               </View>
-              <TouchableOpacity onPress={() => navigation.navigate("AttendanceRange")}>
-                <Text style={styles.rangeLink}>Edit multiple days →</Text>
-              </TouchableOpacity>
-
-              <View style={styles.summaryCard}>
-                <View style={styles.summaryTopRow}>
-                  <Text style={styles.summaryNumber}>
-                    {summary?.present_today ?? 0} / {summary?.total_workers ?? 0}
-                  </Text>
-                  <Text style={styles.summaryLabel}>present {isToday ? "today" : "this day"}</Text>
-                </View>
-                <View style={styles.slotRow}>
-                  {(summary?.slots ?? []).map((s, i) => {
-                    const accent = SLOT_ACCENTS[i % SLOT_ACCENTS.length];
-                    return (
-                      <View key={s.slot} style={[styles.slotBox, { backgroundColor: accent.bg }]}>
-                        <Text style={[styles.slotBoxLabel, { color: accent.fg }]}>{s.slot}</Text>
-                        <Text style={[styles.slotBoxValue, { color: accent.fg }]}>
-                          {s.present} / {s.total}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                  <View style={[styles.slotBox, { backgroundColor: colors.amberLight }]}>
-                    <Text style={[styles.slotBoxLabel, { color: colors.amberDark }]}>Leave</Text>
-                    <Text style={[styles.slotBoxValue, { color: colors.amberDark }]}>{leave.length}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.bulkRow}>
-                <TouchableOpacity style={styles.bulkButton} onPress={handleBulkPresent} disabled={bulkBusy}>
-                  {bulkBusy ? (
-                    <ActivityIndicator color={colors.white} size="small" />
-                  ) : (
-                    <Text style={styles.bulkButtonText}>✓ Mark All Present ({morningShift?.label ?? "Morning"})</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.bulkButtonGhost} onPress={handleCopyYesterday} disabled={bulkBusy}>
-                  <Text style={styles.bulkButtonGhostText}>📋 Copy Yesterday</Text>
-                </TouchableOpacity>
-              </View>
-              {isSunday && <Text style={styles.sundayNote}>Sunday defaults to Absent unless you mark a shift present.</Text>}
             </View>
+
+            {/* A2: one-line stat strip -- dot + label/count per shift,
+                plus Leave and Total, replacing the old 3-box colored
+                summary panel with the same underlying counts. The Copy
+                Yesterday action (previously a full-width button) now
+                lives here as a small icon chip (A3). */}
+            <View style={styles.statStrip}>
+              <View style={styles.statStripScrollRow}>
+                <View style={styles.statDot}>
+                  <View style={[styles.dot, { backgroundColor: colors.teal }]} />
+                  <Text style={styles.statText}>
+                    Present {summary?.present_today ?? 0}/{summary?.total_workers ?? 0}
+                  </Text>
+                </View>
+                {(summary?.slots ?? []).map((s, i) => {
+                  const accent = SLOT_ACCENTS[i % SLOT_ACCENTS.length];
+                  return (
+                    <View key={s.slot} style={styles.statDot}>
+                      <View style={[styles.dot, { backgroundColor: accent.dot }]} />
+                      <Text style={styles.statText}>
+                        {s.slot} {s.present}/{s.total}
+                      </Text>
+                    </View>
+                  );
+                })}
+                <View style={styles.statDot}>
+                  <View style={[styles.dot, { backgroundColor: colors.amber }]} />
+                  <Text style={styles.statText}>Leave {leave.length}</Text>
+                </View>
+                <View style={styles.statDot}>
+                  <View style={[styles.dot, { backgroundColor: colors.neutral }]} />
+                  <Text style={styles.statText}>Total {summary?.total_workers ?? 0}</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.copyChip} onPress={handleCopyYesterday} disabled={bulkBusy}>
+                {bulkBusy ? <ActivityIndicator color={colors.navy} size="small" /> : <Text style={styles.copyChipText}>📋</Text>}
+              </TouchableOpacity>
+            </View>
+
+            {isSunday && <Text style={styles.sundayNote}>Sunday defaults to Absent unless you mark a shift present.</Text>}
 
             {missingComplianceCount > 0 && (
               <TouchableOpacity style={styles.complianceBanner} onPress={handleMissingCompliancePress}>
                 <Text style={styles.complianceBannerText}>
-                  {missingComplianceCount} worker{missingComplianceCount === 1 ? "" : "s"} need Form 12 details
+                  {missingComplianceCount} worker{missingComplianceCount === 1 ? "" : "s"} need Form 12 details ›
                 </Text>
               </TouchableOpacity>
             )}
 
+            {/* A5: denser search + compact tabs */}
             <View style={styles.searchWrap}>
               <TextInput
                 style={styles.searchInput}
@@ -485,54 +493,44 @@ export default function DashboardScreen({ navigation }: Props) {
             {statusTab === "active" ? "No active workers match your search." : "No deactivated workers."}
           </Text>
         }
-        renderItem={({ item }) => {
-          const isActive = item.status === "active";
-          const onLeave = leaveByWorker.has(item.id);
-          return (
-            <View style={styles.row}>
-              <View style={styles.rowTop}>
-                <TouchableOpacity
-                  style={{ flex: 1 }}
-                  onPress={() =>
-                    navigation.navigate("WorkerAttendance", {
-                      workerId: item.id,
-                      workerName: item.name,
-                      workerStatus: item.status,
-                      deactivatedAt: item.deactivated_at,
-                    })
-                  }
-                >
-                  <Text style={styles.name}>{workerLabel(item)}</Text>
-                  <Text style={styles.meta}>Device ID: {item.device_user_id ?? "(no device id mapped yet)"}</Text>
-                </TouchableOpacity>
-                {isActive ? (
-                  <TouchableOpacity onPress={() => handleDeactivate(item)}>
-                    <Text style={styles.deactivateLink}>Deactivate</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={[styles.badge, styles.badgeInactive]}>
-                    <Text style={styles.badgeText}>
-                      Deactivated{item.deactivated_at ? ` · ${item.deactivated_at.slice(0, 10)}` : ""}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {isActive && (
-                <DayAttendanceRow
-                  shifts={shifts}
-                  getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.status}
-                  getShiftSource={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.source}
-                  onSetShiftStatus={(slotKey, status) => handleSetShiftStatus(item, slotKey, status)}
-                  isOnLeave={onLeave}
-                  onToggleLeave={() => handleToggleLeave(item)}
-                  otHours={getDayOtHours(item)}
-                  onOpenOt={() => setOtModalWorker(item)}
-                />
-              )}
-            </View>
-          );
-        }}
+        renderItem={({ item }) => (
+          <AttendanceRowCard
+            worker={item}
+            shifts={shifts}
+            getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.status}
+            getShiftSource={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.source}
+            onSetShiftStatus={(slotKey, status) => handleSetShiftStatus(item, slotKey, status)}
+            isOnLeave={leaveByWorker.has(item.id)}
+            onToggleLeave={() => handleToggleLeave(item)}
+            otHours={getDayOtHours(item)}
+            onOpenOt={() => setOtModalWorker(item)}
+            onDeactivate={() => handleDeactivate(item)}
+            onPressDetail={() =>
+              navigation.navigate("WorkerAttendance", {
+                workerId: item.id,
+                workerName: item.name,
+                workerStatus: item.status,
+                deactivatedAt: item.deactivated_at,
+              })
+            }
+          />
+        )}
       />
+
+      {/* A3: Mark All Present floats above the list as a FAB instead of
+          taking a full-width row inside the header -- keeps the header
+          compact and puts the single highest-frequency action within
+          thumb reach regardless of scroll position. */}
+      {statusTab === "active" && activeWorkers.length > 0 && (
+        <TouchableOpacity
+          style={[styles.fab, { bottom: spacing.lg + insets.bottom }]}
+          onPress={handleBulkPresent}
+          disabled={bulkBusy}
+        >
+          {bulkBusy ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.fabText}>✓ Mark All</Text>}
+        </TouchableOpacity>
+      )}
+
       <OtHoursModal
         visible={otModalWorker !== null}
         initialHours={otModalWorker ? getDayOtHours(otModalWorker) : 0}
@@ -542,55 +540,53 @@ export default function DashboardScreen({ navigation }: Props) {
         }}
         onCancel={() => setOtModalWorker(null)}
       />
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-  headerCard: { backgroundColor: colors.navy, padding: spacing.md, paddingBottom: spacing.lg },
-  factoryName: { color: colors.white, fontSize: 18, fontWeight: "700" },
+  headerCard: { backgroundColor: colors.navy, paddingHorizontal: spacing.md, paddingTop: spacing.sm + 2, paddingBottom: spacing.sm + 4 },
+  headerTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  factoryName: { color: colors.white, fontSize: 16, fontWeight: "700", flexShrink: 1, marginRight: spacing.sm },
+  rangeLink: { color: colors.tealPale, fontSize: 11, fontWeight: "700" },
   dateNavRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm },
   dateNavButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   dateNavButtonDisabled: { opacity: 0.3 },
-  dateNavButtonText: { color: colors.white, fontSize: 18, fontWeight: "700" },
+  dateNavButtonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
   dateNavField: { flex: 1 },
-  todayLink: { paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: colors.teal, borderRadius: radius.sm },
+  todayLink: { paddingHorizontal: spacing.sm, paddingVertical: 5, backgroundColor: colors.teal, borderRadius: radius.sm },
   todayLinkText: { color: colors.white, fontSize: 11, fontWeight: "700" },
-  rangeLink: { color: colors.tealPale, fontSize: 12, fontWeight: "700", marginTop: spacing.sm },
-  summaryCard: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.sm + 6, marginTop: spacing.md },
-  summaryTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
-  summaryNumber: { color: colors.navy, fontSize: 26, fontWeight: "700" },
-  summaryLabel: { color: colors.tealDark, fontSize: 12, fontWeight: "700" },
-  slotRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.sm, flexWrap: "wrap" },
-  slotBox: { flexGrow: 1, flexBasis: "30%", borderRadius: radius.sm, padding: spacing.xs + 4 },
-  slotBoxLabel: { fontSize: 11 },
-  slotBoxValue: { fontSize: 14, fontWeight: "700", marginTop: 2 },
-  bulkRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
-  bulkButton: {
-    flex: 1,
-    backgroundColor: colors.teal,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
+  statStrip: {
+    flexDirection: "row",
     alignItems: "center",
-  },
-  bulkButtonText: { color: colors.white, fontSize: 12, fontWeight: "700" },
-  bulkButtonGhost: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.fieldBg,
+    gap: spacing.sm,
   },
-  bulkButtonGhostText: { color: colors.white, fontSize: 12, fontWeight: "700" },
-  sundayNote: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: spacing.sm, textAlign: "center" },
+  statStripScrollRow: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: spacing.sm + 2, rowGap: 4 },
+  statDot: { flexDirection: "row", alignItems: "center", gap: 5 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  statText: { fontSize: 11.5, fontWeight: "600", color: colors.navy },
+  copyChip: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.fieldBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  copyChipText: { fontSize: 14 },
+  sundayNote: { color: colors.muted, fontSize: 11, marginTop: spacing.xs, textAlign: "center" },
   complianceBanner: {
     backgroundColor: colors.amberPale,
     borderColor: colors.amber,
@@ -598,38 +594,40 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     marginHorizontal: spacing.md,
     marginTop: spacing.sm,
-    padding: spacing.sm + 2,
+    padding: spacing.sm,
   },
   complianceBannerText: { color: colors.navy, fontSize: 12, fontWeight: "700" },
-  searchWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.md },
+  searchWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   searchInput: {
     backgroundColor: colors.fieldBg,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.sm - 2,
     fontSize: 13,
     color: colors.navy,
   },
-  statusTabRow: { flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.md },
-  statusTab: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: spacing.sm + 2, alignItems: "center" },
+  statusTabRow: { flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm, marginBottom: spacing.xs },
+  statusTab: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: spacing.sm - 2, alignItems: "center" },
   statusTabActive: { backgroundColor: colors.teal },
   statusTabActiveMuted: { backgroundColor: colors.navy },
-  statusTabText: { fontSize: 13, fontWeight: "700", color: colors.muted },
+  statusTabText: { fontSize: 12.5, fontWeight: "700", color: colors.muted },
   statusTabTextActive: { color: colors.white },
   statusTabTextActiveMuted: { color: colors.white },
   empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
-  row: {
-    backgroundColor: colors.fieldBg,
-    borderRadius: radius.md,
-    padding: spacing.sm + 4,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.sm,
+  fab: {
+    position: "absolute",
+    right: spacing.md,
+    backgroundColor: colors.teal,
+    borderRadius: 999,
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.sm + 4,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: colors.navy,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
-  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
-  name: { fontSize: 15, fontWeight: "700", color: colors.navy },
-  meta: { fontSize: 11, color: colors.muted, marginTop: 1 },
-  deactivateLink: { color: colors.danger, fontSize: 11, fontWeight: "700" },
-  badge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeInactive: { backgroundColor: colors.muted },
-  badgeText: { color: colors.white, fontSize: 10, fontWeight: "700" },
+  fabText: { color: colors.white, fontSize: 13, fontWeight: "700" },
 });

@@ -71,7 +71,12 @@ export default function SettingsScreen({ navigation }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}>
       <Text style={styles.title}>Settings</Text>
 
-      <Text style={styles.sectionLabel}>Profile Info</Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionLabel}>Profile Info</Text>
+        <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+          <Text style={styles.editProfileLink}>Edit ›</Text>
+        </TouchableOpacity>
+      </View>
       <View style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.rowIcon}>👤</Text>
@@ -213,7 +218,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
   title: { fontSize: 22, fontWeight: "700", color: colors.navy, marginBottom: spacing.md },
-  sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.muted, textTransform: "uppercase", marginBottom: spacing.xs, marginTop: spacing.md },
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.md },
+  sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.muted, textTransform: "uppercase", marginBottom: spacing.xs },
+  editProfileLink: { fontSize: 12, fontWeight: "700", color: colors.teal, marginBottom: spacing.xs },
   card: { backgroundColor: colors.fieldBg, borderRadius: radius.md, overflow: "hidden" },
   row: { flexDirection: "row", alignItems: "center", padding: spacing.md },
   rowIcon: { fontSize: 20, marginRight: spacing.sm },

@@ -13,6 +13,7 @@ import DashboardScreen from "../screens/DashboardScreen";
 import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
+import ProfileScreen from "../screens/ProfileScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
@@ -45,6 +46,7 @@ export type RootStackParamList = {
   WageRateWorkerDetail: { workerId: number; workerName: string };
   WorkerTypes: undefined;
   ShiftSettings: undefined;
+  Profile: undefined;
   StatutoryForms: undefined;
   PrivacyPolicy: undefined;
   HelpSupport: undefined;
@@ -115,6 +117,7 @@ export default function RootNavigator() {
         <Stack.Screen name="WageRateWorkerDetail" component={WageRateWorkerDetailScreen} options={{ title: "Wage Rate" }} />
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
+        <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
         <Stack.Screen name="StatutoryForms" component={StatutoryFormsScreen} options={{ title: "Forms & Reports" }} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} options={{ title: "Help & Support" }} />

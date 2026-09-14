@@ -16,38 +16,29 @@ import {
   createShiftConfig,
   deleteShiftConfig,
   listShiftConfigs,
-  updateFactoryProfile,
   updateShiftConfig,
 } from "../api/client";
 import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
-import SelectField from "../components/SelectField";
 import { ListSkeleton } from "../components/Skeleton";
 import TimeField from "../components/TimeField";
 import { useAuth } from "../context/AuthContext";
-import { INDIAN_STATE_OPTIONS } from "../indianStates";
-import { INDUSTRY_OPTIONS } from "../industries";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ShiftSettings">;
 
-// No dedicated Settings surface exists elsewhere in the app yet -- this
-// screen doubles as the factory-profile editor too, rather than adding a
-// second new screen just for two fields.
-export default function ShiftSettingsScreen({}: Props) {
-  const { token, owner, updateOwner } = useAuth();
+// Factory profile fields (name, address, licence, state, industry) used
+// to live on this screen too, despite it being named for shift
+// management -- moved to a real Profile screen (Section 4) so that data
+// exists in exactly one editable place. The helper link below is for
+// anyone who lands here out of habit looking for those fields.
+export default function ShiftSettingsScreen({ navigation }: Props) {
+  const { token } = useAuth();
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
-  const [factoryName, setFactoryName] = useState(owner?.factory_name ?? "");
-  const [factoryAddress, setFactoryAddress] = useState(owner?.factory_address ?? "");
-  const [factoryLicenceNo, setFactoryLicenceNo] = useState(owner?.factory_licence_no ?? "");
-  const [state, setState] = useState(owner?.state ?? "");
-  const [industry, setIndustry] = useState(owner?.industry ?? "");
-  const [savingProfile, setSavingProfile] = useState(false);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newLabel, setNewLabel] = useState("");
@@ -79,31 +70,6 @@ export default function ShiftSettingsScreen({}: Props) {
       // Keep whatever's already on screen -- see Dashboard's identical note.
     } finally {
       setRefreshing(false);
-    }
-  }
-
-  async function handleSaveProfile() {
-    if (!token) return;
-    if (!factoryName.trim()) {
-      Alert.alert("Factory name required", "This is the name shown on your Home screen and every statutory form.");
-      return;
-    }
-    setSavingProfile(true);
-    try {
-      const updated = await updateFactoryProfile(
-        token,
-        factoryName.trim(),
-        factoryAddress.trim() || undefined,
-        factoryLicenceNo.trim() || undefined,
-        state || undefined,
-        industry || undefined,
-      );
-      await updateOwner(updated);
-      Alert.alert("Saved", "Factory profile updated.");
-    } catch (e: any) {
-      Alert.alert("Could not save", e?.message ?? "Please try again.");
-    } finally {
-      setSavingProfile(false);
     }
   }
 
@@ -184,56 +150,14 @@ export default function ShiftSettingsScreen({}: Props) {
       contentContainerStyle={{ padding: spacing.md }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
     >
-      <Text style={styles.sectionLabel}>Factory profile</Text>
-      <Text style={styles.label}>Factory name</Text>
-      <TextInput
-        style={styles.input}
-        value={factoryName}
-        onChangeText={setFactoryName}
-        placeholder="Your factory's name"
-        placeholderTextColor={colors.muted}
-      />
-      <Text style={styles.label}>Factory address</Text>
-      <TextInput
-        style={styles.input}
-        value={factoryAddress}
-        onChangeText={setFactoryAddress}
-        placeholder="42 Industrial Estate, Madurai"
-        placeholderTextColor={colors.muted}
-        multiline
-      />
-      <Text style={styles.label}>Factory licence / registration no.</Text>
-      <TextInput
-        style={styles.input}
-        value={factoryLicenceNo}
-        onChangeText={setFactoryLicenceNo}
-        placeholder="e.g. TN/MDU/1234"
-        placeholderTextColor={colors.muted}
-        autoCapitalize="characters"
-      />
-      <SelectField
-        label="State (for statutory forms)"
-        value={state || null}
-        options={INDIAN_STATE_OPTIONS}
-        onChange={setState}
-        placeholder="Select your factory's state"
-      />
-      <SelectField
-        label="Industry (sets your Home screen's background)"
-        value={industry || null}
-        options={INDUSTRY_OPTIONS}
-        onChange={setIndustry}
-        placeholder="Select your factory's industry"
-      />
-      <TouchableOpacity
-        style={[styles.button, savingProfile && styles.buttonDisabled]}
-        onPress={handleSaveProfile}
-        disabled={savingProfile}
-      >
-        {savingProfile ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Save profile</Text>}
+      <TouchableOpacity style={styles.helpbox} onPress={() => navigation.navigate("Profile")}>
+        <Text style={styles.helpboxText}>
+          Looking for factory name, address, licence, state, or industry? Edit those from{" "}
+          <Text style={styles.helpboxLink}>Profile ›</Text>
+        </Text>
       </TouchableOpacity>
 
-      <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Shifts</Text>
+      <Text style={styles.sectionLabel}>Shifts</Text>
       <Text style={styles.helper}>
         Up to 3 shifts is typical, but there's no hard limit. Workers can be marked present in more than one
         shift on the same day.
@@ -309,6 +233,9 @@ export default function ShiftSettingsScreen({}: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
+  helpbox: { backgroundColor: colors.skyBlueLight, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
+  helpboxText: { fontSize: 12, color: colors.navy, lineHeight: 17 },
+  helpboxLink: { fontWeight: "700", color: colors.skyBlue },
   sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.xs },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },

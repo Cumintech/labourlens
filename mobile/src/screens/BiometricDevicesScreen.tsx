@@ -8,6 +8,7 @@ import {
   createBiometricDevice,
   listBiometricDevices,
   listUnmappedPunches,
+  listWorkers,
   triggerBiometricSync,
 } from "../api/client";
 import ErrorState from "../components/ErrorState";
@@ -27,6 +28,7 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
   const { token } = useAuth();
   const [devices, setDevices] = useState<BiometricDevice[]>([]);
   const [unmappedCount, setUnmappedCount] = useState(0);
+  const [unmappedWorkerCount, setUnmappedWorkerCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,9 +41,15 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [d, u] = await Promise.all([listBiometricDevices(token), listUnmappedPunches(token)]);
+    const [d, u, w] = await Promise.all([listBiometricDevices(token), listUnmappedPunches(token), listWorkers(token)]);
     setDevices(d);
     setUnmappedCount(u.length);
+    // The leading stat on this screen (per explicit request) -- "how
+    // many workers still need mapping" is the actionable number an
+    // owner cares about first; unmapped punches are secondary, only
+    // meaningful once workers are already mapped and punches from
+    // someone who ISN'T need resolving individually (see UnmappedPunches).
+    setUnmappedWorkerCount(w.filter((worker) => worker.status === "active" && !worker.device_user_id).length);
   }, [token]);
 
   useFocusEffect(
@@ -133,6 +141,17 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
       <Text style={styles.title}>Biometric Devices</Text>
       <Text style={styles.subtitle}>Fingerprint attendance terminals, e.g. one per gate.</Text>
 
+      {unmappedWorkerCount > 0 ? (
+        <View style={styles.leadStat}>
+          <Text style={styles.leadStatNumber}>{unmappedWorkerCount}</Text>
+          <Text style={styles.leadStatLabel}>worker{unmappedWorkerCount === 1 ? "" : "s"} not mapped yet</Text>
+        </View>
+      ) : (
+        <View style={styles.leadStatOk}>
+          <Text style={styles.leadStatOkText}>All active workers are mapped to a device</Text>
+        </View>
+      )}
+
       {unmappedCount > 0 && (
         <TouchableOpacity style={styles.warningBanner} onPress={() => navigation.navigate("UnmappedPunches")}>
           <Text style={styles.warningText}>
@@ -218,6 +237,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "700", color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
   empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
+  leadStat: { backgroundColor: colors.amberLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, alignItems: "center" },
+  leadStatNumber: { fontSize: 32, fontWeight: "800", color: colors.amberDark },
+  leadStatLabel: { fontSize: 13, fontWeight: "600", color: colors.amberDark, marginTop: 2 },
+  leadStatOk: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, alignItems: "center" },
+  leadStatOkText: { fontSize: 13, fontWeight: "700", color: colors.tealDark },
   warningBanner: { backgroundColor: colors.amberLight, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
   warningText: { color: colors.amberDark, fontWeight: "700", fontSize: 13 },
   deviceCard: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },

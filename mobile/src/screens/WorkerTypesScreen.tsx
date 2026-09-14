@@ -13,6 +13,14 @@ import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkerTypes">;
 
+// 500-3000 in steps of 50, for quickly picking a common rate rather
+// than typing one -- the manual text field right below stays the
+// actual source of truth (this is a convenience picker, not the only
+// way in), so any custom value typed there just doesn't match a preset
+// and the picker shows its placeholder instead of a wrong selection.
+const RATE_PRESETS = Array.from({ length: (3000 - 500) / 50 + 1 }, (_, i) => String(500 + i * 50));
+const RATE_PRESET_OPTIONS = RATE_PRESETS.map((r) => ({ label: `₹${r}`, value: r }));
+
 // Categories like Skilled/Unskilled/Helper, each with a default rate --
 // assigning one to a worker (from the Wage Rate worker detail screen)
 // sets their rate to this default unless they already have their own.
@@ -178,8 +186,15 @@ export default function WorkerTypesScreen({}: Props) {
         ]}
         onChange={(v) => setRateType(v as "daily" | "monthly")}
       />
+      <SelectField
+        label="Default rate -- quick pick"
+        value={RATE_PRESETS.includes(rate) ? rate : null}
+        options={RATE_PRESET_OPTIONS}
+        onChange={setRate}
+        placeholder="Choose a common rate, or type your own below"
+      />
       <View style={styles.fieldWrap}>
-        <Text style={styles.label}>Default rate</Text>
+        <Text style={styles.label}>Default rate -- or type your own</Text>
         <TextInput
           style={styles.input}
           value={rate}

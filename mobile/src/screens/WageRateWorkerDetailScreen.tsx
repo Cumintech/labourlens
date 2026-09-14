@@ -54,6 +54,7 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
   const [refreshing, setRefreshing] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [designation, setDesignation] = useState("");
+  const [editingDesignation, setEditingDesignation] = useState(false);
   const [savingDesignation, setSavingDesignation] = useState(false);
 
   const load = useCallback(async () => {
@@ -128,6 +129,7 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
       const save = compliance ? updateWorkerCompliance : createWorkerCompliance;
       const updated = await save(token, workerId, { designation_or_nature_of_work: designation.trim() });
       setCompliance(updated);
+      setEditingDesignation(false);
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Couldn't reach the server.";
       Alert.alert("Could not save designation", message);
@@ -164,68 +166,80 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
         <ProfileRow label="Age" value={age !== null ? `${age} years` : "-"} />
         <ProfileRow label="Gender" value={worker.gender ?? "-"} />
         <ProfileRow label="Mobile" value={worker.mobile ?? "-"} />
-        <ProfileRow label="Device ID" value={worker.device_user_id ?? "(no device id mapped yet)"} />
-        <View style={styles.designationRow}>
-          <Text style={styles.profileLabel}>Designation</Text>
-          <View style={styles.designationEditRow}>
-            <TextInput
-              style={styles.designationInput}
-              value={designation}
-              onChangeText={setDesignation}
-              placeholder="e.g. Electrician"
-              placeholderTextColor={colors.muted}
-            />
-            <TouchableOpacity
-              style={[styles.designationSaveButton, savingDesignation && styles.buttonDisabled]}
-              onPress={handleSaveDesignation}
-              disabled={savingDesignation || designation.trim() === (compliance?.designation_or_nature_of_work ?? "")}
-            >
-              {savingDesignation ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.designationSaveText}>Save</Text>}
+        <ProfileRow label="Device ID" value={worker.device_user_id ?? "(no device id mapped yet)"} warn={!worker.device_user_id} />
+        {editingDesignation ? (
+          <View style={styles.designationRow}>
+            <Text style={styles.profileLabel}>Designation</Text>
+            <View style={styles.designationEditRow}>
+              <TextInput
+                style={styles.designationInput}
+                value={designation}
+                onChangeText={setDesignation}
+                placeholder="e.g. Electrician"
+                placeholderTextColor={colors.muted}
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[styles.designationSaveButton, savingDesignation && styles.buttonDisabled]}
+                onPress={handleSaveDesignation}
+                disabled={savingDesignation}
+              >
+                {savingDesignation ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.designationSaveText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.profileRow}>
+            <Text style={styles.profileLabel}>Designation</Text>
+            <TouchableOpacity style={styles.designationValueRow} onPress={() => setEditingDesignation(true)}>
+              <Text style={styles.profileValue}>{compliance?.designation_or_nature_of_work || "-"}</Text>
+              <Text style={styles.editIcon}>✎</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        )}
       </View>
 
-      <Text style={styles.sectionLabel}>Worker Type</Text>
-      <WorkerTypeSelect
-        label=""
-        token={token ?? ""}
-        workerTypes={workerTypes}
-        value={worker.worker_type_id}
-        onChange={handleAssignType}
-        onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
-        noneLabel="No type assigned"
-        disabled={assigning}
-      />
-      <Text style={styles.helper}>Assigning a type sets this worker's rate to the type's default, unless they already have one.</Text>
-
-      <Text style={styles.sectionLabel}>Current Wage Rate</Text>
-      {currentRate ? (
-        <View style={styles.rateCard}>
-          <Text style={styles.rateValue}>
-            ₹{currentRate.basic} / {currentRate.rate_type === "daily" ? "day" : "month"}
-          </Text>
-          <Text style={styles.rateDetail}>Effective from {currentRate.effective_from}</Text>
+      <View style={styles.wageCard}>
+        <View style={styles.wageCardHead}>
+          <Text style={styles.wageCardTitle}>Wage</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("WageProfile", { workerId, workerName })}>
+            <Text style={styles.wageCardEdit}>✎ Edit</Text>
+          </TouchableOpacity>
         </View>
-      ) : (
-        <Text style={styles.empty}>No wage rate set yet.</Text>
-      )}
+        <WorkerTypeSelect
+          label="Worker type"
+          token={token ?? ""}
+          workerTypes={workerTypes}
+          value={worker.worker_type_id}
+          onChange={handleAssignType}
+          onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
+          noneLabel="No type assigned"
+          disabled={assigning}
+        />
+        <Text style={styles.helper}>Assigning a type sets this worker's rate to the type's default, unless they already have one.</Text>
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => navigation.navigate("WageProfile", { workerId, workerName })}
-      >
-        <Text style={styles.buttonText}>{currentRate ? "Edit Wage Rate" : "Set Wage Rate"}</Text>
-      </TouchableOpacity>
+        {currentRate ? (
+          <View style={styles.rateCard}>
+            <Text style={styles.rateValue}>
+              ₹{currentRate.basic} / {currentRate.rate_type === "daily" ? "day" : "month"}
+            </Text>
+            <Text style={styles.rateDetail}>Effective from {currentRate.effective_from}</Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.rateCardEmpty} onPress={() => navigation.navigate("WageProfile", { workerId, workerName })}>
+            <Text style={styles.empty}>No wage rate set yet -- tap Edit to set one.</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </ScrollView>
   );
 }
 
-function ProfileRow({ label, value }: { label: string; value: string }) {
+function ProfileRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
     <View style={styles.profileRow}>
       <Text style={styles.profileLabel}>{label}</Text>
-      <Text style={styles.profileValue}>{value}</Text>
+      <Text style={[styles.profileValue, warn && styles.profileValueWarn]}>{value}</Text>
     </View>
   );
 }
@@ -235,21 +249,26 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, paddingBottom: spacing.xl * 2 },
   title: { fontSize: 22, fontWeight: "700", color: colors.navy, marginBottom: spacing.md },
   profileCard: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.sm + 4, marginBottom: spacing.md },
-  profileRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
+  profileRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
   profileLabel: { fontSize: 13, color: colors.muted },
   profileValue: { fontSize: 13, fontWeight: "700", color: colors.navy },
+  profileValueWarn: { fontSize: 11.5, fontWeight: "700", color: colors.amberDark },
+  designationValueRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  editIcon: { fontSize: 13, color: colors.muted },
   designationRow: { paddingVertical: 6 },
   designationEditRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: 4 },
   designationInput: { flex: 1, backgroundColor: colors.white, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: colors.navy },
   designationSaveButton: { backgroundColor: colors.teal, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 8 },
   designationSaveText: { color: colors.white, fontSize: 12, fontWeight: "700" },
   buttonDisabled: { opacity: 0.6 },
-  sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs, textTransform: "uppercase" },
+  wageCard: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md },
+  wageCardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
+  wageCardTitle: { fontSize: 13, fontWeight: "800", color: colors.navy, textTransform: "uppercase" },
+  wageCardEdit: { fontSize: 12.5, fontWeight: "700", color: colors.teal },
   helper: { fontSize: 11, color: colors.muted, marginTop: -spacing.sm, marginBottom: spacing.sm },
   rateCard: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.sm + 4 },
   rateValue: { fontSize: 20, fontWeight: "700", color: colors.tealDark },
   rateDetail: { fontSize: 12, color: colors.tealDark, marginTop: 2 },
+  rateCardEmpty: { backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.sm + 4, alignItems: "center" },
   empty: { fontSize: 13, color: colors.muted },
-  button: { backgroundColor: colors.teal, borderRadius: radius.sm, padding: 16, alignItems: "center", marginTop: spacing.lg },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
 });

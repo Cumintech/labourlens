@@ -120,12 +120,11 @@ export default function WageRateWorkersScreen({ navigation }: Props) {
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{workerLabel(item)}</Text>
-              <Text style={styles.meta}>{type ? type.name : "No type assigned"}</Text>
               <Text style={styles.meta}>
-                {rate ? `₹${rate.basic} / ${rate.rate_type === "daily" ? "day" : "month"}` : "No wage rate set"}
+                {type ? type.name : "No type"} · {rate ? `₹${rate.basic} / ${rate.rate_type === "daily" ? "day" : "month"}` : "no rate set"}
               </Text>
-              <Text style={styles.meta}>Device ID: {item.device_user_id ?? "(no device id mapped yet)"}</Text>
             </View>
+            <View style={[styles.dot, item.device_user_id ? styles.dotGreen : styles.dotAmber]} />
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
         );
@@ -153,6 +152,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   name: { fontSize: 15, fontWeight: "700", color: colors.navy },
-  meta: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  meta: { fontSize: 11.5, color: colors.muted, marginTop: 2 },
+  dot: { width: 8, height: 8, borderRadius: 4, marginRight: spacing.sm },
+  dotGreen: { backgroundColor: colors.teal },
+  dotAmber: { backgroundColor: colors.amber },
   arrow: { fontSize: 22, color: colors.muted },
 });

@@ -62,6 +62,20 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
     }, [load]),
   );
 
+  // The banner's own CTA is the primary, most-visible entry point into
+  // mapping -- previously "Map users" only existed buried inside a
+  // per-device card below, disconnected from the alert telling the
+  // owner to go do it. No unified "map across every device" screen
+  // exists yet (DeviceUserMapping is per-device), so this jumps straight
+  // into the one device when there's only one (the common case), or the
+  // first device when there are several -- a real unified screen is a
+  // bigger follow-up, not something to build as a side effect of this fix.
+  function handleMapUsersFromBanner() {
+    if (devices.length === 0) return;
+    const target = devices[0];
+    navigation.navigate("DeviceUserMapping", { deviceId: target.id, deviceName: target.name });
+  }
+
   async function handleRefresh() {
     setRefreshing(true);
     try {
@@ -150,6 +164,11 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
               <Text style={styles.punchLinkText}>
                 {unmappedCount} unmapped punch{unmappedCount === 1 ? "" : "es"} need attention ›
               </Text>
+            </TouchableOpacity>
+          )}
+          {devices.length > 0 && (
+            <TouchableOpacity style={styles.bannerMapButton} onPress={handleMapUsersFromBanner}>
+              <Text style={styles.bannerMapButtonText}>Map users</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -248,6 +267,15 @@ const styles = StyleSheet.create({
   leadStatLabel: { fontSize: 13, fontWeight: "600", color: colors.amberDark, marginTop: 2 },
   leadStatOk: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, alignItems: "center" },
   leadStatOkText: { fontSize: 13, fontWeight: "700", color: colors.tealDark },
+  bannerMapButton: {
+    backgroundColor: colors.teal,
+    borderRadius: radius.sm,
+    paddingVertical: 12,
+    alignItems: "center",
+    width: "100%",
+    marginTop: spacing.md,
+  },
+  bannerMapButtonText: { color: colors.white, fontWeight: "700", fontSize: 14 },
   punchLinkRow: {
     marginTop: spacing.sm + 2,
     paddingTop: spacing.sm + 2,

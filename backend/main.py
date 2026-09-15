@@ -390,7 +390,18 @@ def get_worker(
     )
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    return worker
+    # Real bug, not a hypothetical: returning the bare ORM object here
+    # (unlike list_workers just above, which already does this same join)
+    # left device_user_id silently defaulting to WorkerOut's None every
+    # time, since Worker itself has no such column -- a worker showed as
+    # "not mapped yet" on this endpoint even with a confirmed mapping.
+    mapping = (
+        db.query(models.DeviceUserMapping.device_user_id)
+        .join(models.BiometricDevice, models.BiometricDevice.id == models.DeviceUserMapping.device_id)
+        .filter(models.BiometricDevice.owner_id == owner.id, models.DeviceUserMapping.worker_id == worker.id)
+        .first()
+    )
+    return WorkerOut(**worker.__dict__, device_user_id=mapping[0] if mapping else None)
 
 
 @app.patch("/workers/{worker_id}/deactivate", response_model=WorkerOut)

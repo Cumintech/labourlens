@@ -13,6 +13,21 @@ import { workerLabel } from "../workerLabel";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WageRateWorkers">;
 
+// numeric_employee_code is the one stable, unique per-owner identifier
+// every worker gets (auto-assigned sequentially at creation, backfilled
+// for anyone registered before that existed) -- the right field to sort
+// by here. It's a zero-padded string ("0001", "0012"), so this compares
+// the numeric value rather than lexically (a plain string sort happens
+// to agree up to 4 digits given the padding, but silently breaks once
+// an owner passes 9999 workers). A worker with no code yet (shouldn't
+// normally happen post-backfill, but not guaranteed) sorts last rather
+// than first, since it has no stable position to claim.
+function byEmployeeIdAscending(a: Worker, b: Worker): number {
+  const aCode = a.numeric_employee_code ? parseInt(a.numeric_employee_code, 10) : Infinity;
+  const bCode = b.numeric_employee_code ? parseInt(b.numeric_employee_code, 10) : Infinity;
+  return aCode - bCode;
+}
+
 // Entry point for the Wage Rate feature (Home tile): pick a labourer,
 // see their profile, set/edit their rate -- reuses the worker's
 // existing record rather than asking for anything twice. Worker Type
@@ -33,7 +48,7 @@ export default function WageRateWorkersScreen({ navigation }: Props) {
   const load = useCallback(async () => {
     if (!token) return;
     const [w, types] = await Promise.all([listWorkers(token), listWorkerTypes(token)]);
-    const active = w.filter((worker) => worker.status === "active");
+    const active = w.filter((worker) => worker.status === "active").sort(byEmployeeIdAscending);
     setWorkers(active);
     setWorkerTypes(types);
     const rateEntries = await Promise.all(

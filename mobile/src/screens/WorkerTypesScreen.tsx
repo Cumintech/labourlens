@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Alert, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ApiError, WorkerType, createWorkerType, deleteWorkerType, listWorkerTypes, updateWorkerType } from "../api/client";
 import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
@@ -179,69 +179,76 @@ export default function WorkerTypesScreen({}: Props) {
         </TouchableOpacity>
       )}
 
-      {sheetOpen && (
-        <View style={styles.sheet}>
-          <Text style={styles.sectionLabel}>{editingId ? "Edit type" : "Add a type"}</Text>
-          <View style={styles.fieldWrap}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="e.g. Skilled"
-              placeholderTextColor={colors.muted}
+      <Modal visible={sheetOpen} transparent animationType="fade" onRequestClose={resetForm}>
+        <View style={styles.backdrop}>
+          {/* Sibling to the sheet, not a wrapper around it -- a backdrop
+              that WRAPS the sheet lets DOM click events from the nested
+              TextInputs bubble up and dismiss the modal on react-native-web
+              (a real bug hit and fixed elsewhere in this app). */}
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={resetForm} />
+          <View style={styles.sheet}>
+            <Text style={styles.sectionLabel}>{editingId ? "Edit Worker Type" : "Add Worker Type"}</Text>
+            <View style={styles.fieldWrap}>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. Skilled"
+                placeholderTextColor={colors.muted}
+              />
+            </View>
+            <SelectField
+              label="Rate type"
+              value={rateType}
+              options={[
+                { label: "Daily rate", value: "daily" },
+                { label: "Monthly rate", value: "monthly" },
+              ]}
+              onChange={(v) => setRateType(v as "daily" | "monthly")}
             />
-          </View>
-          <SelectField
-            label="Rate type"
-            value={rateType}
-            options={[
-              { label: "Daily rate", value: "daily" },
-              { label: "Monthly rate", value: "monthly" },
-            ]}
-            onChange={(v) => setRateType(v as "daily" | "monthly")}
-          />
-          <SelectField
-            label="Default rate -- quick pick"
-            value={RATE_PRESETS.includes(rate) ? rate : null}
-            options={RATE_PRESET_OPTIONS}
-            onChange={setRate}
-            placeholder="Choose a common rate, or type your own below"
-          />
-          <View style={styles.fieldWrap}>
-            <Text style={styles.label}>Default rate -- or type your own</Text>
-            <TextInput
-              style={styles.input}
-              value={rate}
-              onChangeText={setRate}
-              placeholder="700"
-              placeholderTextColor={colors.muted}
-              keyboardType="numeric"
+            <SelectField
+              label="Default rate -- quick pick"
+              value={RATE_PRESETS.includes(rate) ? rate : null}
+              options={RATE_PRESET_OPTIONS}
+              onChange={setRate}
+              placeholder="Choose a common rate, or type your own below"
             />
-          </View>
+            <View style={styles.fieldWrap}>
+              <Text style={styles.label}>Default rate -- or type your own</Text>
+              <TextInput
+                style={styles.input}
+                value={rate}
+                onChangeText={setRate}
+                placeholder="700"
+                placeholderTextColor={colors.muted}
+                keyboardType="numeric"
+              />
+            </View>
 
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.saveButton, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-              {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.saveText}>{editingId ? "Save changes" : "Add type"}</Text>}
-            </TouchableOpacity>
-          </View>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.saveButton, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
+                {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.saveText}>{editingId ? "Save changes" : "Add type"}</Text>}
+              </TouchableOpacity>
+            </View>
 
-          {editingId && (
-            <TouchableOpacity
-              style={styles.removeTypeLink}
-              onPress={() => {
-                const type = types.find((t) => t.id === editingId);
-                if (type) handleDelete(type);
-              }}
-            >
-              <Text style={styles.removeLink}>Remove this type</Text>
-            </TouchableOpacity>
-          )}
+            {editingId && (
+              <TouchableOpacity
+                style={styles.removeTypeLink}
+                onPress={() => {
+                  const type = types.find((t) => t.id === editingId);
+                  if (type) handleDelete(type);
+                }}
+              >
+                <Text style={styles.removeLink}>Remove this type</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      )}
+      </Modal>
     </KeyboardScreen>
   );
 }
@@ -257,12 +264,19 @@ const styles = StyleSheet.create({
   chev: { color: colors.muted, fontSize: 18 },
   removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700" },
   sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
-  sheet: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.md,
+    maxHeight: "85%",
+  },
   fieldWrap: { marginBottom: spacing.md },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
-  input: { backgroundColor: colors.white, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.navy },
+  input: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.navy },
   buttonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
-  cancelButton: { flex: 1, paddingVertical: 16, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.white },
+  cancelButton: { flex: 1, paddingVertical: 16, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
   cancelText: { color: colors.muted, fontWeight: "700" },
   saveButton: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, padding: 16, alignItems: "center" },
   buttonDisabled: { opacity: 0.6 },

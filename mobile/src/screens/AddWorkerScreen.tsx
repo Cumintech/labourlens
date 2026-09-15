@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import {
   ApiError,
   WorkerType,
@@ -90,6 +91,13 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [backUri, setBackUri] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [autoFilled, setAutoFilled] = useState({ name: false, dob: false, gender: false, aadhaar_number: false, current_address: false });
+  // Worker Details starts hidden -- showing empty Name/DOB/etc. fields
+  // above an unstarted scan implied they should be filled in manually
+  // first, which fought against the scan-first flow. Revealed by a
+  // successful scan (both sides) or by choosing manual entry; once
+  // revealed it stays revealed (switching back to "Scan ID card"
+  // afterward doesn't hide already-entered data again).
+  const [detailsRevealed, setDetailsRevealed] = useState(false);
 
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
@@ -174,6 +182,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
         aadhaar_number: !!fields.aadhaar_number,
         current_address: !!fields.current_address,
       });
+      setDetailsRevealed(true);
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
       Alert.alert("Scan failed", message);
@@ -293,8 +302,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
     }
   }
 
-  const bothScanned = !!frontUri && !!backUri;
-  const step1Continueable = scanMode ? bothScanned && identityValid : identityValid;
+  const step1Continueable = detailsRevealed && identityValid;
 
   return (
     <KeyboardAvoidingView
@@ -325,7 +333,13 @@ export default function AddWorkerScreen({ navigation }: Props) {
               <TouchableOpacity style={[styles.segOption, scanMode && styles.segOptionActive]} onPress={() => setScanMode(true)}>
                 <Text style={[styles.segText, scanMode && styles.segTextActive]}>Scan ID card</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.segOption, !scanMode && styles.segOptionActive]} onPress={() => setScanMode(false)}>
+              <TouchableOpacity
+                style={[styles.segOption, !scanMode && styles.segOptionActive]}
+                onPress={() => {
+                  setScanMode(false);
+                  setDetailsRevealed(true);
+                }}
+              >
                 <Text style={[styles.segText, !scanMode && styles.segTextActive]}>Enter manually</Text>
               </TouchableOpacity>
             </View>
@@ -366,22 +380,26 @@ export default function AddWorkerScreen({ navigation }: Props) {
               </>
             )}
 
-            <Text style={styles.sectionTitle}>Worker details</Text>
-            <Field label="Name" value={name} onChangeText={(v) => { setName(v); setAutoFilled((a) => ({ ...a, name: false })); }} autoFilled={autoFilled.name} />
-            <View style={styles.dateFieldWrap}>
-              <DateField label="Date of birth" value={dob} onChange={(v) => { setDob(v); setAutoFilled((a) => ({ ...a, dob: false })); }} placeholder="Select date" />
-              {autoFilled.dob && <Text style={styles.autoTag}>Auto-filled</Text>}
-            </View>
-            {estimate?.underMinimumAge && (
-              <Text style={styles.warningText}>
-                This worker appears to be under the legal minimum working age (14) -- please verify the date of birth.
-                This does not block saving.
-              </Text>
+            {detailsRevealed && (
+              <Animated.View entering={FadeInDown.duration(300)}>
+                <Text style={styles.sectionTitle}>Worker details</Text>
+                <Field label="Name" value={name} onChangeText={(v) => { setName(v); setAutoFilled((a) => ({ ...a, name: false })); }} autoFilled={autoFilled.name} />
+                <View style={styles.dateFieldWrap}>
+                  <DateField label="Date of birth" value={dob} onChange={(v) => { setDob(v); setAutoFilled((a) => ({ ...a, dob: false })); }} placeholder="Select date" />
+                  {autoFilled.dob && <Text style={styles.autoTag}>Auto-filled</Text>}
+                </View>
+                {estimate?.underMinimumAge && (
+                  <Text style={styles.warningText}>
+                    This worker appears to be under the legal minimum working age (14) -- please verify the date of birth.
+                    This does not block saving.
+                  </Text>
+                )}
+                <SelectField label="Gender" value={gender || null} options={GENDER_OPTIONS} onChange={(v) => { setGender(v); setAutoFilled((a) => ({ ...a, gender: false })); }} placeholder="Select" />
+                <Field label="Aadhaar number" value={aadhaarNumber} onChangeText={(v) => { setAadhaarNumber(v); setAutoFilled((a) => ({ ...a, aadhaar_number: false })); }} autoFilled={autoFilled.aadhaar_number} keyboardType="number-pad" />
+                <Field label="Current address" value={currentAddress} onChangeText={(v) => { setCurrentAddress(v); setAutoFilled((a) => ({ ...a, current_address: false })); }} autoFilled={autoFilled.current_address} />
+                <Field label="Mobile" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
+              </Animated.View>
             )}
-            <SelectField label="Gender" value={gender || null} options={GENDER_OPTIONS} onChange={(v) => { setGender(v); setAutoFilled((a) => ({ ...a, gender: false })); }} placeholder="Select" />
-            <Field label="Aadhaar number" value={aadhaarNumber} onChangeText={(v) => { setAadhaarNumber(v); setAutoFilled((a) => ({ ...a, aadhaar_number: false })); }} autoFilled={autoFilled.aadhaar_number} keyboardType="number-pad" />
-            <Field label="Current address" value={currentAddress} onChangeText={(v) => { setCurrentAddress(v); setAutoFilled((a) => ({ ...a, current_address: false })); }} autoFilled={autoFilled.current_address} />
-            <Field label="Mobile" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
           </>
         )}
 

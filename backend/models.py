@@ -83,6 +83,15 @@ class Worker(Base):
     # case) -- see biometric.py.
     numeric_employee_code: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # The storage key (not the image itself) for this worker's ID-card
+    # photo -- see photo_storage.py. None means no photo uploaded yet.
+    # A single deterministic key per worker (not a history table): a
+    # replacement photo overwrites the same object in storage rather
+    # than accumulating old ones, per explicit request to avoid storage
+    # growth over time. Not encrypted -- a headshot isn't the kind of
+    # sensitive identifier the EncryptedString columns below protect.
+    photo_key: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # Plain last-4 for display ("•••• •••• 7412"); full number encrypted.
     aadhaar_last4: Mapped[str] = mapped_column(String(4), nullable=False)
     aadhaar_encrypted: Mapped[str] = mapped_column(EncryptedString, nullable=False)

@@ -29,7 +29,9 @@ from PIL import Image as PILImage
 from reportlab.lib import colors as pdf_colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import cm
+from reportlab.lib.units import cm, mm
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
@@ -1394,3 +1396,115 @@ def build_wageslip(db: Session, owner: models.Owner, worker: models.Worker, star
         elements.extend(_wageslip_month_elements(db, owner, styles, worker, month, year))
     doc.build(elements)
     return buf.getvalue(), "application/pdf", f"wageslip_{worker.id}_{start_date.isoformat()}_to_{end_date.isoformat()}.pdf"
+
+
+# --------------------------------------------------------------------------
+# Worker ID card -- deliberately NOT built on the register/statutory-form
+# machinery above (no bilingual header, no Table/Paragraph flowables): a
+# fixed-size badge has nothing to flow or paginate, so a raw Canvas with a
+# few draw calls is simpler and lighter than routing it through
+# SimpleDocTemplate for a single page that's always exactly one layout.
+# Standard credit-card-sized page (85.6mm x 54mm, ISO/IEC 7810 ID-1) --
+# meant to be printed and laminated, not read on screen. English-only,
+# Helvetica base fonts (no embedding) -- no Tamil requirement here unlike
+# Form 25/25-B, and avoiding font embedding keeps this genuinely tiny per
+# the explicit "under ~80-100KB" target.
+# --------------------------------------------------------------------------
+
+ID_CARD_PAGESIZE = (85.6 * mm, 54 * mm)
+
+
+def build_id_card(owner: models.Owner, worker: models.Worker, photo_bytes: bytes) -> tuple[bytes, str, str]:
+    width, height = ID_CARD_PAGESIZE
+    margin = 3 * mm
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=ID_CARD_PAGESIZE)
+
+    c.setLineWidth(0.75)
+    c.setStrokeColor(pdf_colors.HexColor("#1B2340"))
+    c.rect(1 * mm, 1 * mm, width - 2 * mm, height - 2 * mm)
+
+    # Header band -- factory name, the one line that has to fit
+    # regardless of how long it is, so it shrinks rather than overflows.
+    header_font_size = 9
+    while c.stringWidth(owner.factory_name, "Helvetica-Bold", header_font_size) > width - 2 * margin and header_font_size > 6:
+        header_font_size -= 0.5
+    c.setFont("Helvetica-Bold", header_font_size)
+    c.setFillColor(pdf_colors.HexColor("#1B2340"))
+    c.drawCentredString(width / 2, height - margin - header_font_size, owner.factory_name)
+
+    photo_w, photo_h = 18 * mm, 22.5 * mm  # matches the app's 400x500 upload aspect ratio
+    # Vertically centered on the card, not bottom-anchored -- the text
+    # block starts near the top and only runs as far down as it needs
+    # to, so a bottom-anchored photo left a large dead gap between the
+    # two instead of reading as one aligned card (caught by actually
+    # rendering and looking at a sample card, not just checking PDF
+    # validity/size).
+    photo_x, photo_y = margin, (height - photo_h) / 2
+    try:
+        c.drawImage(
+            ImageReader(io.BytesIO(photo_bytes)),
+            photo_x,
+            photo_y,
+            width=photo_w,
+            height=photo_h,
+            preserveAspectRatio=True,
+            anchor="c",
+        )
+    except Exception:
+        # A corrupt/unreadable photo blocks the whole card otherwise --
+        # draw an empty frame instead of failing the request; the owner
+        # can re-upload and reprint.
+        c.setStrokeColor(pdf_colors.HexColor("#9CA3AF"))
+        c.rect(photo_x, photo_y, photo_w, photo_h)
+    c.setStrokeColor(pdf_colors.HexColor("#1B2340"))
+    c.setLineWidth(0.5)
+    c.rect(photo_x, photo_y, photo_w, photo_h)
+
+    text_x = photo_x + photo_w + 3 * mm
+    text_width = width - margin - text_x
+
+    def wrap(text: str, font: str, size: float) -> list[str]:
+        words = text.split()
+        lines: list[str] = []
+        line = ""
+        for word in words:
+            candidate = f"{line} {word}".strip()
+            if c.stringWidth(candidate, font, size) > text_width and line:
+                lines.append(line)
+                line = word
+            else:
+                line = candidate
+        if line:
+            lines.append(line)
+        return lines
+
+    # Each entry: (wrapped lines, font, size, color, gap between its own
+    # lines, extra gap added AFTER this block before the next one).
+    blocks: list[tuple[list[str], str, float, str, float, float]] = [
+        (wrap(worker.name, "Helvetica-Bold", 9), "Helvetica-Bold", 9, "#12213D", 3.6 * mm, 0.5 * mm),
+        (wrap(f"Emp ID: {worker.numeric_employee_code or '-'}", "Helvetica", 6.5), "Helvetica", 6.5, "#2C3B58", 3 * mm, 0),
+    ]
+    if owner.factory_address:
+        blocks.append((wrap(owner.factory_address, "Helvetica", 5.5), "Helvetica", 5.5, "#5B6478", 2.6 * mm, 0))
+    if owner.mobile:
+        blocks.append((wrap(f"Contact: {owner.mobile}", "Helvetica", 5.5), "Helvetica", 5.5, "#5B6478", 2.6 * mm, 0))
+
+    # Measured, then vertically centered on the card as one block --
+    # rather than anchored under the header, which (caught by actually
+    # rendering a sample card, not just checking the PDF is valid) left
+    # the text hugging the top while the photo sat centered below it,
+    # reading as two misaligned halves instead of one balanced card.
+    total_text_height = sum(len(lines) * gap + extra for lines, _, _, _, gap, extra in blocks)
+    y = height / 2 + total_text_height / 2
+    for lines, font, size, color, gap, extra in blocks:
+        c.setFont(font, size)
+        c.setFillColor(pdf_colors.HexColor(color))
+        for line in lines:
+            c.drawString(text_x, y, line)
+            y -= gap
+        y -= extra
+
+    c.showPage()
+    c.save()
+    return buf.getvalue(), "application/pdf", f"id_card_{worker.id}.pdf"

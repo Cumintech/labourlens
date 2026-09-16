@@ -10,6 +10,14 @@ python-multipart==0.0.20
 psycopg2-binary==2.9.10
 pydantic[email]==2.10.4
 
+# Worker ID-card photo storage (see photo_storage.py) -- talks to
+# Supabase Storage's plain REST API directly rather than pulling in the
+# full supabase-py SDK, which drags in its own realtime/postgrest/auth
+# clients this project has no use for. Was already resolvable
+# transitively (verify_*.py scripts already `import requests`), pinned
+# explicitly now that backend runtime code depends on it directly too.
+requests==2.34.2
+
 # Aadhaar OCR (see ocr.py for why EasyOCR over Tesseract on this
 # machine). Heavy (PyTorch-based) -- revisit if this ends up deployed
 # somewhere Tesseract's system binary is easy to install (any normal

@@ -107,6 +107,11 @@ class WorkerOut(BaseModel):
     # numeric_employee_code could theoretically be used as a direct
     # device ID (that path has no confirmation record to point to).
     device_user_id: str | None = None
+    # Whether an ID-card photo is on file -- see models.Worker.photo_key.
+    # Deliberately not the storage key itself (an internal detail the
+    # client has no use for and shouldn't be able to guess/construct
+    # URLs from); presence is what "ID Card: Generated" reads off of.
+    photo_key: str | None = None
     created_at: datetime
 
 

@@ -12,6 +12,7 @@ import biometric_api
 import forms
 import models
 import ocr
+import photo_storage
 import reports
 import sync_worker
 from attendance_service import upsert_attendance
@@ -402,6 +403,67 @@ def get_worker(
         .first()
     )
     return WorkerOut(**worker.__dict__, device_user_id=mapping[0] if mapping else None)
+
+
+# The mobile app compresses to ~400x500px JPEG at ~60-70% quality before
+# ever sending this (see AddWorkerScreen/expo-image-manipulator) -- this
+# is a server-side safety net, not the primary size control, since a
+# client is never fully trustworthy about following its own rules.
+MAX_PHOTO_UPLOAD_BYTES = 100 * 1024
+
+
+@app.post("/workers/{worker_id}/photo", response_model=WorkerOut)
+async def upload_worker_photo(
+    worker_id: int,
+    photo: UploadFile = File(...),
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    worker = _get_owned_worker(worker_id, owner, db)
+    photo_bytes = await photo.read()
+    if len(photo_bytes) > MAX_PHOTO_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Photo is too large ({len(photo_bytes) // 1024}KB) -- must be under {MAX_PHOTO_UPLOAD_BYTES // 1024}KB.",
+        )
+    try:
+        key = photo_storage.upload_worker_photo(worker.id, photo_bytes)
+    except photo_storage.PhotoStorageNotConfigured as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    worker.photo_key = key
+    db.commit()
+    db.refresh(worker)
+    mapping = (
+        db.query(models.DeviceUserMapping.device_user_id)
+        .join(models.BiometricDevice, models.BiometricDevice.id == models.DeviceUserMapping.device_id)
+        .filter(models.BiometricDevice.owner_id == owner.id, models.DeviceUserMapping.worker_id == worker.id)
+        .first()
+    )
+    return WorkerOut(**worker.__dict__, device_user_id=mapping[0] if mapping else None)
+
+
+@app.post("/workers/{worker_id}/id-card")
+def generate_id_card(
+    worker_id: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    worker = _get_owned_worker(worker_id, owner, db)
+    if not worker.photo_key:
+        raise HTTPException(status_code=400, detail="Upload a photo for this worker before generating an ID card.")
+    try:
+        photo_bytes = photo_storage.get_worker_photo(worker.photo_key)
+    except photo_storage.PhotoStorageNotConfigured as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    # Generated fresh from the stored photo + current worker/factory data
+    # every time, not cached as its own separate file -- per explicit
+    # request, storing both a photo AND a redundant PDF copy of the same
+    # information isn't worth the extra storage for how cheap this is to
+    # regenerate (a handful of Canvas draw calls, no per-worker register
+    # scan like Form 25).
+    content, media_type, filename = forms.build_id_card(owner, worker, photo_bytes)
+    _log_form_generation(db, owner, "id_card", worker_id, None, None, "generated")
+    return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @app.patch("/workers/{worker_id}/deactivate", response_model=WorkerOut)
@@ -1270,12 +1332,18 @@ def list_form_templates(
     returns an empty list rather than an error -- the frontend already
     handles "no form types available" the same way it handles "no
     workers yet"."""
-    return (
+    templates = (
         db.query(models.FormTemplate)
         .filter(models.FormTemplate.state == state)
         .order_by(models.FormTemplate.id)
         .all()
     )
+    # ID Card isn't a state-specific statutory register (unlike
+    # everything else in form_templates) -- it's the same document
+    # regardless of which state's forms an owner is on, so it's appended
+    # here rather than seeded as a per-state DB row that would need
+    # inserting again for every future state.
+    return [*templates, FormTemplateOut(form_code="id_card", label="ID Card (Duplicate)", is_available=True)]
 
 
 def _generate_form_content(

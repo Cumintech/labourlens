@@ -1,4 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { File } from "expo-file-system";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -24,14 +26,17 @@ import {
   createWageProfile,
   createWorker,
   createWorkerCompliance,
+  generateIdCard,
   listWorkerTypes,
   scanAadhaar,
+  uploadWorkerPhoto,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import SelectField from "../components/SelectField";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { sharePdfBytes } from "../pdfShare";
 import { colors, radius, spacing } from "../theme";
 import { autofillFromWorkerType } from "../workerTypeAutofill";
 
@@ -43,8 +48,17 @@ const GENDER_OPTIONS = [
   { label: "Other", value: "Other" },
 ];
 
-const STEPS = ["Identity", "Compliance", "Wage"] as const;
-type Step = 1 | 2 | 3;
+const STEPS = ["Identity", "Compliance", "Wage", "ID Card"] as const;
+type Step = 1 | 2 | 3 | 4;
+
+// Matches the ID card's own photo box aspect ratio (forms.py's
+// build_id_card) and the backend's server-side size cap -- resized and
+// re-encoded here, client-side, BEFORE upload, so the network payload
+// and the backend's storage cost stay small regardless of how large the
+// phone's native camera/gallery photo actually is.
+const ID_PHOTO_WIDTH = 400;
+const ID_PHOTO_HEIGHT = 500;
+const ID_PHOTO_JPEG_QUALITY = 0.65;
 
 // OCR text doesn't reliably come back as exactly "Male"/"Female"/"Other"
 // -- normalize onto one of the three canonical values the dropdown
@@ -130,6 +144,19 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [otherAllowances, setOtherAllowances] = useState("");
   const [lwfAmount, setLwfAmount] = useState("");
 
+  // --- Step 4: ID Card, optional ---
+  // Worker is created at the Step 3 -> 4 transition (see
+  // handleCreateWorker) since uploading a photo needs a real worker_id
+  // to attach it to -- everything before this step stays purely local
+  // state, nothing is saved until Continue is pressed on Wage.
+  const [createdWorkerId, setCreatedWorkerId] = useState<number | null>(null);
+  const [createdWorkerName, setCreatedWorkerName] = useState("");
+  const [rawPhotoUri, setRawPhotoUri] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoUploaded, setPhotoUploaded] = useState(false);
+  const [cardOfferDismissed, setCardOfferDismissed] = useState(false);
+  const [generatingCard, setGeneratingCard] = useState(false);
+
   const [saving, setSaving] = useState(false);
 
   const estimate = useMemo(() => estimateCategory(dob), [dob]);
@@ -214,20 +241,27 @@ export default function AddWorkerScreen({ navigation }: Props) {
       setStep(2);
     } else if (step === 2) {
       setStep(3);
-    } else {
-      handleSave();
+    } else if (step === 3) {
+      handleCreateWorker();
     }
   }
 
   function goBack() {
     if (step === 1) {
       navigation.goBack();
-    } else {
+    } else if (step < 4) {
       setStep((s) => (s - 1) as Step);
     }
+    // No back navigation from step 4 -- the worker record (and any
+    // compliance/wage data) is already saved by the time this step is
+    // reached, so "back" has nothing safe to undo into.
   }
 
-  async function handleSave() {
+  // Creates the worker + optional compliance/wage, same as this screen's
+  // old single final save step -- now happens at the Wage -> ID Card
+  // transition instead of at the very end, since Step 4's photo upload
+  // needs a real worker_id to attach to.
+  async function handleCreateWorker() {
     if (!identityValid || !token) return;
     setSaving(true);
     const warnings: string[] = [];
@@ -293,13 +327,86 @@ export default function AddWorkerScreen({ navigation }: Props) {
           `${created.name} was saved, but the ${warnings.join(" and ")} didn't save -- add ${warnings.length === 1 ? "it" : "them"} later from the worker's own screen.`,
         );
       }
-      navigation.navigate("Home");
+      setCreatedWorkerId(created.id);
+      setCreatedWorkerName(created.name);
+      setStep(4);
     } catch (e) {
       const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
       Alert.alert("Save failed", message);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function pickPhoto(source: "camera" | "gallery") {
+    const permission =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        source === "camera" ? "Camera permission needed" : "Photo library permission needed",
+        `Enable ${source === "camera" ? "camera" : "photo library"} access to add an ID photo.`,
+      );
+      return;
+    }
+    // allowsEditing + aspect gives a native crop step on both iOS and
+    // Android for free -- a simple portrait-aspect crop is exactly what
+    // was asked for, and building a custom cropper for this would be a
+    // much heavier addition than the feature calls for.
+    const options: ImagePicker.ImagePickerOptions = {
+      mediaTypes: "images",
+      quality: 1,
+      allowsEditing: true,
+      aspect: [ID_PHOTO_WIDTH, ID_PHOTO_HEIGHT],
+    };
+    const result =
+      source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+    if (result.canceled || !result.assets[0]) return;
+    setRawPhotoUri(result.assets[0].uri);
+  }
+
+  // Resize + re-encode happens here, client-side, before the photo ever
+  // reaches the network -- a phone camera photo can be several MB; this
+  // brings it down to roughly the ID card's own printed photo size
+  // (see the module-level ID_PHOTO_* constants) so upload is fast and
+  // the backend's storage cost per worker stays tiny.
+  async function handleConfirmPhoto() {
+    if (!rawPhotoUri || !createdWorkerId || !token) return;
+    setUploadingPhoto(true);
+    try {
+      const rendered = await ImageManipulator.manipulate(rawPhotoUri).resize({ width: ID_PHOTO_WIDTH, height: ID_PHOTO_HEIGHT }).renderAsync();
+      const saved = await rendered.saveAsync({ compress: ID_PHOTO_JPEG_QUALITY, format: SaveFormat.JPEG });
+      if (__DEV__) {
+        const sizeBytes = (await new File(saved.uri).arrayBuffer()).byteLength;
+        console.log(`[id-card] compressed photo: ${saved.width}x${saved.height}, ${(sizeBytes / 1024).toFixed(1)}KB`);
+      }
+      await uploadWorkerPhoto(token, createdWorkerId, saved.uri);
+      setPhotoUploaded(true);
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't process or upload that photo. Please try again.";
+      Alert.alert("Photo upload failed", message);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function handleGenerateCard() {
+    if (!createdWorkerId || !token) return;
+    setGeneratingCard(true);
+    try {
+      const bytes = await generateIdCard(token, createdWorkerId);
+      await sharePdfBytes(bytes, "id_card");
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
+      Alert.alert("Could not generate ID card", message);
+    } finally {
+      setGeneratingCard(false);
+    }
+  }
+
+  function finishRegistration() {
+    navigation.navigate("Home");
   }
 
   const step1Continueable = detailsRevealed && identityValid;
@@ -492,19 +599,81 @@ export default function AddWorkerScreen({ navigation }: Props) {
             )}
           </>
         )}
+
+        {step === 4 && (
+          <>
+            <Text style={styles.sectionTitle}>ID card photo</Text>
+            <Text style={styles.hint}>
+              {createdWorkerName} has been saved. Add a photo now to generate their ID card, or skip this and do it
+              later from Forms &amp; Reports.
+            </Text>
+
+            {!rawPhotoUri && !photoUploaded && (
+              <View style={styles.scanRow}>
+                <TouchableOpacity style={styles.scanCard} onPress={() => pickPhoto("camera")}>
+                  <Text style={styles.scanEmoji}>📷</Text>
+                  <Text style={styles.scanCardLabel}>Take Photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.scanCard} onPress={() => pickPhoto("gallery")}>
+                  <Text style={styles.scanEmoji}>🖼️</Text>
+                  <Text style={styles.scanCardLabel}>Choose from Gallery</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {rawPhotoUri && !photoUploaded && (
+              <Animated.View entering={FadeInDown.duration(250)}>
+                <Image source={{ uri: rawPhotoUri }} style={styles.photoPreview} resizeMode="cover" />
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={() => setRawPhotoUri(null)} disabled={uploadingPhoto}>
+                    <Text style={styles.cancelButtonText}>Retake / Choose Again</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.confirmButton, uploadingPhoto && styles.buttonDisabled]} onPress={handleConfirmPhoto} disabled={uploadingPhoto}>
+                    {uploadingPhoto ? <ActivityIndicator color={colors.white} /> : <Text style={styles.confirmButtonText}>Confirm</Text>}
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            )}
+
+            {photoUploaded && !cardOfferDismissed && (
+              <Animated.View entering={FadeInDown.duration(250)}>
+                <Image source={{ uri: rawPhotoUri! }} style={styles.photoPreview} resizeMode="cover" />
+                <Text style={styles.photoSavedTag}>Photo saved</Text>
+                <TouchableOpacity style={[styles.confirmButton, styles.generateCardButton, generatingCard && styles.buttonDisabled]} onPress={handleGenerateCard} disabled={generatingCard}>
+                  {generatingCard ? <ActivityIndicator color={colors.white} /> : <Text style={styles.confirmButtonText}>Generate ID Card</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.skipCardLink} onPress={() => setCardOfferDismissed(true)}>
+                  <Text style={styles.skipCardLinkText}>Skip for now</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            {photoUploaded && cardOfferDismissed && (
+              <Text style={styles.skipNote}>
+                Photo saved. You can generate this worker's ID card anytime from Forms &amp; Reports.
+              </Text>
+            )}
+          </>
+        )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: spacing.md + insets.bottom }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={goBack} disabled={saving}>
+        <TouchableOpacity style={[styles.backBtn, step === 4 && styles.buttonDisabled]} onPress={goBack} disabled={saving || step === 4}>
           <Text style={styles.backBtnText}>Back</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.nextBtn, ((step === 1 && !step1Continueable) || saving) && styles.buttonDisabled]}
-          onPress={goContinue}
-          disabled={(step === 1 && !step1Continueable) || saving}
-        >
-          {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.nextBtnText}>{step === 3 ? "Save Worker" : "Continue"}</Text>}
-        </TouchableOpacity>
+        {step === 4 ? (
+          <TouchableOpacity style={styles.nextBtn} onPress={finishRegistration}>
+            <Text style={styles.nextBtnText}>Finish</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || saving) && styles.buttonDisabled]}
+            onPress={goContinue}
+            disabled={(step === 1 && !step1Continueable) || saving}
+          >
+            {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.nextBtnText}>Continue</Text>}
+          </TouchableOpacity>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -611,4 +780,31 @@ const styles = StyleSheet.create({
   nextBtn: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
   nextBtnText: { color: colors.white, fontSize: 15, fontWeight: "700" },
   buttonDisabled: { opacity: 0.5 },
+  photoPreview: {
+    width: 160,
+    height: 200,
+    borderRadius: radius.md,
+    alignSelf: "center",
+    backgroundColor: colors.fieldBg,
+    marginBottom: spacing.md,
+  },
+  buttonRow: { flexDirection: "row", gap: spacing.sm },
+  cancelButton: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
+  cancelButtonText: { color: colors.navy, fontSize: 13, fontWeight: "700" },
+  confirmButton: { flex: 1, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
+  confirmButtonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+  generateCardButton: { alignSelf: "center", width: "100%", marginBottom: spacing.sm },
+  photoSavedTag: {
+    alignSelf: "center",
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.tealDark,
+    backgroundColor: colors.tealLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: spacing.md,
+  },
+  skipCardLink: { alignItems: "center", paddingVertical: spacing.sm },
+  skipCardLinkText: { color: colors.muted, fontSize: 13, fontWeight: "700" },
 });

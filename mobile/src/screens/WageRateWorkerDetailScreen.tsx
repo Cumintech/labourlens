@@ -11,6 +11,7 @@ import {
   WorkerType,
   assignWorkerType,
   createWorkerCompliance,
+  generateIdCard,
   getWageProfileHistory,
   getWorker,
   getWorkerCompliance,
@@ -22,6 +23,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { sharePdfBytes } from "../pdfShare";
 import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WageRateWorkerDetail">;
@@ -56,6 +58,7 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
   const [designation, setDesignation] = useState("");
   const [editingDesignation, setEditingDesignation] = useState(false);
   const [savingDesignation, setSavingDesignation] = useState(false);
+  const [generatingCard, setGeneratingCard] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -138,6 +141,26 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
     }
   }
 
+  // Same action either way -- there's no separately-stored PDF to
+  // "view" versus "reprint" (see backend/main.py's generate_id_card:
+  // generated fresh from the stored photo every time), so both the
+  // "Generated" and "Not generated yet" states route through this one
+  // handler. If no photo is on file yet, the backend's own 400 message
+  // explains that clearly rather than this screen guessing at one.
+  async function handleGenerateCard() {
+    if (!token) return;
+    setGeneratingCard(true);
+    try {
+      const bytes = await generateIdCard(token, workerId);
+      await sharePdfBytes(bytes, "id_card");
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't reach the server.";
+      Alert.alert("Could not generate ID card", message);
+    } finally {
+      setGeneratingCard(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -197,6 +220,21 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
             </TouchableOpacity>
           </View>
         )}
+        <View style={styles.profileRow}>
+          <Text style={styles.profileLabel}>ID Card</Text>
+          <View style={styles.designationValueRow}>
+            <Text style={[styles.profileValue, worker.photo_key ? styles.profileValueOk : styles.profileValueWarn]}>
+              {worker.photo_key ? "Generated" : "Not generated yet"}
+            </Text>
+            <TouchableOpacity onPress={handleGenerateCard} disabled={generatingCard}>
+              {generatingCard ? (
+                <ActivityIndicator color={colors.teal} size="small" />
+              ) : (
+                <Text style={styles.idCardLink}>{worker.photo_key ? "View / Reprint" : "Generate now"}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <View style={styles.wageCard}>
@@ -253,6 +291,8 @@ const styles = StyleSheet.create({
   profileLabel: { fontSize: 13, color: colors.muted },
   profileValue: { fontSize: 13, fontWeight: "700", color: colors.navy },
   profileValueWarn: { fontSize: 11.5, fontWeight: "700", color: colors.amberDark },
+  profileValueOk: { fontSize: 11.5, fontWeight: "700", color: colors.tealDark },
+  idCardLink: { fontSize: 12, fontWeight: "700", color: colors.teal },
   designationValueRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   editIcon: { fontSize: 13, color: colors.muted },
   designationRow: { paddingVertical: 6 },

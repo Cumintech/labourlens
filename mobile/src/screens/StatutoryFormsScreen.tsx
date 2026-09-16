@@ -1,20 +1,15 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-// expo-file-system's SDK 54 API is class-based (File/Directory/Paths) --
-// the old top-level FileSystem.downloadAsync()/cacheDirectory functions
-// were removed, not just renamed. Confirmed against the installed
-// package's own type definitions rather than assumed from memory.
-import { File, Paths } from "expo-file-system";
-import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { FormTemplate, Worker, emailForm, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
+import { FormTemplate, Worker, emailForm, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
 import { useAuth } from "../context/AuthContext";
 import { INDIAN_STATE_OPTIONS } from "../indianStates";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { sharePdfBytes } from "../pdfShare";
 import { colors, radius, spacing } from "../theme";
 import { workerLabel } from "../workerLabel";
 
@@ -37,6 +32,9 @@ const FORM_METADATA: Record<string, { hasPeriod: boolean; workerFilterable: bool
   form12: { hasPeriod: false, workerFilterable: true, workerRequired: false },
   form15: { hasPeriod: true, workerFilterable: false, workerRequired: false },
   wageslip: { hasPeriod: true, workerFilterable: true, workerRequired: true },
+  // Always exactly one worker, never a period -- an ID card is a
+  // snapshot of current identity/photo, not scoped to any date range.
+  id_card: { hasPeriod: false, workerFilterable: true, workerRequired: true },
 };
 const DEFAULT_FORM_METADATA = { hasPeriod: true, workerFilterable: false, workerRequired: false };
 
@@ -181,6 +179,15 @@ export default function StatutoryFormsScreen({}: Props) {
     if (!token || !validateSelection()) return;
     setDownloading(true);
     try {
+      // ID Card is generated through its own POST endpoint (see
+      // backend/main.py's generate_id_card), not the generic GET
+      // /forms/{code} dispatcher every other form uses -- it operates on
+      // one worker's stored photo rather than a date-scoped register.
+      if (formCode === "id_card") {
+        const bytes = await generateIdCard(token, selectedWorkerId!);
+        await sharePdfBytes(bytes, "id_card");
+        return;
+      }
       const url = getFormDownloadUrl(formCode, {
         workerId: formOption.workerFilterable ? selectedWorkerId ?? undefined : undefined,
         startDate: formOption.hasPeriod ? computed.start : undefined,
@@ -207,14 +214,7 @@ export default function StatutoryFormsScreen({}: Props) {
         return;
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
-      const destination = new File(Paths.cache, `${formCode}_${Date.now()}.pdf`);
-      destination.create({ overwrite: true });
-      destination.write(bytes);
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(destination.uri);
-      } else {
-        Alert.alert("Downloaded", `Saved to ${destination.uri}`);
-      }
+      await sharePdfBytes(bytes, formCode);
     } catch (e: any) {
       Alert.alert("Download failed", e?.message ?? "Couldn't reach the server.");
     } finally {
@@ -315,25 +315,32 @@ export default function StatutoryFormsScreen({}: Props) {
       )}
 
       <TouchableOpacity style={[styles.button, downloading && styles.buttonDisabled]} onPress={handleDownload} disabled={downloading}>
-        {downloading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Download PDF</Text>}
+        {downloading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>{formCode === "id_card" ? "Download / Share PDF" : "Download PDF"}</Text>}
       </TouchableOpacity>
+      {formCode === "id_card" && (
+        <Text style={styles.helper}>Reprints this worker's existing ID card from their stored photo and current details.</Text>
+      )}
 
-      <Text style={styles.sectionLabel}>Or email it</Text>
-      <View style={styles.emailRow}>
-        <TextInput
-          style={[styles.input, styles.emailInput]}
-          value={recipientEmail}
-          onChangeText={setRecipientEmail}
-          placeholder="owner@example.com"
-          placeholderTextColor={colors.muted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-        />
-        <TouchableOpacity style={[styles.buttonGhost, styles.emailButton, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
-          {emailing ? <ActivityIndicator color={colors.teal} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
-        </TouchableOpacity>
-      </View>
+      {formCode !== "id_card" && (
+        <>
+          <Text style={styles.sectionLabel}>Or email it</Text>
+          <View style={styles.emailRow}>
+            <TextInput
+              style={[styles.input, styles.emailInput]}
+              value={recipientEmail}
+              onChangeText={setRecipientEmail}
+              placeholder="owner@example.com"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+            />
+            <TouchableOpacity style={[styles.buttonGhost, styles.emailButton, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
+              {emailing ? <ActivityIndicator color={colors.teal} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </KeyboardScreen>
   );
 }

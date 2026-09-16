@@ -156,6 +156,10 @@ export type Worker = {
   // an error. Never the direct-employee-code enrollment path (that has
   // no separate confirmation record to show here).
   device_user_id: string | null;
+  // Whether an ID-card photo is on file -- an opaque storage key, not a
+  // URL; its only client-side use is "is this non-null" for the ID Card
+  // status row. null means no photo uploaded yet.
+  photo_key: string | null;
   created_at: string;
 };
 
@@ -248,6 +252,41 @@ export async function scanAadhaar(
     await throwForErrorResponse(res, "OCR failed");
   }
   return res.json();
+}
+
+// `uri` is expected to already be a small, compressed JPEG (see
+// AddWorkerScreen's use of expo-image-manipulator before calling this) --
+// the backend also enforces a hard size cap as a safety net, but this
+// call sends whatever it's given as-is, no client-side re-check.
+export async function uploadWorkerPhoto(token: string, workerId: number, uri: string): Promise<Worker> {
+  const formData = new FormData();
+  formData.append("photo", { uri, name: "photo.jpg", type: "image/jpeg" } as any);
+  const res = await fetch(`${API_BASE_URL}/workers/${workerId}/photo`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    await throwForErrorResponse(res, "Photo upload failed");
+  }
+  return res.json();
+}
+
+// Returns the raw PDF bytes directly (not a URL to separately fetch) --
+// unlike the other forms, this is a POST (see backend/main.py's
+// generate_id_card), so it doesn't fit getFormDownloadUrl's
+// build-a-GET-URL pattern; callers write these bytes to a file and hand
+// off to Sharing the same way StatutoryFormsScreen does for every other
+// generated PDF.
+export async function generateIdCard(token: string, workerId: number): Promise<Uint8Array> {
+  const res = await fetch(`${API_BASE_URL}/workers/${workerId}/id-card`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    await throwForErrorResponse(res, "ID card generation failed");
+  }
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 export function createWorker(token: string, input: WorkerCreateInput): Promise<Worker> {

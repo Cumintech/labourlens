@@ -9,7 +9,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Labour Lens uses the camera to scan Aadhaar cards for worker registration."
+        "NSCameraUsageDescription": "Labour Lens uses the camera to scan Aadhaar cards for worker registration.",
+        "NSPhotoLibraryUsageDescription": "Labour Lens uses your photo library to attach a worker's photo for their ID card."
       }
     },
     "android": {
@@ -28,7 +29,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Labour Lens uses the camera to scan Aadhaar cards for worker registration."
+          "cameraPermission": "Labour Lens uses the camera to scan Aadhaar cards for worker registration.",
+          "photosPermission": "Labour Lens uses your photo library to attach a worker's photo for their ID card."
         }
       ],
       "@react-native-community/datetimepicker",

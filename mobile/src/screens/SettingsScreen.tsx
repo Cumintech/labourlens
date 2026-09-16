@@ -1,7 +1,8 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ApiError, deleteAccount } from "../api/client";
 import { useAppLock } from "../context/AppLockContext";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -15,7 +16,7 @@ type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 const PIN_PATTERN = /^\d{4}$/;
 
 export default function SettingsScreen({ navigation }: Props) {
-  const { owner, logout } = useAuth();
+  const { owner, token, logout } = useAuth();
   const { isPinSet, setPin, clearPin, verifyPin } = useAppLock();
   const insets = useSafeAreaInsets();
 
@@ -26,11 +27,38 @@ export default function SettingsScreen({ navigation }: Props) {
   const [disablePinModal, setDisablePinModal] = useState(false);
   const [disablePinInput, setDisablePinInput] = useState("");
 
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
   function handleLogout() {
     Alert.alert("Log out", "Log out of Labour Lens on this device?", [
       { text: "Cancel", style: "cancel" },
       { text: "Log out", style: "destructive", onPress: logout },
     ]);
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      "Delete account",
+      "This permanently deletes your Labour Lens login. You won't be able to sign in again with this mobile number. Worker attendance and compliance records are kept as required by the Tamil Nadu Factories Act.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete account", style: "destructive", onPress: confirmDeleteAccount },
+      ],
+    );
+  }
+
+  async function confirmDeleteAccount() {
+    if (!token) return;
+    setDeletingAccount(true);
+    try {
+      await deleteAccount(token);
+      logout();
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
+      Alert.alert("Could not delete account", message);
+    } finally {
+      setDeletingAccount(false);
+    }
   }
 
   function handleToggleAppLock(value: boolean) {
@@ -142,6 +170,15 @@ export default function SettingsScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.row} onPress={handleLogout}>
           <Text style={styles.rowIcon}>🚪</Text>
           <Text style={[styles.rowValue, { color: colors.danger, fontWeight: "700" }]}>Log Out</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.row} onPress={handleDeleteAccount} disabled={deletingAccount}>
+          <Text style={styles.rowIcon}>🗑️</Text>
+          {deletingAccount ? (
+            <ActivityIndicator color={colors.danger} />
+          ) : (
+            <Text style={[styles.rowValue, { color: colors.danger, fontWeight: "700" }]}>Delete Account</Text>
+          )}
         </TouchableOpacity>
       </View>
 

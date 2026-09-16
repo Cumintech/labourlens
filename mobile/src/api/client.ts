@@ -54,6 +54,14 @@ export type FormTemplate = {
   is_available: boolean;
 };
 
+export async function deleteAccount(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/owners/me`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) await throwForErrorResponse(res, "Request failed");
+}
+
 export function listFormTemplates(token: string, state: string): Promise<FormTemplate[]> {
   return request<FormTemplate[]>(`/form-templates?state=${encodeURIComponent(state)}`, {
     headers: { Authorization: `Bearer ${token}` },

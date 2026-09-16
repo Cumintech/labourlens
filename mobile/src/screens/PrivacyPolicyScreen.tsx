@@ -22,6 +22,14 @@ export default function PrivacyPolicyScreen() {
         own factory's account and are never shared with any other factory owner.
       </Text>
 
+      <Text style={styles.heading}>Worker ID photos</Text>
+      <Text style={styles.body}>
+        If you generate a worker's ID card, their photo is captured from your camera or photo library, compressed
+        on your device, and stored the same way as their other records -- scoped to your factory's account, never
+        shared with any other Labour Lens account. The photo is used only to print or reprint that worker's ID
+        card and is kept for as long as their other worker records are (see "How long we keep it" below).
+      </Text>
+
       <Text style={styles.heading}>Who can see it</Text>
       <Text style={styles.body}>
         Only your own login can see your factory's data. Every record is scoped to your account on the server --

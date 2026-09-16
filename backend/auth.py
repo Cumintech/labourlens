@@ -61,4 +61,9 @@ def get_current_owner(
     owner = db.get(models.Owner, owner_id)
     if not owner:
         raise HTTPException(status_code=401, detail="Owner not found")
+    if owner.deleted_at is not None:
+        # A token issued before deletion is still validly signed and
+        # unexpired -- reject it explicitly here too, not just at login,
+        # so a deleted account can't keep using an old token.
+        raise HTTPException(status_code=401, detail="This account has been deleted")
     return owner

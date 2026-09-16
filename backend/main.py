@@ -1,4 +1,5 @@
 import os
+import secrets
 from contextlib import asynccontextmanager
 from datetime import date as date_, datetime, timezone
 
@@ -232,6 +233,8 @@ def login(body: OwnerLoginIn, db: Session = Depends(get_db)):
     owner = db.query(models.Owner).filter(models.Owner.mobile == body.mobile).first()
     if not owner or not verify_password(body.password, owner.password_hash):
         raise HTTPException(status_code=401, detail="Invalid mobile number or password")
+    if owner.deleted_at is not None:
+        raise HTTPException(status_code=401, detail="Invalid mobile number or password")
 
     token = create_token(owner.id)
     return TokenOut(access_token=token, owner=_owner_out(db, owner))
@@ -260,6 +263,26 @@ def update_factory_profile(
     db.commit()
     db.refresh(owner)
     return _owner_out(db, owner)
+
+
+@app.delete("/owners/me", status_code=204)
+def delete_account(owner: models.Owner = Depends(get_current_owner), db: Session = Depends(get_db)):
+    """Apple Guideline 5.1.1(v): an app that supports account creation
+    must also support account deletion, in-app. This does NOT cascade-
+    delete Worker/Attendance/WageProfile/etc. rows -- the Tamil Nadu
+    Factories Act requires those statutory registers to be retained
+    regardless of whether the owner's own login still exists (see
+    PrivacyPolicyScreen.tsx's "How long we keep it" section). Deleting
+    is therefore: invalidate the password so it can never verify again,
+    and stamp deleted_at so both this endpoint's own re-entrancy and
+    every future request through get_current_owner reject the account
+    outright, even with an unexpired token issued before deletion."""
+    if owner.deleted_at is not None:
+        return Response(status_code=204)
+    owner.password_hash = hash_password(secrets.token_urlsafe(32))
+    owner.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.post("/workers/ocr", response_model=OcrFieldsOut)

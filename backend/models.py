@@ -39,6 +39,14 @@ class Owner(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Account deletion (Apple Guideline 5.1.1(v)): set when the owner
+    # deletes their account. Login is blocked once this is set, but the
+    # row itself is kept -- Worker/Attendance/WageProfile rows still
+    # reference this owner_id, and the Tamil Nadu Factories Act requires
+    # those statutory registers to be retained regardless of whether the
+    # owner's own login still exists (see PrivacyPolicyScreen.tsx). Not a
+    # boolean flag so we also have a record of *when* it happened.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class WorkerType(Base):

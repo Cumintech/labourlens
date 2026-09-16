@@ -1,6 +1,7 @@
 import { StatusBar } from "expo-status-bar";
 import React from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import ErrorBoundary from "./src/components/ErrorBoundary";
 import { AppLockProvider, useAppLock } from "./src/context/AppLockContext";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { useAutoBiometricSync } from "./src/hooks/useAutoBiometricSync";
@@ -33,7 +34,9 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <AppLockProvider>
-          <Gate />
+          <ErrorBoundary>
+            <Gate />
+          </ErrorBoundary>
           <StatusBar style="auto" />
         </AppLockProvider>
       </AuthProvider>

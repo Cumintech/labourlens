@@ -1508,3 +1508,83 @@ def build_id_card(owner: models.Owner, worker: models.Worker, photo_bytes: bytes
     c.showPage()
     c.save()
     return buf.getvalue(), "application/pdf", f"id_card_{worker.id}.pdf"
+
+
+# --------------------------------------------------------------------------
+# Appointment Letter -- built on the same SimpleDocTemplate/Paragraph
+# machinery as Form 12/15/Wage Slip (reusing _header_elements for the
+# letterhead), not the raw-Canvas approach build_id_card uses -- this is a
+# normal flowing A4 document, not a fixed-size badge with nothing to flow.
+# English-only like the Wage Slip/Form 12/15 (no Tamil requirement on the
+# real reference this was built from). Every fact not on file for this
+# specific worker (no WorkerCompliance row, no WageProfile yet) renders as
+# "-" rather than blocking generation -- same convention Form 15 already
+# uses for a worker with no wage rate set.
+# --------------------------------------------------------------------------
+
+
+def build_appointment_letter(db: Session, owner: models.Owner, worker: models.Worker) -> tuple[bytes, str, str]:
+    compliance = (
+        db.query(models.WorkerCompliance).filter(models.WorkerCompliance.worker_id == worker.id).first()
+    )
+    designation = (compliance.designation_or_nature_of_work if compliance else None) or "-"
+    joining_date = compliance.date_of_joining if compliance else None
+
+    # Latest wage rate effective as of today -- same query used by
+    # GET /workers/{id}/wage-profile, not a computed monthly figure like
+    # compute_wage() (a letter states the rate, not a period's payout).
+    wage = (
+        db.query(models.WageProfile)
+        .filter(models.WageProfile.worker_id == worker.id, models.WageProfile.effective_from <= date.today())
+        .order_by(models.WageProfile.effective_from.desc(), models.WageProfile.id.desc())
+        .first()
+    )
+    if wage:
+        rate_unit = "day" if wage.rate_type == "daily" else "month"
+        wage_line = f"Rs. {wage.basic:.2f} per {rate_unit}"
+    else:
+        wage_line = "-"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm, leftMargin=2 * cm, rightMargin=2 * cm)
+    styles = getSampleStyleSheet()
+    body_style = ParagraphStyle("letter_body", parent=styles["Normal"], spaceAfter=10, leading=15)
+
+    elements = _header_elements(owner, styles, "Appointment Letter")
+    elements.append(Paragraph(f"Date: {date.today().isoformat()}", styles["Normal"]))
+    elements.append(Spacer(1, 0.6 * cm))
+
+    elements.append(Paragraph("To,", body_style))
+    elements.append(Paragraph(worker.name, body_style))
+    if worker.current_address:
+        elements.append(Paragraph(worker.current_address, body_style))
+    if worker.numeric_employee_code:
+        elements.append(Paragraph(f"Employee ID: {worker.numeric_employee_code}", body_style))
+    elements.append(Spacer(1, 0.4 * cm))
+
+    elements.append(Paragraph(f"Dear {worker.name},", body_style))
+    elements.append(
+        Paragraph(
+            f"We are pleased to appoint you as <b>{designation}</b> at <b>{owner.factory_name}</b>, "
+            f"with effect from <b>{joining_date.isoformat() if joining_date else '-'}</b>. Your wage for this "
+            f"role will be <b>{wage_line}</b>, subject to applicable statutory deductions. This appointment is "
+            "governed by the applicable provisions of labour law and the factory's standing policies.",
+            body_style,
+        )
+    )
+    elements.append(
+        Paragraph(
+            "Please treat this letter as confirmation of your appointment. We look forward to your valuable "
+            "contribution.",
+            body_style,
+        )
+    )
+    elements.append(Spacer(1, 1.2 * cm))
+
+    elements.append(Paragraph(f"For {owner.factory_name},", body_style))
+    elements.append(Spacer(1, 1.4 * cm))
+    elements.append(Paragraph("_________________________", body_style))
+    elements.append(Paragraph("Authorized Signatory", body_style))
+
+    doc.build(elements)
+    return buf.getvalue(), "application/pdf", f"appointment_letter_{worker.id}.pdf"

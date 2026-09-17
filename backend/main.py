@@ -489,6 +489,23 @@ def generate_id_card(
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
+@app.post("/workers/{worker_id}/appointment-letter")
+def generate_appointment_letter(
+    worker_id: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """No photo/compliance/wage-profile prerequisite, unlike the ID card --
+    every fact this pulls in is optional and renders as "-" when a worker
+    doesn't have it on file yet (see forms.build_appointment_letter), so
+    the letter can always be generated/reprinted, same as Forms & Reports'
+    other per-worker documents."""
+    worker = _get_owned_worker(worker_id, owner, db)
+    content, media_type, filename = forms.build_appointment_letter(db, owner, worker)
+    _log_form_generation(db, owner, "appointment_letter", worker_id, None, None, "generated")
+    return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
 @app.patch("/workers/{worker_id}/deactivate", response_model=WorkerOut)
 def deactivate_worker(
     worker_id: int,
@@ -1361,12 +1378,16 @@ def list_form_templates(
         .order_by(models.FormTemplate.id)
         .all()
     )
-    # ID Card isn't a state-specific statutory register (unlike
-    # everything else in form_templates) -- it's the same document
-    # regardless of which state's forms an owner is on, so it's appended
-    # here rather than seeded as a per-state DB row that would need
-    # inserting again for every future state.
-    return [*templates, FormTemplateOut(form_code="id_card", label="ID Card (Duplicate)", is_available=True)]
+    # ID Card and Appointment Letter aren't state-specific statutory
+    # registers (unlike everything else in form_templates) -- they're the
+    # same document regardless of which state's forms an owner is on, so
+    # they're appended here rather than seeded as per-state DB rows that
+    # would need inserting again for every future state.
+    return [
+        *templates,
+        FormTemplateOut(form_code="id_card", label="ID Card (Duplicate)", is_available=True),
+        FormTemplateOut(form_code="appointment_letter", label="Appointment Letter", is_available=True),
+    ]
 
 
 def _generate_form_content(

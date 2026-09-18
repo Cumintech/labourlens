@@ -5,6 +5,7 @@ from datetime import date as date_, datetime, timezone
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,7 @@ import forms
 import models
 import ocr
 import photo_storage
+import privacy_policy
 import reports
 import sync_worker
 from attendance_service import upsert_attendance
@@ -173,6 +175,24 @@ def _owner_out(db: Session, owner: models.Owner) -> OwnerOut:
 @app.get("/health", response_model=HealthOut)
 def health():
     return HealthOut(status="ok", time=datetime.now(timezone.utc))
+
+
+@app.get("/privacy-policy", response_class=HTMLResponse)
+def privacy_policy_page():
+    """Publicly reachable (no auth) -- this is the URL Play Console's
+    Data Safety form and App Store Connect's App Privacy section both
+    require. Renders from privacy_policy.py's SECTIONS, the same source
+    /privacy-policy.json below and the mobile app both read, so there's
+    exactly one place this text is ever written."""
+    return HTMLResponse(content=privacy_policy.render_html())
+
+
+@app.get("/privacy-policy.json")
+def privacy_policy_json():
+    """Fetched by PrivacyPolicyScreen.tsx to render the in-app screen --
+    see privacy_policy.py's module docstring for why the content lives
+    there instead of being hardcoded in both places."""
+    return {"title": privacy_policy.TITLE, "updated": privacy_policy.LAST_UPDATED, "sections": privacy_policy.SECTIONS}
 
 
 @app.post("/owners/signup", response_model=TokenOut, status_code=201)

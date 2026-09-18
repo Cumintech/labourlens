@@ -1,75 +1,69 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { PrivacyPolicyContent, getPrivacyPolicy } from "../api/client";
+import ErrorState from "../components/ErrorState";
 import { colors, spacing } from "../theme";
 
-// Describes what this specific app actually does with data -- not a
-// generic template. Kept in sync with the real behavior: Aadhaar is
-// encrypted at rest (only the last 4 digits are ever shown in the UI),
-// everything else lives only on the owner's own backend, and nothing
-// is shared with any third party by this app.
+// Content is fetched from the backend (GET /privacy-policy.json), not
+// hardcoded here -- the same content backs the public HTML page at
+// GET /privacy-policy (the URL Play Console/App Store Connect both
+// require), so there's exactly one place this text is ever written.
+// See backend/privacy_policy.py.
 export default function PrivacyPolicyScreen() {
   const insets = useSafeAreaInsets();
+  const [content, setContent] = useState<PrivacyPolicyContent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    getPrivacyPolicy()
+      .then((c) => {
+        setContent(c);
+        setLoadError(false);
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.teal} />
+      </View>
+    );
+  }
+
+  if (loadError || !content) {
+    return <ErrorState message="Couldn't load the Privacy Policy. Check your connection and try again." onRetry={load} />;
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}>
-      <Text style={styles.title}>Privacy Policy</Text>
-      <Text style={styles.updated}>Last updated: 2026</Text>
+      <Text style={styles.title}>{content.title}</Text>
+      <Text style={styles.updated}>{content.updated}</Text>
 
-      <Text style={styles.heading}>What we store</Text>
-      <Text style={styles.body}>
-        Worker Aadhaar numbers are encrypted before they're stored -- only the last 4 digits are ever shown on
-        screen or in any downloaded form. Attendance, wage rates, and payment records are stored only on your
-        own factory's account and are never shared with any other factory owner.
-      </Text>
-
-      <Text style={styles.heading}>Worker ID photos</Text>
-      <Text style={styles.body}>
-        If you generate a worker's ID card, their photo is captured from your camera or photo library, compressed
-        on your device, and stored the same way as their other records -- scoped to your factory's account, never
-        shared with any other Labour Lens account. The photo is used only to print or reprint that worker's ID
-        card and is kept for as long as their other worker records are (see "How long we keep it" below).
-      </Text>
-
-      <Text style={styles.heading}>Who can see it</Text>
-      <Text style={styles.body}>
-        Only your own login can see your factory's data. Every record is scoped to your account on the server --
-        no other Labour Lens account can query or view it.
-      </Text>
-
-      <Text style={styles.heading}>Where it goes</Text>
-      <Text style={styles.body}>
-        Data stays on this app's backend unless you explicitly download or email a form or report yourself. We
-        don't sell or share worker data with advertisers or other third parties.
-      </Text>
-
-      <Text style={styles.heading}>App Lock PIN</Text>
-      <Text style={styles.body}>
-        If you turn on App Lock, your 4-digit PIN is stored only on this device, in its secure hardware-backed
-        storage (Android Keystore / iOS Keychain) -- it's never sent to our servers.
-      </Text>
-
-      <Text style={styles.heading}>How long we keep it</Text>
-      <Text style={styles.body}>
-        Worker records, attendance, wage, and compliance data are kept for as long as your factory's account is
-        active, and afterward for as long as the Tamil Nadu Factories Act requires factories to retain these
-        statutory registers -- deactivating a worker does not delete their record, since the law requires the
-        register to keep showing everyone who has ever been employed. If you close your account, we retain data
-        only as long as the law requires before deleting it. Your consent to this policy, and when you gave it, is
-        itself kept as a record of that consent.
-      </Text>
-
-      <Text style={styles.heading}>Your control</Text>
-      <Text style={styles.body}>
-        You can deactivate a worker's record at any time from the app. Contact us via Help & Support if you need
-        a worker's data corrected or removed, or if you have questions about how long a specific record will be
-        kept.
-      </Text>
+      {content.sections.map((s) => (
+        <View key={s.heading}>
+          <Text style={styles.heading}>{s.heading}</Text>
+          <Text style={styles.body}>{s.body}</Text>
+        </View>
+      ))}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.white },
   content: { padding: spacing.lg, paddingBottom: spacing.xl },
   title: { fontSize: 22, fontWeight: "700", color: colors.navy },
   updated: { fontSize: 12, color: colors.muted, marginTop: 4, marginBottom: spacing.md },

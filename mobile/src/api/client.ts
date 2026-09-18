@@ -73,6 +73,21 @@ export async function deleteAccount(token: string): Promise<void> {
   if (!res.ok) await throwForErrorResponse(res, "Request failed");
 }
 
+export type PrivacyPolicyContent = {
+  title: string;
+  updated: string;
+  sections: { heading: string; body: string }[];
+};
+
+// No auth header -- this mirrors the same public GET /privacy-policy.json
+// the backend also renders as a plain HTML page at GET /privacy-policy
+// (the URL Play Console/App Store Connect require), so the content is
+// written in exactly one place, not duplicated between the app and a
+// hosted page.
+export function getPrivacyPolicy(): Promise<PrivacyPolicyContent> {
+  return request<PrivacyPolicyContent>("/privacy-policy.json");
+}
+
 export function listFormTemplates(token: string, state: string): Promise<FormTemplate[]> {
   return request<FormTemplate[]>(`/form-templates?state=${encodeURIComponent(state)}`, {
     headers: { Authorization: `Bearer ${token}` },

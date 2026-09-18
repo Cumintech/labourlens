@@ -26,6 +26,7 @@ import {
   createWageProfile,
   createWorker,
   createWorkerCompliance,
+  generateAppointmentLetter,
   generateIdCard,
   listWorkerTypes,
   scanAadhaar,
@@ -156,6 +157,10 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [photoUploaded, setPhotoUploaded] = useState(false);
   const [cardOfferDismissed, setCardOfferDismissed] = useState(false);
   const [generatingCard, setGeneratingCard] = useState(false);
+  // Appointment Letter -- independent of the photo/ID-card flow above:
+  // it needs only the worker's saved Identity/Compliance/Wage data
+  // (already committed by the time step 4 renders), no photo required.
+  const [generatingLetter, setGeneratingLetter] = useState(false);
 
   const [saving, setSaving] = useState(false);
 
@@ -402,6 +407,20 @@ export default function AddWorkerScreen({ navigation }: Props) {
       Alert.alert("Could not generate ID card", message);
     } finally {
       setGeneratingCard(false);
+    }
+  }
+
+  async function handleGenerateLetter() {
+    if (!createdWorkerId || !token) return;
+    setGeneratingLetter(true);
+    try {
+      const bytes = await generateAppointmentLetter(token, createdWorkerId);
+      await sharePdfBytes(bytes, "appointment_letter");
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
+      Alert.alert("Could not generate appointment letter", message);
+    } finally {
+      setGeneratingLetter(false);
     }
   }
 
@@ -653,6 +672,20 @@ export default function AddWorkerScreen({ navigation }: Props) {
                 Photo saved. You can generate this worker's ID card anytime from Forms &amp; Reports.
               </Text>
             )}
+
+            <View style={styles.letterSection}>
+              <Text style={styles.sectionTitle}>Appointment letter</Text>
+              <Text style={styles.hint}>
+                Generate {createdWorkerName}&apos;s appointment letter now, or do it later from Forms &amp; Reports.
+              </Text>
+              <TouchableOpacity
+                style={[styles.confirmButton, styles.generateCardButton, generatingLetter && styles.buttonDisabled]}
+                onPress={handleGenerateLetter}
+                disabled={generatingLetter}
+              >
+                {generatingLetter ? <ActivityIndicator color={colors.white} /> : <Text style={styles.confirmButtonText}>Generate Appointment Letter</Text>}
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </ScrollView>
@@ -794,6 +827,7 @@ const styles = StyleSheet.create({
   confirmButton: { flex: 1, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
   confirmButtonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
   generateCardButton: { alignSelf: "center", width: "100%", marginBottom: spacing.sm },
+  letterSection: { marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.fieldBg },
   photoSavedTag: {
     alignSelf: "center",
     fontSize: 11,

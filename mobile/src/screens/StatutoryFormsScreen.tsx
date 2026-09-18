@@ -2,7 +2,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { FormTemplate, Worker, emailForm, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
+import { FormTemplate, Worker, emailForm, generateAppointmentLetter, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
@@ -35,8 +35,26 @@ const FORM_METADATA: Record<string, { hasPeriod: boolean; workerFilterable: bool
   // Always exactly one worker, never a period -- an ID card is a
   // snapshot of current identity/photo, not scoped to any date range.
   id_card: { hasPeriod: false, workerFilterable: true, workerRequired: true },
+  // Same reasoning as id_card -- a letter reflects the worker's current
+  // designation/wage/joining date, not a date-scoped register.
+  appointment_letter: { hasPeriod: false, workerFilterable: true, workerRequired: true },
 };
 const DEFAULT_FORM_METADATA = { hasPeriod: true, workerFilterable: false, workerRequired: false };
+
+// Forms generated through their own dedicated POST endpoint (see
+// backend/main.py) rather than the generic GET /forms/{code} dispatcher
+// every date-scoped form uses -- each operates on a single worker's
+// current data, not a period. Sharing this map (instead of repeating an
+// `if (formCode === ...)` per form) is what keeps a third such form from
+// duplicating the same branching a third time.
+const DIRECT_PDF_GENERATORS: Record<string, (token: string, workerId: number) => Promise<Uint8Array>> = {
+  id_card: generateIdCard,
+  appointment_letter: generateAppointmentLetter,
+};
+const DIRECT_PDF_HELPER_TEXT: Record<string, string> = {
+  id_card: "Reprints this worker's existing ID card from their stored photo and current details.",
+  appointment_letter: "Generates this worker's appointment letter from their current designation, wage, and joining date on file.",
+};
 
 type PeriodPreset = "current_month" | "last_month" | "last_3_months" | "last_6_months" | "current_year" | "last_year" | "custom";
 
@@ -179,13 +197,10 @@ export default function StatutoryFormsScreen({}: Props) {
     if (!token || !validateSelection()) return;
     setDownloading(true);
     try {
-      // ID Card is generated through its own POST endpoint (see
-      // backend/main.py's generate_id_card), not the generic GET
-      // /forms/{code} dispatcher every other form uses -- it operates on
-      // one worker's stored photo rather than a date-scoped register.
-      if (formCode === "id_card") {
-        const bytes = await generateIdCard(token, selectedWorkerId!);
-        await sharePdfBytes(bytes, "id_card");
+      const directGenerator = DIRECT_PDF_GENERATORS[formCode];
+      if (directGenerator) {
+        const bytes = await directGenerator(token, selectedWorkerId!);
+        await sharePdfBytes(bytes, formCode);
         return;
       }
       const url = getFormDownloadUrl(formCode, {
@@ -315,13 +330,11 @@ export default function StatutoryFormsScreen({}: Props) {
       )}
 
       <TouchableOpacity style={[styles.button, downloading && styles.buttonDisabled]} onPress={handleDownload} disabled={downloading}>
-        {downloading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>{formCode === "id_card" ? "Download / Share PDF" : "Download PDF"}</Text>}
+        {downloading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>{DIRECT_PDF_GENERATORS[formCode] ? "Download / Share PDF" : "Download PDF"}</Text>}
       </TouchableOpacity>
-      {formCode === "id_card" && (
-        <Text style={styles.helper}>Reprints this worker's existing ID card from their stored photo and current details.</Text>
-      )}
+      {DIRECT_PDF_HELPER_TEXT[formCode] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[formCode]}</Text>}
 
-      {formCode !== "id_card" && (
+      {!DIRECT_PDF_GENERATORS[formCode] && (
         <>
           <Text style={styles.sectionLabel}>Or email it</Text>
           <View style={styles.emailRow}>

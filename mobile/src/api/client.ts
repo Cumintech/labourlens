@@ -54,6 +54,17 @@ export type FormTemplate = {
   is_available: boolean;
 };
 
+export async function generateAppointmentLetter(token: string, workerId: number): Promise<Uint8Array> {
+  const res = await fetch(`${API_BASE_URL}/workers/${workerId}/appointment-letter`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    await throwForErrorResponse(res, "Appointment letter generation failed");
+  }
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 export async function deleteAccount(token: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/owners/me`, {
     method: "DELETE",

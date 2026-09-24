@@ -83,6 +83,23 @@ class _Bilingual:
         return self.english
 
 
+# Every _Bilingual usage above is this module's OWN fixed reference text
+# (government form titles/headers, transcribed once). Owner-entered data --
+# a worker's name, address, father's name, designation -- can just as
+# easily be typed in Tamil, and until this check existed nothing routed
+# that dynamic text through the Tamil-safe rendering path at all: it fell
+# through to ReportLab's own Helvetica text drawing and rendered as solid
+# boxes (confirmed by actually registering a worker with a Tamil name and
+# looking at the generated PDFs -- including Form 25, whose own bilingual
+# title renders correctly on the very same page, proving the rasterizer
+# works fine and the gap was purely "dynamic text never used it").
+_TAMIL_UNICODE_BLOCK = range(0x0B80, 0x0C00)
+
+
+def _contains_tamil(text: str) -> bool:
+    return any(ord(ch) in _TAMIL_UNICODE_BLOCK for ch in text)
+
+
 _tamil_hb_face = hb.Face(open(_TAMIL_FONT_PATH, "rb").read())
 _tamil_ft_face = freetype.Face(_TAMIL_FONT_PATH)
 _TAMIL_RENDER_PX = 200  # internal rasterization size; downscaled to the requested point size afterward for crisp output
@@ -252,8 +269,15 @@ def _tamil_inline_image_tag(tamil: str, size_pt: float, color: str = "black") ->
     / Tamil: value" one-line layout, where a separate Image flowable
     isn't an option because Paragraph markup only accepts images by
     file path, not an in-memory buffer). The cache is keyed by content
-    and kept forever -- the set of Tamil labels used across all forms
-    is small and fixed, not user data, so there's nothing to evict."""
+    and kept forever. Originally this was only ever called with this
+    module's own small, fixed set of Tamil labels -- since
+    _safe_paragraph_text reuses this same function for owner-entered
+    dynamic text (a worker's name/designation embedded in an
+    Appointment Letter's prose), the cache can now grow with real
+    data too. Left as-is rather than adding eviction: Render's disk is
+    already ephemeral and wiped on every deploy (see photo_storage.py),
+    so this never accumulates past one deploy's lifetime, and each
+    cached file is a few KB at most."""
     rendered = _shape_and_rasterize_tamil_line(tamil, color)
     if rendered is None:
         return ""
@@ -634,6 +658,16 @@ _SMALL_CELL_STYLE = ParagraphStyle("small_cell", fontName="Helvetica", fontSize=
 _SMALL_HEADER_STYLE = ParagraphStyle("small_header", fontName="Helvetica-Bold", fontSize=6.5, leading=8, textColor=pdf_colors.white)
 
 
+# A worker's own data (name, address, father's name, designation) has no
+# fixed column width to measure against here -- unlike _bi()'s labels,
+# which are each hand-tuned to their one real column. This is a single
+# reasonable default wide enough for the register tables' actual widest
+# free-text columns (Form 12's address columns), not a precise per-call
+# value -- word-wrap still keeps a longer name/address from overflowing
+# even though it isn't tuned to Form 25's much narrower columns specifically.
+_DYNAMIC_TAMIL_CELL_MAX_WIDTH_PT = 90
+
+
 def _wrap_row(values: list, header: bool = False) -> list:
     """Wraps every cell in a Paragraph so long header labels and
     free-text values (addresses, bank details) wrap within their column
@@ -641,7 +675,12 @@ def _wrap_row(values: list, header: bool = False) -> list:
     wrap on their own. A _Bilingual cell (Form 25's headers) becomes a
     two-flowable cell instead: the English Paragraph plus a separately
     rendered Tamil image stacked underneath (see _render_tamil_image) --
-    reportlab table cells accept a list of flowables for exactly this."""
+    reportlab table cells accept a list of flowables for exactly this.
+    A plain string cell containing Tamil (owner-entered data, not one of
+    this module's own fixed labels) gets the same Tamil-image treatment
+    as a _Bilingual cell's Tamil half, instead of falling through to
+    ReportLab's own broken Tamil text drawing -- see _contains_tamil's
+    comment for how this gap was found."""
     style = _SMALL_HEADER_STYLE if header else _SMALL_CELL_STYLE
     color = "white" if header else "black"
     cells: list = []
@@ -652,9 +691,38 @@ def _wrap_row(values: list, header: bool = False) -> list:
             if tamil_image is not None:
                 cell_flowables.append(tamil_image)
             cells.append(cell_flowables)
+        elif isinstance(v, str) and _contains_tamil(v):
+            tamil_image = _render_tamil_image(v, style.fontSize, color=color, max_width_pt=_DYNAMIC_TAMIL_CELL_MAX_WIDTH_PT)
+            cells.append(tamil_image if tamil_image is not None else Paragraph(v, style))
         else:
             cells.append(Paragraph(str(v), style))
     return cells
+
+
+def _cell_or_tamil_image(text: str, font_size: float = 9, color: str = "black", max_width_pt: float | None = None):
+    """Same reasoning as _wrap_row's Tamil handling above, for a call
+    site (the Wage Slip) that builds its Table rows directly as plain
+    [label, value] pairs rather than routing every row through
+    _wrap_row -- that table has no single header row/column style for
+    _wrap_row's header/cell split to apply to."""
+    if not text or not _contains_tamil(text):
+        return text
+    image = _render_tamil_image(text, font_size, color=color, max_width_pt=max_width_pt)
+    return image if image is not None else text
+
+
+def _safe_paragraph_text(text: str, size_pt: float, color: str = "black") -> str:
+    """For a possibly-Tamil dynamic value (worker name, designation,
+    factory name) embedded INSIDE a larger Paragraph markup string
+    (the Appointment Letter's prose sentences) rather than occupying
+    its own table cell or flowable -- renders via the same Tamil-safe
+    pipeline as an inline <img> tag, since a separate Image flowable
+    isn't an option once the text is part of a sentence. See
+    _tamil_inline_image_tag's own docstring for the mechanism."""
+    if not text or not _contains_tamil(text):
+        return text
+    tag = _tamil_inline_image_tag(text, size_pt, color=color)
+    return tag if tag else text
 
 
 def _style_table(table: Table) -> None:
@@ -1354,8 +1422,13 @@ def _wageslip_month_elements(db: Session, owner: models.Owner, styles, worker: m
     else:
         rows = [
             ["Wage Slip No. / Worker ID No.", compliance.worker_code if compliance else "-"],
-            ["Name of the Worker", worker.name],
-            ["Nature of Work / Designation", compliance.designation_or_nature_of_work if compliance else "-"],
+            ["Name of the Worker", _cell_or_tamil_image(worker.name, font_size=9, max_width_pt=200)],
+            [
+                "Nature of Work / Designation",
+                _cell_or_tamil_image(
+                    compliance.designation_or_nature_of_work if compliance else "-", font_size=9, max_width_pt=200
+                ),
+            ],
             ["Wage Period", period_label],
             ["Minimum Wages / day or month", f"{wage['rate'].basic:.2f} / {wage['rate'].rate_type}"],
             ["Total Days Worked", str(wage["summary"]["days_worked"])],
@@ -1424,14 +1497,36 @@ def build_id_card(owner: models.Owner, worker: models.Worker, photo_bytes: bytes
     c.setStrokeColor(pdf_colors.HexColor("#1B2340"))
     c.rect(1 * mm, 1 * mm, width - 2 * mm, height - 2 * mm)
 
+    def draw_centred(x_center: float, y: float, text: str, font: str, size: float, color: str) -> None:
+        """c.drawCentredString() routed through the Tamil-safe rasterizer
+        when needed -- see draw_line's docstring further down for why a
+        raw Canvas can't just call c.drawString()/drawCentredString()
+        directly for Tamil text."""
+        if _contains_tamil(text):
+            rendered = _shape_and_rasterize_tamil_line(text, color)
+            if rendered is not None:
+                png_bytes, px_w, px_h = rendered
+                scale = size / _TAMIL_RENDER_PX
+                img_w, img_h = px_w * scale, px_h * scale
+                c.drawImage(
+                    ImageReader(io.BytesIO(png_bytes)), x_center - img_w / 2, y - img_h * 0.25,
+                    width=img_w, height=img_h, mask="auto",
+                )
+                return
+        c.setFont(font, size)
+        c.setFillColor(pdf_colors.HexColor(color))
+        c.drawCentredString(x_center, y, text)
+
     # Header band -- factory name, the one line that has to fit
     # regardless of how long it is, so it shrinks rather than overflows.
+    # stringWidth() only measures Latin/Helvetica correctly, so a Tamil
+    # factory name skips the shrink-to-fit loop (it isn't meaningful for
+    # a script Helvetica has no glyphs for) and draws at a fixed size.
     header_font_size = 9
-    while c.stringWidth(owner.factory_name, "Helvetica-Bold", header_font_size) > width - 2 * margin and header_font_size > 6:
-        header_font_size -= 0.5
-    c.setFont("Helvetica-Bold", header_font_size)
-    c.setFillColor(pdf_colors.HexColor("#1B2340"))
-    c.drawCentredString(width / 2, height - margin - header_font_size, owner.factory_name)
+    if not _contains_tamil(owner.factory_name):
+        while c.stringWidth(owner.factory_name, "Helvetica-Bold", header_font_size) > width - 2 * margin and header_font_size > 6:
+            header_font_size -= 0.5
+    draw_centred(width / 2, height - margin - header_font_size, owner.factory_name, "Helvetica-Bold", header_font_size, "#1B2340")
 
     photo_w, photo_h = 18 * mm, 22.5 * mm  # matches the app's 400x500 upload aspect ratio
     # Vertically centered on the card, not bottom-anchored -- the text
@@ -1465,6 +1560,12 @@ def build_id_card(owner: models.Owner, worker: models.Worker, photo_bytes: bytes
     text_width = width - margin - text_x
 
     def wrap(text: str, font: str, size: float) -> list[str]:
+        # c.stringWidth() only measures Latin/Helvetica glyphs correctly
+        # -- reuse the already-existing Tamil-aware wrapper (the same one
+        # _Bilingual cells use) instead of measuring Tamil text with the
+        # wrong font's metrics.
+        if _contains_tamil(text):
+            return _wrap_tamil_lines(text, size, max_width_pt=text_width)
         words = text.split()
         lines: list[str] = []
         line = ""
@@ -1478,6 +1579,27 @@ def build_id_card(owner: models.Owner, worker: models.Worker, photo_bytes: bytes
         if line:
             lines.append(line)
         return lines
+
+    def draw_line(x: float, y: float, text: str, font: str, size: float, color: str) -> None:
+        """c.drawString() routed through the Tamil-safe rasterizer when
+        needed. build_id_card draws directly on a raw Canvas, not
+        through Platypus, so it can't reuse _wrap_row's Paragraph/Image-
+        flowable approach -- this draws the same rasterized PNG via
+        c.drawImage() instead of c.drawString() at the equivalent
+        position. The y-offset is an approximation (there's no exposed
+        baseline metric from the rasterizer to align exactly), tuned to
+        look right rather than derived precisely."""
+        if _contains_tamil(text):
+            rendered = _shape_and_rasterize_tamil_line(text, color)
+            if rendered is not None:
+                png_bytes, px_w, px_h = rendered
+                scale = size / _TAMIL_RENDER_PX
+                img_w, img_h = px_w * scale, px_h * scale
+                c.drawImage(ImageReader(io.BytesIO(png_bytes)), x, y - img_h * 0.2, width=img_w, height=img_h, mask="auto")
+                return
+        c.setFont(font, size)
+        c.setFillColor(pdf_colors.HexColor(color))
+        c.drawString(x, y, text)
 
     # Each entry: (wrapped lines, font, size, color, gap between its own
     # lines, extra gap added AFTER this block before the next one).
@@ -1498,10 +1620,8 @@ def build_id_card(owner: models.Owner, worker: models.Worker, photo_bytes: bytes
     total_text_height = sum(len(lines) * gap + extra for lines, _, _, _, gap, extra in blocks)
     y = height / 2 + total_text_height / 2
     for lines, font, size, color, gap, extra in blocks:
-        c.setFont(font, size)
-        c.setFillColor(pdf_colors.HexColor(color))
         for line in lines:
-            c.drawString(text_x, y, line)
+            draw_line(text_x, y, line, font, size, color)
             y -= gap
         y -= extra
 
@@ -1554,18 +1674,26 @@ def build_appointment_letter(db: Session, owner: models.Owner, worker: models.Wo
     elements.append(Paragraph(f"Date: {date.today().isoformat()}", styles["Normal"]))
     elements.append(Spacer(1, 0.6 * cm))
 
+    # See _safe_paragraph_text's docstring -- a Tamil name/address/
+    # designation/factory-name embedded in these sentences would
+    # otherwise render as broken boxes via ReportLab's own font drawing.
+    body_font_size = body_style.fontSize
+    safe_name = _safe_paragraph_text(worker.name, body_font_size)
+    safe_designation = _safe_paragraph_text(designation, body_font_size)
+    safe_factory_name = _safe_paragraph_text(owner.factory_name, body_font_size)
+
     elements.append(Paragraph("To,", body_style))
-    elements.append(Paragraph(worker.name, body_style))
+    elements.append(Paragraph(safe_name, body_style))
     if worker.current_address:
-        elements.append(Paragraph(worker.current_address, body_style))
+        elements.append(Paragraph(_safe_paragraph_text(worker.current_address, body_font_size), body_style))
     if worker.numeric_employee_code:
         elements.append(Paragraph(f"Employee ID: {worker.numeric_employee_code}", body_style))
     elements.append(Spacer(1, 0.4 * cm))
 
-    elements.append(Paragraph(f"Dear {worker.name},", body_style))
+    elements.append(Paragraph(f"Dear {safe_name},", body_style))
     elements.append(
         Paragraph(
-            f"We are pleased to appoint you as <b>{designation}</b> at <b>{owner.factory_name}</b>, "
+            f"We are pleased to appoint you as <b>{safe_designation}</b> at <b>{safe_factory_name}</b>, "
             f"with effect from <b>{joining_date.isoformat() if joining_date else '-'}</b>. Your wage for this "
             f"role will be <b>{wage_line}</b>, subject to applicable statutory deductions. This appointment is "
             "governed by the applicable provisions of labour law and the factory's standing policies.",
@@ -1581,7 +1709,7 @@ def build_appointment_letter(db: Session, owner: models.Owner, worker: models.Wo
     )
     elements.append(Spacer(1, 1.2 * cm))
 
-    elements.append(Paragraph(f"For {owner.factory_name},", body_style))
+    elements.append(Paragraph(f"For {safe_factory_name},", body_style))
     elements.append(Spacer(1, 1.4 * cm))
     elements.append(Paragraph("_________________________", body_style))
     elements.append(Paragraph("Authorized Signatory", body_style))

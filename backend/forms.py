@@ -22,6 +22,7 @@ import hashlib
 import io
 import os
 from datetime import date, timedelta
+from xml.sax import saxutils
 
 import freetype
 import uharfbuzz as hb
@@ -98,6 +99,22 @@ _TAMIL_UNICODE_BLOCK = range(0x0B80, 0x0C00)
 
 def _contains_tamil(text: str) -> bool:
     return any(ord(ch) in _TAMIL_UNICODE_BLOCK for ch in text)
+
+
+def _xml_escape(text: str) -> str:
+    """CRITICAL fix (security audit, 2026-09): every dynamic, owner/
+    worker-entered string below (factory name/address, worker name,
+    designation, father's name, ...) used to go into ReportLab's
+    Paragraph() completely unescaped. Paragraph parses its input as a
+    small XML/HTML-like markup language (<b>, <font>, &amp;/&lt;/&gt;
+    as metacharacters) -- a value containing a bare "&" or an unclosed
+    "<b>" raises a parser exception at Paragraph() construction time,
+    with no try/except anywhere in this module catching it, which
+    turned an owner typing "Fitter & Welder" as a designation into a
+    500 that permanently broke every future PDF for that worker until
+    someone edited the DB by hand. Every call site that puts owner/
+    worker-entered text into a Paragraph must escape it first."""
+    return saxutils.escape(text, {'"': "&quot;"})
 
 
 _tamil_hb_face = hb.Face(open(_TAMIL_FONT_PATH, "rb").read())
@@ -643,11 +660,11 @@ def _header_elements(owner: models.Owner, styles, form_title, period_label: str 
             elements.append(tamil_image)
     else:
         elements = [Paragraph(form_title, styles["Title"])]
-    elements.append(Paragraph(owner.factory_name, styles["Normal"]))
+    elements.append(Paragraph(_xml_escape(owner.factory_name), styles["Normal"]))
     if owner.factory_address:
-        elements.append(Paragraph(owner.factory_address, styles["Normal"]))
+        elements.append(Paragraph(_xml_escape(owner.factory_address), styles["Normal"]))
     if owner.factory_licence_no:
-        elements.append(Paragraph(f"Licence / Registration No.: {owner.factory_licence_no}", styles["Normal"]))
+        elements.append(Paragraph(f"Licence / Registration No.: {_xml_escape(owner.factory_licence_no)}", styles["Normal"]))
     if period_label:
         elements.append(Paragraph(period_label, styles["Normal"]))
     elements.append(Spacer(1, 0.4 * cm))
@@ -693,9 +710,9 @@ def _wrap_row(values: list, header: bool = False) -> list:
             cells.append(cell_flowables)
         elif isinstance(v, str) and _contains_tamil(v):
             tamil_image = _render_tamil_image(v, style.fontSize, color=color, max_width_pt=_DYNAMIC_TAMIL_CELL_MAX_WIDTH_PT)
-            cells.append(tamil_image if tamil_image is not None else Paragraph(v, style))
+            cells.append(tamil_image if tamil_image is not None else Paragraph(_xml_escape(v), style))
         else:
-            cells.append(Paragraph(str(v), style))
+            cells.append(Paragraph(_xml_escape(str(v)), style))
     return cells
 
 
@@ -718,11 +735,19 @@ def _safe_paragraph_text(text: str, size_pt: float, color: str = "black") -> str
     its own table cell or flowable -- renders via the same Tamil-safe
     pipeline as an inline <img> tag, since a separate Image flowable
     isn't an option once the text is part of a sentence. See
-    _tamil_inline_image_tag's own docstring for the mechanism."""
+    _tamil_inline_image_tag's own docstring for the mechanism.
+
+    Unlike _cell_or_tamil_image's plain-string passthrough (safe as-is,
+    since a raw Table cell is never markup-parsed), this function's
+    output always lands inside an f-string later passed to Paragraph(),
+    which DOES parse its input as markup -- so the non-Tamil path must
+    escape (_xml_escape) before returning, same reasoning as
+    _wrap_row's fix, or a bare "&" in a designation/name breaks
+    Paragraph() construction outright (see _xml_escape's docstring)."""
     if not text or not _contains_tamil(text):
-        return text
+        return _xml_escape(text) if text else text
     tag = _tamil_inline_image_tag(text, size_pt, color=color)
-    return tag if tag else text
+    return tag if tag else _xml_escape(text)
 
 
 def _style_table(table: Table) -> None:
@@ -1064,11 +1089,26 @@ def _form25b_month_elements(
             owner, styles, _bi("Form 25-B -- Time Card", "வருகை பதிவேட்டின் கூடுதல் விபரம்", size=12, max_width_pt=None), period_label
         )
     )
-    elements.append(Paragraph(f"{_bi_label('Name of the Worker', 'தொழிலாளரின் பெயர்')}: {worker.name}", styles["Normal"]))
-    fathers_name_label = _bi_label("Father's Name", "தகப்பனாரின் பெயர்")
+    # worker.name/father_or_spouse_name/designation here are a SEPARATE
+    # insertion point from the day-grid table above (which _wrap_row
+    # already covers) -- this identity block was still raw-interpolating
+    # owner-entered free text into Paragraph() with no Tamil-safety and
+    # no XML-escaping until this fix (security audit, 2026-09). Routed
+    # through _safe_paragraph_text so both gaps close at once.
+    body_font_size_25b = styles["Normal"].fontSize
     elements.append(
         Paragraph(
-            f"{fathers_name_label}: {compliance.father_or_spouse_name if compliance else '-'}",
+            f"{_bi_label('Name of the Worker', 'தொழிலாளரின் பெயர்')}: {_safe_paragraph_text(worker.name, body_font_size_25b)}",
+            styles["Normal"],
+        )
+    )
+    fathers_name_label = _bi_label("Father's Name", "தகப்பனாரின் பெயர்")
+    fathers_name_value = _safe_paragraph_text(
+        compliance.father_or_spouse_name if compliance and compliance.father_or_spouse_name else "-", body_font_size_25b
+    )
+    elements.append(
+        Paragraph(
+            f"{fathers_name_label}: {fathers_name_value}",
             styles["Normal"],
         )
     )
@@ -1078,10 +1118,13 @@ def _form25b_month_elements(
             styles["Normal"],
         )
     )
+    designation_25b = _safe_paragraph_text(
+        compliance.designation_or_nature_of_work if compliance and compliance.designation_or_nature_of_work else "-",
+        body_font_size_25b,
+    )
     elements.append(
         Paragraph(
-            f"{_bi_label('Designation or Occupation', 'பதவியின் பெயர் [அ] வேலை')}: "
-            f"{compliance.designation_or_nature_of_work if compliance else '-'}",
+            f"{_bi_label('Designation or Occupation', 'பதவியின் பெயர் [அ] வேலை')}: {designation_25b}",
             styles["Normal"],
         )
     )
@@ -1239,7 +1282,7 @@ def build_form12(db: Session, owner: models.Owner, worker: models.Worker | None 
     )
     styles = getSampleStyleSheet()
     elements = _header_elements(owner, styles, "Form 12 -- Register of Adult Workers and Young Persons")
-    elements.append(Paragraph(f"Registration No.: {owner.factory_licence_no or '-'}", styles["Normal"]))
+    elements.append(Paragraph(f"Registration No.: {_xml_escape(owner.factory_licence_no) if owner.factory_licence_no else '-'}", styles["Normal"]))
     elements.append(Spacer(1, 0.3 * cm))
     # Serial Number + Name of the Worker repeat on every printed page.
     elements.extend(_paginated_register_elements(table_data[0], table_data[1:], col_widths_cm, fixed_count=2))

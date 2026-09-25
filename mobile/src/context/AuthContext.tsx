@@ -1,9 +1,25 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { Owner, login as apiLogin, signup as apiSignup, setUnauthorizedHandler } from "../api/client";
 
 const TOKEN_KEY = "labourlens_token";
 const OWNER_KEY = "labourlens_owner";
+
+// Security audit finding: the session token and owner profile were the
+// only pieces of sensitive local state still in AsyncStorage (plain,
+// unencrypted) instead of SecureStore (Keychain/Keystore-backed) --
+// inconsistent with AppLockContext.tsx's own PIN storage, which already
+// uses this exact pattern including the web fallback shim (expo-secure-store
+// has no web backend; Platform.OS === "web" only happens in the web
+// preview used for documentation screenshots, never a real build).
+const Store = Platform.OS === "web"
+  ? {
+      getItemAsync: async (key: string) => localStorage.getItem(key),
+      setItemAsync: async (key: string, value: string) => localStorage.setItem(key, value),
+      deleteItemAsync: async (key: string) => localStorage.removeItem(key),
+    }
+  : SecureStore;
 
 type AuthContextValue = {
   token: string | null;
@@ -25,8 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       const [storedToken, storedOwner] = await Promise.all([
-        AsyncStorage.getItem(TOKEN_KEY),
-        AsyncStorage.getItem(OWNER_KEY),
+        Store.getItemAsync(TOKEN_KEY),
+        Store.getItemAsync(OWNER_KEY),
       ]);
       if (storedToken && storedOwner) {
         setToken(storedToken);
@@ -38,8 +54,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function login(mobile: string, password: string) {
     const res = await apiLogin(mobile, password);
-    await AsyncStorage.setItem(TOKEN_KEY, res.access_token);
-    await AsyncStorage.setItem(OWNER_KEY, JSON.stringify(res.owner));
+    await Store.setItemAsync(TOKEN_KEY, res.access_token);
+    await Store.setItemAsync(OWNER_KEY, JSON.stringify(res.owner));
     setToken(res.access_token);
     setOwner(res.owner);
   }
@@ -51,8 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // then log in as a different one to switch), same as login().
   async function signup(name: string, mobile: string, password: string, factoryName: string, consentGiven: boolean) {
     const res = await apiSignup(name, mobile, password, factoryName, consentGiven);
-    await AsyncStorage.setItem(TOKEN_KEY, res.access_token);
-    await AsyncStorage.setItem(OWNER_KEY, JSON.stringify(res.owner));
+    await Store.setItemAsync(TOKEN_KEY, res.access_token);
+    await Store.setItemAsync(OWNER_KEY, JSON.stringify(res.owner));
     setToken(res.access_token);
     setOwner(res.owner);
     return res.owner;
@@ -63,12 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // so the Home screen's factory name updates immediately instead of
   // needing a logout/login to pick up the change.
   async function updateOwner(updated: Owner) {
-    await AsyncStorage.setItem(OWNER_KEY, JSON.stringify(updated));
+    await Store.setItemAsync(OWNER_KEY, JSON.stringify(updated));
     setOwner(updated);
   }
 
   async function logout() {
-    await AsyncStorage.multiRemove([TOKEN_KEY, OWNER_KEY]);
+    await Promise.all([Store.deleteItemAsync(TOKEN_KEY), Store.deleteItemAsync(OWNER_KEY)]);
     setToken(null);
     setOwner(null);
   }

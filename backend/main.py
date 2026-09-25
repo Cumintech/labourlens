@@ -1,3 +1,4 @@
+import io
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -6,6 +7,8 @@ from datetime import date as date_, datetime, timezone
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import func
@@ -497,6 +500,19 @@ async def upload_worker_photo(
             status_code=422,
             detail=f"Photo is too large ({len(photo_bytes) // 1024}KB) -- must be under {MAX_PHOTO_UPLOAD_BYTES // 1024}KB.",
         )
+    # Security audit finding: this previously trusted the client's
+    # declared Content-Type entirely -- nothing checked the bytes
+    # actually decode as a real image before storing them under
+    # {worker_id}.jpg. Image.open().verify() reads the real header/
+    # magic bytes (not the filename or declared content-type), so a
+    # renamed non-image file is rejected here rather than silently
+    # stored. verify() invalidates the Image object for further use per
+    # Pillow's own docs, which is fine -- photo_bytes (the raw bytes)
+    # is what actually gets stored, not this Image instance.
+    try:
+        PILImage.open(io.BytesIO(photo_bytes)).verify()
+    except UnidentifiedImageError:
+        raise HTTPException(status_code=422, detail="That file isn't a valid image.")
     try:
         key = photo_storage.upload_worker_photo(worker.id, photo_bytes)
     except photo_storage.PhotoStorageNotConfigured as e:

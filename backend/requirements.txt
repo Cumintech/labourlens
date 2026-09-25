@@ -28,6 +28,14 @@ requests==2.34.2
 # Linux host, unlike this Windows dev machine).
 easyocr==1.7.2
 
+# Was already resolvable transitively (easyocr and reportlab both pull
+# it in), pinned explicitly now that main.py depends on it directly too
+# -- magic-byte validation on worker photo uploads (security audit
+# finding: only a size cap and a fixed storage content-type limited a
+# non-image upload before this, no check that the bytes decode as a
+# real image).
+pillow==12.3.0
+
 # Portal Sync Worker (see sync_worker.py) -- the Portal has no API, so
 # this drives it the same way a person would. `playwright install
 # chromium` also needs to run once wherever this deploys (not just pip

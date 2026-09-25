@@ -21,7 +21,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Wage Owner A", "mobile": "9000000401", "password": "pass123", "factory_name": "Wage Factory A", "consent_given": True},
+    json={"name": "Wage Owner A", "mobile": "9000000401", "password": "pass12345", "factory_name": "Wage Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -76,7 +76,7 @@ print("no PUT/edit endpoint exists for wage-profile (append-only enforced at the
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Wage Owner B", "mobile": "9000000402", "password": "pass123", "factory_name": "Wage Factory B", "consent_given": True},
+    json={"name": "Wage Owner B", "mobile": "9000000402", "password": "pass12345", "factory_name": "Wage Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

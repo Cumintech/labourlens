@@ -3,9 +3,11 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import date as date_, datetime, timezone
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,7 @@ import ocr
 import photo_storage
 import privacy_policy
 import reports
+from rate_limit import limiter
 import sync_worker
 from attendance_service import upsert_attendance
 from auth import create_token, get_current_owner, hash_password, verify_password
@@ -133,15 +136,38 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Labour Lens API", lifespan=lifespan)
 
-# Wide open for Day 1 (Expo dev client + Expo Go connect from arbitrary
-# local IPs during development). Tighten to specific origins once the app
-# has a real distribution channel (Day 5+).
+# Security audit finding: was allow_origins=["*"], marked in its own
+# comment as "Day 1... tighten by Day 5+" and never revisited despite
+# shipping to production. The mobile app never sends an Origin header
+# at all for native requests, so it needs no entry here -- this list is
+# only ever consulted for browser-based clients (the admin portal, and
+# a local `expo start --web` preview). Configurable via ALLOWED_ORIGINS
+# (comma-separated) so the real admin-portal production origin can be
+# set on Render without another code change once it's deployed
+# somewhere with a known URL; defaults cover only local dev origins,
+# never falls back to "*".
+_allowed_origins = [
+    o.strip()
+    for o in os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://localhost:8090,http://localhost:19006",
+    ).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+# Security audit finding: no rate limiting existed anywhere -- combined
+# with no password-strength floor (see schemas.py's OwnerSignupIn),
+# /owners/login was a straightforward online brute-force target. The
+# actual Limiter instance lives in rate_limit.py (shared with admin.py,
+# which can't import this module back without a circular import).
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(admin.router)
 app.include_router(biometric_api.router)
@@ -196,7 +222,8 @@ def privacy_policy_json():
 
 
 @app.post("/owners/signup", response_model=TokenOut, status_code=201)
-def signup(body: OwnerSignupIn, db: Session = Depends(get_db)):
+@limiter.limit("10/hour")
+def signup(request: Request, body: OwnerSignupIn, db: Session = Depends(get_db)):
     if not body.consent_given:
         raise HTTPException(status_code=422, detail="You must accept the Privacy Policy to create an account")
 
@@ -249,7 +276,8 @@ def signup(body: OwnerSignupIn, db: Session = Depends(get_db)):
 
 
 @app.post("/owners/login", response_model=TokenOut)
-def login(body: OwnerLoginIn, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, body: OwnerLoginIn, db: Session = Depends(get_db)):
     owner = db.query(models.Owner).filter(models.Owner.mobile == body.mobile).first()
     if not owner or not verify_password(body.password, owner.password_hash):
         raise HTTPException(status_code=401, detail="Invalid mobile number or password")

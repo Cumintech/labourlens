@@ -27,7 +27,7 @@ signup = client.post(
     json={
         "name": "Letter Owner",
         "mobile": "9000001901",
-        "password": "pass123",
+        "password": "pass12345",
         "factory_name": "Sunrise Textiles Private Limited",
         "factory_address": "42 Industrial Estate, Salem, Tamil Nadu 636001",
         "consent_given": True,

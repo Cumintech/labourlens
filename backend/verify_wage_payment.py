@@ -24,7 +24,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Payment Owner A", "mobile": "9000000601", "password": "pass123", "factory_name": "Payment Factory A", "consent_given": True},
+    json={"name": "Payment Owner A", "mobile": "9000000601", "password": "pass12345", "factory_name": "Payment Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -75,7 +75,7 @@ print("a different month for the same worker creates a separate row: PASSED")
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Payment Owner B", "mobile": "9000000602", "password": "pass123", "factory_name": "Payment Factory B", "consent_given": True},
+    json={"name": "Payment Owner B", "mobile": "9000000602", "password": "pass12345", "factory_name": "Payment Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

@@ -62,7 +62,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Tamil Test Owner", "mobile": "9000002101", "password": "pass123", "factory_name": "Tamil Test Factory", "consent_given": True},
+    json={"name": "Tamil Test Owner", "mobile": "9000002101", "password": "pass12345", "factory_name": "Tamil Test Factory", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]

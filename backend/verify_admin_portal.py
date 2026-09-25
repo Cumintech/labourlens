@@ -36,7 +36,7 @@ admin_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 # --- Two factory-owner signups -- each should auto-create a Factory row ---
 owner_a = client.post(
     "/owners/signup",
-    json={"name": "Portal Owner A", "mobile": "9000001401", "password": "pass123", "factory_name": "Portal Factory A", "consent_given": True},
+    json={"name": "Portal Owner A", "mobile": "9000001401", "password": "pass12345", "factory_name": "Portal Factory A", "consent_given": True},
 )
 assert owner_a.status_code == 201, owner_a.text
 owner_a_token = owner_a.json()["access_token"]
@@ -44,7 +44,7 @@ owner_a_id = owner_a.json()["owner"]["id"]
 
 owner_b = client.post(
     "/owners/signup",
-    json={"name": "Portal Owner B", "mobile": "9000001402", "password": "pass123", "factory_name": "Portal Factory B", "consent_given": True},
+    json={"name": "Portal Owner B", "mobile": "9000001402", "password": "pass12345", "factory_name": "Portal Factory B", "consent_given": True},
 )
 assert owner_b.status_code == 201, owner_b.text
 

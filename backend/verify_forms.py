@@ -43,7 +43,7 @@ def pdf_text(content: bytes) -> str:
 # with Form 12 details, attendance, a wage rate, and a paid leave entry ---
 signup = client.post(
     "/owners/signup",
-    json={"name": "Forms Owner A", "mobile": "9000000701", "password": "pass123", "factory_name": "Forms Factory A", "consent_given": True},
+    json={"name": "Forms Owner A", "mobile": "9000000701", "password": "pass12345", "factory_name": "Forms Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -309,7 +309,7 @@ db_cleanup.close()
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Forms Owner B", "mobile": "9000000702", "password": "pass123", "factory_name": "Forms Factory B", "consent_given": True},
+    json={"name": "Forms Owner B", "mobile": "9000000702", "password": "pass12345", "factory_name": "Forms Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

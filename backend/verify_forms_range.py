@@ -30,7 +30,7 @@ def pdf_text(content: bytes) -> str:
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Range Owner", "mobile": "9000001101", "password": "pass123", "factory_name": "Range Factory", "consent_given": True},
+    json={"name": "Range Owner", "mobile": "9000001101", "password": "pass12345", "factory_name": "Range Factory", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}

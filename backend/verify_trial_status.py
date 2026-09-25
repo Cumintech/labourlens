@@ -26,7 +26,7 @@ client = TestClient(app)
 # --- Brand-new signup: trial, full days remaining ---
 signup = client.post(
     "/owners/signup",
-    json={"name": "Trial Owner", "mobile": "9000001501", "password": "pass123", "factory_name": "Trial Factory", "consent_given": True},
+    json={"name": "Trial Owner", "mobile": "9000001501", "password": "pass12345", "factory_name": "Trial Factory", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 owner_body = signup.json()["owner"]

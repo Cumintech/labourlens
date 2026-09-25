@@ -7,13 +7,14 @@ platform."""
 
 from datetime import date as date_, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
 from admin_auth import create_admin_token, get_current_admin, verify_password
 from database import get_db
+from rate_limit import limiter
 from schemas import (
     AdminDashboardOut,
     AdminLoginIn,
@@ -79,7 +80,8 @@ def _get_owned_factory(factory_id: int, db: Session) -> models.Factory:
 
 
 @router.post("/login", response_model=AdminTokenOut)
-def admin_login(body: AdminLoginIn, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def admin_login(request: Request, body: AdminLoginIn, db: Session = Depends(get_db)):
     admin = db.query(models.AdminUser).filter(models.AdminUser.email == body.email).first()
     if not admin or not verify_password(body.password, admin.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")

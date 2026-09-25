@@ -22,7 +22,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Effective Owner", "mobile": "9000001201", "password": "pass123", "factory_name": "Effective Factory", "consent_given": True},
+    json={"name": "Effective Owner", "mobile": "9000001201", "password": "pass12345", "factory_name": "Effective Factory", "consent_given": True},
 )
 headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
 

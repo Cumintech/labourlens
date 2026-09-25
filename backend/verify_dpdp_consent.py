@@ -23,7 +23,7 @@ client = TestClient(app)
 # --- consent_given omitted entirely ---
 no_field = client.post(
     "/owners/signup",
-    json={"name": "No Consent Owner", "mobile": "9000002001", "password": "pass123", "factory_name": "No Consent Factory"},
+    json={"name": "No Consent Owner", "mobile": "9000002001", "password": "pass12345", "factory_name": "No Consent Factory"},
 )
 assert no_field.status_code == 422, f"signup without consent_given at all should be blocked: {no_field.status_code} {no_field.text}"
 assert "Privacy Policy" in no_field.text, f"expected a clear reason in the response: {no_field.text}"
@@ -33,7 +33,7 @@ print("Signup with consent_given omitted entirely: blocked with 422: PASSED")
 false_field = client.post(
     "/owners/signup",
     json={
-        "name": "False Consent Owner", "mobile": "9000002002", "password": "pass123",
+        "name": "False Consent Owner", "mobile": "9000002002", "password": "pass12345",
         "factory_name": "False Consent Factory", "consent_given": False,
     },
 )
@@ -53,7 +53,7 @@ print("Rejected signups create no Owner row: PASSED")
 ok = client.post(
     "/owners/signup",
     json={
-        "name": "Real Consent Owner", "mobile": "9000002003", "password": "pass123",
+        "name": "Real Consent Owner", "mobile": "9000002003", "password": "pass12345",
         "factory_name": "Real Consent Factory", "consent_given": True,
     },
 )

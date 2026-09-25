@@ -27,7 +27,7 @@ client = TestClient(app)
 # --- New signup gets default shifts automatically ---
 signup = client.post(
     "/owners/signup",
-    json={"name": "Shift Owner A", "mobile": "9000000201", "password": "pass123", "factory_name": "Shift Factory A", "consent_given": True},
+    json={"name": "Shift Owner A", "mobile": "9000000201", "password": "pass12345", "factory_name": "Shift Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -169,7 +169,7 @@ print("deleting a shift with no attendance history: succeeds: PASSED")
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Shift Owner B", "mobile": "9000000203", "password": "pass123", "factory_name": "Shift Factory B", "consent_given": True},
+    json={"name": "Shift Owner B", "mobile": "9000000203", "password": "pass12345", "factory_name": "Shift Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

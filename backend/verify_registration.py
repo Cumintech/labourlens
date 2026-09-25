@@ -39,7 +39,7 @@ client = TestClient(app)
 # --- Owner A: the one we'll actually exercise ---
 signup_resp = client.post(
     "/owners/signup",
-    json={"name": "Owner A", "mobile": "9000000001", "password": "pass123", "factory_name": "Factory A", "consent_given": True},
+    json={"name": "Owner A", "mobile": "9000000001", "password": "pass12345", "factory_name": "Factory A", "consent_given": True},
 )
 assert signup_resp.status_code == 201, signup_resp.text
 token_a = signup_resp.json()["access_token"]
@@ -49,7 +49,7 @@ print("owner A signed up")
 # --- Owner B: only used to prove multi-tenant scoping ---
 signup_resp_b = client.post(
     "/owners/signup",
-    json={"name": "Owner B", "mobile": "9000000002", "password": "pass123", "factory_name": "Factory B", "consent_given": True},
+    json={"name": "Owner B", "mobile": "9000000002", "password": "pass12345", "factory_name": "Factory B", "consent_given": True},
 )
 assert signup_resp_b.status_code == 201, signup_resp_b.text
 token_b = signup_resp_b.json()["access_token"]

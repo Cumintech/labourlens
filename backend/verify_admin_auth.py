@@ -40,7 +40,7 @@ db.close()
 signup = client.post(
     "/owners/signup",
     json={
-        "name": "Admin Test Owner", "mobile": "9000001301", "password": "pass123",
+        "name": "Admin Test Owner", "mobile": "9000001301", "password": "pass12345",
         "factory_name": "Admin Test Factory", "consent_given": True,
     },
 )

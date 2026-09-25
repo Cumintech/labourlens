@@ -79,7 +79,7 @@ signup = client.post(
     json={
         "name": "Escaping Test Owner",
         "mobile": "9000002201",
-        "password": "pass123",
+        "password": "pass12345",
         "factory_name": "Fitter <b>Welder Works",  # the real, confirmed crash trigger
         "factory_address": "12 Industrial Rd, <b>Unclosed",
         "consent_given": True,

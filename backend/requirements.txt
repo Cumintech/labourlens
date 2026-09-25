@@ -10,6 +10,10 @@ python-multipart==0.0.20
 psycopg2-binary==2.9.10
 pydantic[email]==2.10.4
 
+# Rate limiting on /owners/login, /owners/signup, /admin/login (security
+# audit finding: none existed anywhere -- see main.py's Limiter setup).
+slowapi==0.1.10
+
 # Worker ID-card photo storage (see photo_storage.py) -- talks to
 # Supabase Storage's plain REST API directly rather than pulling in the
 # full supabase-py SDK, which drags in its own realtime/postgrest/auth

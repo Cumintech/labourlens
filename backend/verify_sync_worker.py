@@ -32,7 +32,7 @@ assert requests.get(f"{PORTAL_URL}/login").status_code == 200, (
 # --- Owner + Portal credentials ---
 signup = client.post(
     "/owners/signup",
-    json={"name": "Sync Test Owner", "mobile": "9000000099", "password": "pass123", "factory_name": "Sync Test Factory", "consent_given": True},
+    json={"name": "Sync Test Owner", "mobile": "9000000099", "password": "pass12345", "factory_name": "Sync Test Factory", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]
@@ -41,7 +41,7 @@ headers = {"Authorization": f"Bearer {token}"}
 cred_resp = client.post(
     "/portal-credentials",
     headers=headers,
-    json={"portal_username": "portaladmin", "portal_password": "portalpass123"},
+    json={"portal_username": "portaladmin", "portal_password": "portalpass12345"},
 )
 assert cred_resp.status_code == 204, cred_resp.text
 print("portal credentials set")
@@ -77,7 +77,7 @@ print("search endpoint correctly requires login (401 without a session): PASSED"
 
 # Use a real logged-in session to actually verify the Portal-side entry
 portal_session = requests.Session()
-login_resp = portal_session.post(f"{PORTAL_URL}/login", data={"username": "portaladmin", "password": "portalpass123"})
+login_resp = portal_session.post(f"{PORTAL_URL}/login", data={"username": "portaladmin", "password": "portalpass12345"})
 assert login_resp.status_code == 200
 portal_check = portal_session.get(f"{PORTAL_URL}/workers/search?aadhaar=111122223333").json()
 assert len(portal_check["matches"]) == 1, f"worker not found on Portal after sync: {portal_check}"
@@ -103,7 +103,7 @@ print("worker confirmed inactive on the real Test Portal after deactivate sync: 
 # --- Genuine failure path: wrong Portal credentials ---
 signup2 = client.post(
     "/owners/signup",
-    json={"name": "Bad Cred Owner", "mobile": "9000000098", "password": "pass123", "factory_name": "Bad Cred Factory", "consent_given": True},
+    json={"name": "Bad Cred Owner", "mobile": "9000000098", "password": "pass12345", "factory_name": "Bad Cred Factory", "consent_given": True},
 )
 token2 = signup2.json()["access_token"]
 headers2 = {"Authorization": f"Bearer {token2}"}

@@ -24,7 +24,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Audit Owner", "mobile": "9000001001", "password": "pass123", "factory_name": "Audit Factory", "consent_given": True},
+    json={"name": "Audit Owner", "mobile": "9000001001", "password": "pass12345", "factory_name": "Audit Factory", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 owner_id = signup.json()["owner"]["id"]
@@ -109,7 +109,7 @@ print("Reassigning a worker type to a worker who already has a rate doesn't fabr
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Audit Owner B", "mobile": "9000001002", "password": "pass123", "factory_name": "Audit Factory B", "consent_given": True},
+    json={"name": "Audit Owner B", "mobile": "9000001002", "password": "pass12345", "factory_name": "Audit Factory B", "consent_given": True},
 )
 owner_b_id = signup_b.json()["owner"]["id"]
 db = SessionLocal()

@@ -23,7 +23,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Wage Summary Owner A", "mobile": "9000000801", "password": "pass123", "factory_name": "Wage Summary Factory A", "consent_given": True},
+    json={"name": "Wage Summary Owner A", "mobile": "9000000801", "password": "pass12345", "factory_name": "Wage Summary Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -109,7 +109,7 @@ print("factory-wide daily wage summary: correct present-worker cost, absent work
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Wage Summary Owner B", "mobile": "9000000802", "password": "pass123", "factory_name": "Wage Summary Factory B", "consent_given": True},
+    json={"name": "Wage Summary Owner B", "mobile": "9000000802", "password": "pass12345", "factory_name": "Wage Summary Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

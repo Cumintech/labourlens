@@ -71,7 +71,7 @@ os.environ.pop("SMTP_PASSWORD", None)
 try:
     signup = client.post(
         "/owners/signup",
-        json={"name": "Report Owner", "mobile": "9000000075", "password": "pass123", "factory_name": "Report Factory", "consent_given": True},
+        json={"name": "Report Owner", "mobile": "9000000075", "password": "pass12345", "factory_name": "Report Factory", "consent_given": True},
     )
     assert signup.status_code == 201, signup.text
     token = signup.json()["access_token"]

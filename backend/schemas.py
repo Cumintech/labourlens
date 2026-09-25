@@ -5,6 +5,9 @@ from typing import Literal
 from pydantic import BaseModel, field_validator
 
 
+MIN_OWNER_PASSWORD_LENGTH = 8
+
+
 class OwnerSignupIn(BaseModel):
     name: str
     mobile: str
@@ -14,6 +17,19 @@ class OwnerSignupIn(BaseModel):
     # without it (a real gate, not just a UI checkbox that could be
     # bypassed by any other client of this API).
     consent_given: bool = False
+
+    @field_validator("password")
+    @classmethod
+    def _password_min_length(cls, v: str) -> str:
+        # Security audit finding: there was previously NO length/
+        # complexity check at all -- a signup with password="1" would
+        # succeed and bcrypt-hash it as-is. 8 is a floor, not a strong
+        # policy (the admin account enforces 12+ in seed_admin.py,
+        # appropriate there since it sees every factory's data; 8 is a
+        # more realistic minimum for a factory owner's own account).
+        if len(v) < MIN_OWNER_PASSWORD_LENGTH:
+            raise ValueError(f"Password must be at least {MIN_OWNER_PASSWORD_LENGTH} characters")
+        return v
 
 
 class OwnerLoginIn(BaseModel):

@@ -23,7 +23,7 @@ client = TestClient(app)
 
 signup = client.post(
     "/owners/signup",
-    json={"name": "Type Owner A", "mobile": "9000000901", "password": "pass123", "factory_name": "Type Factory A", "consent_given": True},
+    json={"name": "Type Owner A", "mobile": "9000000901", "password": "pass12345", "factory_name": "Type Factory A", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token_a = signup.json()["access_token"]
@@ -89,7 +89,7 @@ print("deleting a worker type clears the assignment on workers pointing at it: P
 # --- Cross-owner scoping ---
 signup_b = client.post(
     "/owners/signup",
-    json={"name": "Type Owner B", "mobile": "9000000902", "password": "pass123", "factory_name": "Type Factory B", "consent_given": True},
+    json={"name": "Type Owner B", "mobile": "9000000902", "password": "pass12345", "factory_name": "Type Factory B", "consent_given": True},
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}

@@ -26,7 +26,7 @@ TODAY = date(2026, 8, 18)
 # --- Owner + 3 workers ---
 signup = client.post(
     "/owners/signup",
-    json={"name": "Attendance Owner", "mobile": "9000000077", "password": "pass123", "factory_name": "Attendance Factory", "consent_given": True},
+    json={"name": "Attendance Owner", "mobile": "9000000077", "password": "pass12345", "factory_name": "Attendance Factory", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]
@@ -74,7 +74,7 @@ print("invalid slot/status rejected with 422: PASSED")
 # --- Owner scoping: a second owner cannot mark a worker they don't own ---
 signup2 = client.post(
     "/owners/signup",
-    json={"name": "Other Owner", "mobile": "9000000076", "password": "pass123", "factory_name": "Other Factory", "consent_given": True},
+    json={"name": "Other Owner", "mobile": "9000000076", "password": "pass12345", "factory_name": "Other Factory", "consent_given": True},
 )
 headers2 = {"Authorization": f"Bearer {signup2.json()['access_token']}"}
 r = client.post("/attendance", headers=headers2, json={"worker_id": w0, "date": str(TODAY), "slot": "AM", "status": "present"})

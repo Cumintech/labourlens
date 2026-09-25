@@ -38,7 +38,7 @@ client = TestClient(app)
 # --- Setup: owner, two workers (one direct-ID, one via manual mapping), a device ---
 signup = client.post(
     "/owners/signup",
-    json={"name": "Biometric Owner", "mobile": "9000001601", "password": "pass123", "factory_name": "Biometric Factory", "consent_given": True},
+    json={"name": "Biometric Owner", "mobile": "9000001601", "password": "pass12345", "factory_name": "Biometric Factory", "consent_given": True},
 )
 assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]

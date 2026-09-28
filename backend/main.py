@@ -144,16 +144,19 @@ app = FastAPI(title="Labour Lens API", lifespan=lifespan)
 # shipping to production. The mobile app never sends an Origin header
 # at all for native requests, so it needs no entry here -- this list is
 # only ever consulted for browser-based clients (the admin portal, and
-# a local `expo start --web` preview). Configurable via ALLOWED_ORIGINS
+# a local `expo start` web preview). Configurable via ALLOWED_ORIGINS
 # (comma-separated) so the real admin-portal production origin can be
 # set on Render without another code change once it's deployed
 # somewhere with a known URL; defaults cover only local dev origins,
-# never falls back to "*".
+# never falls back to "*". 8081 is Expo SDK 57's own default web port
+# (`npx expo start` -> press "w"); 8090 is this repo's own launch.json
+# override of that port -- both are real local-dev entry points, not
+# just one of them (confirmed live: 8081 alone was getting rejected).
 _allowed_origins = [
     o.strip()
     for o in os.environ.get(
         "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://localhost:8090,http://localhost:19006",
+        "http://localhost:5173,http://localhost:8081,http://localhost:8090,http://localhost:19006",
     ).split(",")
     if o.strip()
 ]

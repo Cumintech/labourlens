@@ -382,15 +382,25 @@ export default function AddWorkerScreen({ navigation }: Props) {
     try {
       const rendered = await ImageManipulator.manipulate(rawPhotoUri).resize({ width: ID_PHOTO_WIDTH, height: ID_PHOTO_HEIGHT }).renderAsync();
       const saved = await rendered.saveAsync({ compress: ID_PHOTO_JPEG_QUALITY, format: SaveFormat.JPEG });
+      // Diagnostic-only: must never be able to fail the actual upload below
+      // it. Previously shared the same try/catch as the real upload, so
+      // any hiccup here (this always runs in Expo Go, since __DEV__ is
+      // always true there) surfaced as a misleading "couldn't process or
+      // upload" even if resize/save/upload all would have worked fine.
       if (__DEV__) {
-        const sizeBytes = (await new File(saved.uri).arrayBuffer()).byteLength;
-        console.log(`[id-card] compressed photo: ${saved.width}x${saved.height}, ${(sizeBytes / 1024).toFixed(1)}KB`);
+        try {
+          const sizeBytes = (await new File(saved.uri).arrayBuffer()).byteLength;
+          console.log(`[id-card] compressed photo: ${saved.width}x${saved.height}, ${(sizeBytes / 1024).toFixed(1)}KB`);
+        } catch (diagError) {
+          console.warn("[id-card] size-logging diagnostic failed (non-fatal):", diagError);
+        }
       }
       await uploadWorkerPhoto(token, createdWorkerId, saved.uri);
       setPhotoUploaded(true);
     } catch (e) {
-      const message = e instanceof ApiError ? e.message : "Couldn't process or upload that photo. Please try again.";
-      Alert.alert("Photo upload failed", message);
+      console.error("[id-card] photo upload failed:", e);
+      const detail = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
+      Alert.alert("Photo upload failed", `Couldn't process or upload that photo: ${detail}`);
     } finally {
       setUploadingPhoto(false);
     }

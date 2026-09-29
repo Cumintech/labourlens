@@ -39,6 +39,7 @@ import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
 import { colors, radius, spacing } from "../theme";
+import { isValidAadhaar, isValidIndianMobile, normalizeIndianMobile, stripToDigits } from "../validators";
 import { autofillFromWorkerType } from "../workerTypeAutofill";
 
 type Props = NativeStackScreenProps<RootStackParamList, "NewWorkerScan">;
@@ -165,7 +166,11 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [saving, setSaving] = useState(false);
 
   const estimate = useMemo(() => estimateCategory(dob), [dob]);
-  const identityValid = name.trim().length > 0 && aadhaarNumber.trim().length > 0;
+  const aadhaarValid = isValidAadhaar(aadhaarNumber);
+  // Mobile is optional here (unlike the owner's own login mobile) -- an
+  // empty field is fine, a partial/malformed one is an error.
+  const mobileValid = mobile.trim().length === 0 || isValidIndianMobile(mobile);
+  const identityValid = name.trim().length > 0 && aadhaarValid && mobileValid;
 
   useFocusEffect(
     useCallback(() => {
@@ -205,7 +210,11 @@ export default function AddWorkerScreen({ navigation }: Props) {
       setName(fields.name ?? "");
       setDob(fields.dob ?? "");
       setGender(normalizeGender(fields.gender));
-      setAadhaarNumber(fields.aadhaar_number ?? "");
+      // Stripped the same way manual typing is -- OCR noise (stray
+      // spaces, a misread letter) shouldn't bypass the digits-only rule;
+      // an invalid result is kept in the field (not cleared) so the
+      // inline error below tells the owner to correct it.
+      setAadhaarNumber(stripToDigits(fields.aadhaar_number ?? "", 12));
       setCurrentAddress(fields.current_address ?? "");
       setAutoFilled({
         name: !!fields.name,
@@ -531,9 +540,24 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   </Text>
                 )}
                 <SelectField label="Gender" value={gender || null} options={GENDER_OPTIONS} onChange={(v) => { setGender(v); setAutoFilled((a) => ({ ...a, gender: false })); }} placeholder="Select" />
-                <Field label="Aadhaar number" value={aadhaarNumber} onChangeText={(v) => { setAadhaarNumber(v); setAutoFilled((a) => ({ ...a, aadhaar_number: false })); }} autoFilled={autoFilled.aadhaar_number} keyboardType="number-pad" />
+                <Field
+                  label="Aadhaar number"
+                  value={aadhaarNumber}
+                  onChangeText={(v) => { setAadhaarNumber(stripToDigits(v, 12)); setAutoFilled((a) => ({ ...a, aadhaar_number: false })); }}
+                  autoFilled={autoFilled.aadhaar_number}
+                  keyboardType="number-pad"
+                  error={aadhaarNumber.length > 0 && !aadhaarValid ? "Enter a valid 12-digit Aadhaar number" : undefined}
+                  maxLength={12}
+                />
                 <Field label="Current address" value={currentAddress} onChangeText={(v) => { setCurrentAddress(v); setAutoFilled((a) => ({ ...a, current_address: false })); }} autoFilled={autoFilled.current_address} />
-                <Field label="Mobile" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
+                <Field
+                  label="Mobile"
+                  value={mobile}
+                  onChangeText={(v) => setMobile(normalizeIndianMobile(v))}
+                  keyboardType="number-pad"
+                  maxLength={10}
+                  error={mobile.length > 0 && !mobileValid ? "Enter a valid 10-digit mobile number" : undefined}
+                />
               </Animated.View>
             )}
           </>
@@ -729,6 +753,8 @@ function Field({
   autoFilled,
   autoFilledLabel = "Auto-filled",
   keyboardType,
+  maxLength,
+  error,
 }: {
   label: string;
   value: string;
@@ -736,6 +762,8 @@ function Field({
   autoFilled?: boolean;
   autoFilledLabel?: string;
   keyboardType?: "default" | "number-pad" | "phone-pad" | "numeric";
+  maxLength?: number;
+  error?: string;
 }) {
   return (
     <View style={styles.fieldWrap}>
@@ -748,8 +776,10 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         keyboardType={keyboardType}
+        maxLength={maxLength}
         placeholderTextColor={colors.muted}
       />
+      {error && <Text style={styles.fieldError}>{error}</Text>}
     </View>
   );
 }
@@ -810,6 +840,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: "600", color: colors.muted },
   autoTag: { fontSize: 10, fontWeight: "700", color: colors.tealDark, backgroundColor: colors.tealLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   input: { borderWidth: 0, backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.navy },
+  fieldError: { fontSize: 11, color: colors.danger, marginTop: 4 },
   footer: {
     flexDirection: "row",
     gap: spacing.sm,

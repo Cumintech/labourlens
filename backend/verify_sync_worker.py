@@ -50,7 +50,7 @@ print("portal credentials set")
 worker_resp = client.post(
     "/workers",
     headers=headers,
-    json={"name": "Sync Test Worker", "aadhaar_number": "111122223333"},
+    json={"name": "Sync Test Worker", "aadhaar_number": "211122223335"},
 )
 assert worker_resp.status_code == 201, worker_resp.text
 worker_id = worker_resp.json()["id"]
@@ -69,7 +69,7 @@ print("sync_status after create sync:", create_row)
 assert create_row["state"] == "synced", f"create sync failed: {create_row.get('last_error')}"
 
 # --- Confirm the worker actually exists on the real Test Portal now ---
-portal_search = requests.get(f"{PORTAL_URL}/workers/search?aadhaar=111122223333")
+portal_search = requests.get(f"{PORTAL_URL}/workers/search?aadhaar=211122223335")
 # Not logged in via requests session -- expect 401, confirming the search
 # endpoint itself requires auth (a real check, not just trusting it works)
 assert portal_search.status_code == 401, "search endpoint should require login"
@@ -79,7 +79,7 @@ print("search endpoint correctly requires login (401 without a session): PASSED"
 portal_session = requests.Session()
 login_resp = portal_session.post(f"{PORTAL_URL}/login", data={"username": "portaladmin", "password": "portalpass12345"})
 assert login_resp.status_code == 200
-portal_check = portal_session.get(f"{PORTAL_URL}/workers/search?aadhaar=111122223333").json()
+portal_check = portal_session.get(f"{PORTAL_URL}/workers/search?aadhaar=211122223335").json()
 assert len(portal_check["matches"]) == 1, f"worker not found on Portal after sync: {portal_check}"
 assert portal_check["matches"][0]["status"] == "active"
 print("worker confirmed present and active on the real Test Portal: PASSED")
@@ -96,7 +96,7 @@ deactivate_row = next(r for r in status_final if r["action"] == "deactivate")
 print("sync_status after deactivate sync:", deactivate_row)
 assert deactivate_row["state"] == "synced", f"deactivate sync failed: {deactivate_row.get('last_error')}"
 
-portal_check2 = portal_session.get(f"{PORTAL_URL}/workers/search?aadhaar=111122223333").json()
+portal_check2 = portal_session.get(f"{PORTAL_URL}/workers/search?aadhaar=211122223335").json()
 assert portal_check2["matches"][0]["status"] == "inactive", f"Portal still shows active: {portal_check2}"
 print("worker confirmed inactive on the real Test Portal after deactivate sync: PASSED")
 

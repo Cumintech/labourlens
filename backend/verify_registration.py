@@ -18,6 +18,15 @@ from PIL import Image, ImageDraw
 from database import Base, SessionLocal, engine
 import models
 from main import app
+from verhoeff import validate_verhoeff
+
+
+def _valid_aadhaar(prefix11: str) -> str:
+    for last in range(10):
+        cand = prefix11 + str(last)
+        if validate_verhoeff(cand):
+            return cand
+    raise AssertionError("no valid checksum found")
 
 
 def _make_test_aadhaar_image() -> bytes:
@@ -28,7 +37,7 @@ def _make_test_aadhaar_image() -> bytes:
     draw.text((20, 40), "SURESH PRASAD", fill="black")
     draw.text((20, 100), "DOB: 14/03/1985", fill="black")
     draw.text((20, 160), "MALE", fill="black")
-    draw.text((20, 220), "1234 5678 9012", fill="black")
+    draw.text((20, 220), "2234 5678 9018", fill="black")
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -67,7 +76,7 @@ assert ocr_resp.status_code == 200, ocr_resp.text
 ocr_fields = ocr_resp.json()
 print("OCR extracted:", ocr_fields)
 assert ocr_fields.get("name") == "SURESH PRASAD", ocr_fields
-assert ocr_fields.get("aadhaar_number") == "123456789012", ocr_fields
+assert ocr_fields.get("aadhaar_number") == "223456789018", ocr_fields
 assert ocr_fields.get("gender") == "Male", ocr_fields
 
 # --- Create a worker for Owner A using the OCR fields + manual additions ---
@@ -86,7 +95,7 @@ create_resp = client.post(
 assert create_resp.status_code == 201, create_resp.text
 worker = create_resp.json()
 print("worker created:", worker)
-assert worker["aadhaar_last4"] == "9012", worker
+assert worker["aadhaar_last4"] == "9018", worker
 assert "aadhaar_number" not in worker, "raw Aadhaar must never appear in API responses"
 assert "aadhaar_encrypted" not in worker, "encrypted column must never appear in API responses"
 
@@ -102,9 +111,9 @@ with engine.connect() as raw_conn:
         {"id": worker["id"]},
     ).fetchone()
 raw_aadhaar_encrypted, raw_address_encrypted, raw_last4 = row
-assert raw_aadhaar_encrypted != "123456789012", f"Aadhaar stored in plaintext! {raw_aadhaar_encrypted!r}"
+assert raw_aadhaar_encrypted != "223456789018", f"Aadhaar stored in plaintext! {raw_aadhaar_encrypted!r}"
 assert raw_address_encrypted != "42 MG Road, Bengaluru", f"Address stored in plaintext! {raw_address_encrypted!r}"
-assert raw_last4 == "9012"
+assert raw_last4 == "9018"
 print(f"raw DB confirms encryption: aadhaar_encrypted={raw_aadhaar_encrypted[:20]}..., "
       f"current_address={raw_address_encrypted[:20]}...")
 
@@ -126,7 +135,7 @@ for i in range(49):  # 1 already created above, need 49 more to hit 50
     resp = client.post(
         "/workers",
         headers=headers_a,
-        json={"name": f"Bulk Worker {i}", "aadhaar_number": f"{100000000000 + i}"},
+        json={"name": f"Bulk Worker {i}", "aadhaar_number": _valid_aadhaar(f"20000000{i:03d}")},
     )
     assert resp.status_code == 201, f"worker {i}: {resp.text}"
 

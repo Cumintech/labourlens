@@ -68,7 +68,7 @@ print("Trial well past its window: clamps to 0, never negative, status stays 'tr
 
 # --- Confirm nothing here actually blocks real app usage once "expired" ---
 worker = client.post(
-    "/workers", headers={"Authorization": f"Bearer {token}"}, json={"name": "Post-Trial Worker", "aadhaar_number": "888899990000"}
+    "/workers", headers={"Authorization": f"Bearer {token}"}, json={"name": "Post-Trial Worker", "aadhaar_number": "888899990004"}
 )
 assert worker.status_code == 201, worker.text
 print("Creating a worker still works after the trial window has passed -- informational only, not a gate: PASSED")

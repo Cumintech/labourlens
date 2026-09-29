@@ -69,7 +69,7 @@ token = signup.json()["access_token"]
 headers = {"Authorization": f"Bearer {token}"}
 
 worker = client.post(
-    "/workers", headers=headers, json={"name": TAMIL_NAME, "aadhaar_number": "900099998888", "dob": "1995-06-01"}
+    "/workers", headers=headers, json={"name": TAMIL_NAME, "aadhaar_number": "900099998886", "dob": "1995-06-01"}
 ).json()
 wid = worker["id"]
 assert client.post(f"/workers/{wid}/compliance", headers=headers, json={"designation_or_nature_of_work": "Machine Operator"}).status_code == 201
@@ -103,7 +103,7 @@ assert idcard.status_code == 200 and idcard.content[:4] == b"%PDF"
 print(f"ID Card (Tamil name via raw Canvas draw_line) generates: PASSED ({len(idcard.content)} bytes)")
 
 # Sanity: an English-only worker must still render exactly as before (no regression)
-worker_en = client.post("/workers", headers=headers, json={"name": ENGLISH_NAME, "aadhaar_number": "900077776666"}).json()
+worker_en = client.post("/workers", headers=headers, json={"name": ENGLISH_NAME, "aadhaar_number": "900077776667"}).json()
 form12_en = client.get(f"/forms/form12/{worker_en['id']}", headers=headers)
 assert form12_en.status_code == 200 and form12_en.content[:4] == b"%PDF"
 print(f"Form 12 (English name, unaffected) still generates: PASSED ({len(form12_en.content)} bytes)")

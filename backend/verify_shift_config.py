@@ -86,7 +86,7 @@ print("migration script is idempotent on a second run: PASSED")
 
 # --- Attendance marking validated against the owner's own shifts ---
 worker = client.post(
-    "/workers", headers=headers_a, json={"name": "Shift Worker", "aadhaar_number": "111122223333"}
+    "/workers", headers=headers_a, json={"name": "Shift Worker", "aadhaar_number": "211122223335"}
 ).json()
 
 mark_default = client.post(

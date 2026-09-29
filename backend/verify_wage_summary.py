@@ -34,18 +34,18 @@ assert am_shift["slot_key"] == "AM"
 client.put(f"/shift-configs/{am_shift['id']}", headers=headers_a, json={"slot_key": "AM", "label": "AM", "start_time": "06:00", "end_time": "14:00"})
 
 # --- Worker 1: daily rate, 3 days present in September, one with OT ---
-w1 = client.post("/workers", headers=headers_a, json={"name": "Wage Worker One", "aadhaar_number": "555511112222"}).json()
+w1 = client.post("/workers", headers=headers_a, json={"name": "Wage Worker One", "aadhaar_number": "555511112225"}).json()
 client.post(f"/workers/{w1['id']}/wage-profile", headers=headers_a, json={"rate_type": "daily", "basic": 500, "hra": 0, "da": 0, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": "2026-09-01"})
 for day, ot in (("2026-09-01", 0), ("2026-09-02", 0), ("2026-09-03", 4)):
     r = client.post("/attendance", headers=headers_a, json={"worker_id": w1["id"], "date": day, "slot": "AM", "status": "present", "overtime_hours": ot})
     assert r.status_code == 200, r.text
 
 # --- Worker 2: monthly rate, no attendance marked at all this month ---
-w2 = client.post("/workers", headers=headers_a, json={"name": "Wage Worker Two", "aadhaar_number": "555511113333"}).json()
+w2 = client.post("/workers", headers=headers_a, json={"name": "Wage Worker Two", "aadhaar_number": "555511113332"}).json()
 client.post(f"/workers/{w2['id']}/wage-profile", headers=headers_a, json={"rate_type": "monthly", "basic": 15000, "hra": 0, "da": 0, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": "2026-09-01"})
 
 # --- Worker 3: no wage profile at all ---
-w3 = client.post("/workers", headers=headers_a, json={"name": "No Rate Worker", "aadhaar_number": "555511114444"}).json()
+w3 = client.post("/workers", headers=headers_a, json={"name": "No Rate Worker", "aadhaar_number": "555511114448"}).json()
 
 # --- Independently hand-computed expected figures for worker 1 ---
 DAYS_WORKED = 3

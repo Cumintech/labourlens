@@ -4,8 +4,49 @@ from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
+from verhoeff import validate_verhoeff
 
 MIN_OWNER_PASSWORD_LENGTH = 8
+
+_AADHAAR_PATTERN = re.compile(r"^[2-9]\d{11}$")
+
+
+def _validate_aadhaar_digits(v: str) -> str:
+    digits = v.replace(" ", "")
+    if not _AADHAAR_PATTERN.match(digits) or not validate_verhoeff(digits):
+        raise ValueError("Enter a valid 12-digit Aadhaar number")
+    return digits
+
+
+# Indian mobile numbers: 10 digits, first digit 6-9. A pasted
+# +91XXXXXXXXXX or 0XXXXXXXXXX is reduced to the bare 10 digits rather
+# than rejected outright -- a real, common paste pattern, not user error.
+_MOBILE_PATTERN = re.compile(r"^[6-9]\d{9}$")
+
+
+def _normalize_mobile_digits(v: str) -> str:
+    digits = re.sub(r"\D", "", v)
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    return digits
+
+
+def _validate_mobile_required(v: str) -> str:
+    digits = _normalize_mobile_digits(v)
+    if not _MOBILE_PATTERN.match(digits):
+        raise ValueError("Enter a valid 10-digit mobile number")
+    return digits
+
+
+def _validate_mobile_optional(v: str | None) -> str | None:
+    if v is None or not v.strip():
+        return None
+    digits = _normalize_mobile_digits(v)
+    if not _MOBILE_PATTERN.match(digits):
+        raise ValueError("Enter a valid 10-digit mobile number")
+    return digits
 
 
 class OwnerSignupIn(BaseModel):
@@ -31,10 +72,29 @@ class OwnerSignupIn(BaseModel):
             raise ValueError(f"Password must be at least {MIN_OWNER_PASSWORD_LENGTH} characters")
         return v
 
+    @field_validator("mobile")
+    @classmethod
+    def _validate_mobile(cls, v: str) -> str:
+        return _validate_mobile_required(v)
+
 
 class OwnerLoginIn(BaseModel):
     mobile: str
     password: str
+
+    # Deliberately lenient, unlike signup: normalize a pasted +91/0
+    # prefix so lookup still matches, but never hard-reject the format
+    # here. Signup had NO mobile validation at all before this change,
+    # so some already-existing production accounts could in principle
+    # have a mobile value that wouldn't pass the strict pattern below --
+    # rejecting login on format would lock a real owner out of their own
+    # account. An unrecognized/malformed value just won't match any
+    # stored mobile and falls through to the existing generic "Invalid
+    # mobile number or password" 401, same as any other wrong credential.
+    @field_validator("mobile")
+    @classmethod
+    def _normalize_mobile(cls, v: str) -> str:
+        return _normalize_mobile_digits(v) or v
 
 
 class OwnerOut(BaseModel):
@@ -103,6 +163,16 @@ class WorkerCreateIn(BaseModel):
     native_district: str | None = None
     bank_account_number: str | None = None
     bank_ifsc: str | None = None
+
+    @field_validator("aadhaar_number")
+    @classmethod
+    def _validate_aadhaar(cls, v: str) -> str:
+        return _validate_aadhaar_digits(v)
+
+    @field_validator("mobile")
+    @classmethod
+    def _validate_mobile(cls, v: str | None) -> str | None:
+        return _validate_mobile_optional(v)
 
 
 class WorkerOut(BaseModel):

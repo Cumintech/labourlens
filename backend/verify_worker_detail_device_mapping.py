@@ -30,7 +30,7 @@ assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]
 headers = {"Authorization": f"Bearer {token}"}
 
-worker = client.post("/workers", headers=headers, json={"name": "Ganesh", "aadhaar_number": "555566667777"}).json()
+worker = client.post("/workers", headers=headers, json={"name": "Ganesh", "aadhaar_number": "555566667771"}).json()
 
 # Before mapping: both endpoints correctly agree it's unmapped.
 before_detail = client.get(f"/workers/{worker['id']}", headers=headers)

@@ -18,6 +18,15 @@ from fastapi.testclient import TestClient
 from database import Base, engine
 import models
 from main import app
+from verhoeff import validate_verhoeff
+
+
+def _valid_aadhaar(prefix11: str) -> str:
+    for last in range(10):
+        cand = prefix11 + str(last)
+        if validate_verhoeff(cand):
+            return cand
+    raise AssertionError("no valid checksum found")
 
 Base.metadata.create_all(bind=engine)
 client = TestClient(app)
@@ -34,7 +43,7 @@ headers = {"Authorization": f"Bearer {token}"}
 
 worker_ids = []
 for i in range(3):
-    r = client.post("/workers", headers=headers, json={"name": f"Worker {i}", "aadhaar_number": f"11112222{i:04d}"})
+    r = client.post("/workers", headers=headers, json={"name": f"Worker {i}", "aadhaar_number": _valid_aadhaar(f"2111222{i:04d}")})
     assert r.status_code == 201, r.text
     worker_ids.append(r.json()["id"])
 w0, w1, w2 = worker_ids

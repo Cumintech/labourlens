@@ -31,7 +31,7 @@ assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]
 headers = {"Authorization": f"Bearer {token}"}
 
-worker = client.post("/workers", headers=headers, json={"name": "Kept Worker", "aadhaar_number": "555588889999"}).json()
+worker = client.post("/workers", headers=headers, json={"name": "Kept Worker", "aadhaar_number": "555588889990"}).json()
 assert worker["id"], worker
 
 still_logged_in = client.get("/owners/me", headers=headers)

@@ -67,7 +67,7 @@ assert after.json()["rate_type"] == "daily" and after.json()["basic"] == 750, (
 print("assigning a worker type to a worker with no rate auto-creates a wage profile from its defaults: PASSED")
 
 # --- Assigning a type to a worker who already has a rate leaves it untouched ---
-w2 = client.post("/workers", headers=headers_a, json={"name": "Already Has Rate", "aadhaar_number": "444455557777"}).json()
+w2 = client.post("/workers", headers=headers_a, json={"name": "Already Has Rate", "aadhaar_number": "444455557776"}).json()
 client.post(
     f"/workers/{w2['id']}/wage-profile",
     headers=headers_a,

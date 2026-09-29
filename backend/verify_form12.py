@@ -34,7 +34,7 @@ today = date(2026, 9, 3)
 
 def _worker_with_dob(dob: str) -> dict:
     return client.post(
-        "/workers", headers=headers_a, json={"name": "W", "aadhaar_number": "999900001111", "dob": dob}
+        "/workers", headers=headers_a, json={"name": "W", "aadhaar_number": "999900001119", "dob": dob}
     ).json()
 
 

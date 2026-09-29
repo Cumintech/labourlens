@@ -64,7 +64,7 @@ set_hours = client.put(
 assert set_hours.status_code == 200, set_hours.text  # AM is now an 8-hour shift
 
 worker = client.post(
-    "/workers", headers=headers_a, json={"name": "Forms Worker", "aadhaar_number": "555566667777", "dob": "1990-01-01", "gender": "Male"}
+    "/workers", headers=headers_a, json={"name": "Forms Worker", "aadhaar_number": "555566667771", "dob": "1990-01-01", "gender": "Male"}
 ).json()
 
 compliance = client.post(
@@ -313,7 +313,7 @@ signup_b = client.post(
 )
 token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}
-worker_b = client.post("/workers", headers=headers_b, json={"name": "Owner B Worker", "aadhaar_number": "111111119999"}).json()
+worker_b = client.post("/workers", headers=headers_b, json={"name": "Owner B Worker", "aadhaar_number": "211111119991"}).json()
 
 form15_b = client.get("/forms/form15", headers=headers_b, params={"start_date": "2026-08-01", "end_date": "2026-08-31"})
 text15_b = pdf_text(form15_b.content)

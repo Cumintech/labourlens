@@ -77,7 +77,7 @@ try:
     token = signup.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    w = client.post("/workers", headers=headers, json={"name": "Report Worker", "aadhaar_number": "999988887777"}).json()
+    w = client.post("/workers", headers=headers, json={"name": "Report Worker", "aadhaar_number": "999988887779"}).json()
     mark = client.post(
         "/attendance", headers=headers, json={"worker_id": w["id"], "date": str(TODAY), "slot": "AM", "status": "present"}
     )
@@ -86,7 +86,7 @@ try:
     # A second worker, deactivated partway through the report period --
     # the report must call this out in its own section, not just silently
     # drop them from the attendance rows.
-    w2 = client.post("/workers", headers=headers, json={"name": "Leaving Worker", "aadhaar_number": "999988886666"}).json()
+    w2 = client.post("/workers", headers=headers, json={"name": "Leaving Worker", "aadhaar_number": "999988886669"}).json()
     deactivate = client.patch(f"/workers/{w2['id']}/deactivate", headers=headers)
     assert deactivate.status_code == 200, deactivate.text
     # deactivate_worker() stamps deactivated_at with the real wall-clock

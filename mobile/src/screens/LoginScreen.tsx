@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import KeyboardScreen from "../components/KeyboardScreen";
 import { AuthStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+import { isValidIndianMobile, normalizeIndianMobile } from "../validators";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
@@ -27,10 +28,18 @@ export default function LoginScreen({ navigation }: Props) {
 
   async function handleSubmit() {
     setError(null);
+    // Checked before either branch even reaches the network -- a
+    // malformed mobile number is never a legitimate login attempt or a
+    // signup the backend would accept, so there's no reason to make a
+    // request just to get the same rejection back from the server.
+    if (!isValidIndianMobile(mobile)) {
+      setError("Enter a valid 10-digit mobile number.");
+      return;
+    }
     setSubmitting(true);
     try {
       if (mode === "login") {
-        await login(mobile.trim(), password);
+        await login(mobile, password);
       } else {
         if (!name.trim() || !factoryName.trim()) {
           setError("Owner name and factory name are required.");
@@ -43,7 +52,7 @@ export default function LoginScreen({ navigation }: Props) {
           setError("Please accept the Privacy Policy to create an account.");
           return;
         }
-        const newOwner = await signup(name.trim(), mobile.trim(), password, factoryName.trim(), consentChecked);
+        const newOwner = await signup(name.trim(), mobile, password, factoryName.trim(), consentChecked);
         if (newOwner.plan_status === "trial") {
           Alert.alert(
             "Welcome to Labour Lens",
@@ -103,8 +112,9 @@ export default function LoginScreen({ navigation }: Props) {
       <TextInput
         style={styles.input}
         value={mobile}
-        onChangeText={setMobile}
+        onChangeText={(v) => setMobile(normalizeIndianMobile(v))}
         keyboardType="phone-pad"
+        maxLength={10}
         placeholder="9840XXXXXX"
         placeholderTextColor={colors.muted}
         autoCapitalize="none"

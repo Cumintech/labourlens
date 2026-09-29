@@ -44,7 +44,7 @@ assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]
 headers = {"Authorization": f"Bearer {token}"}
 
-worker_a = client.post("/workers", headers=headers, json={"name": "Worker A", "aadhaar_number": "111122223333"}).json()
+worker_a = client.post("/workers", headers=headers, json={"name": "Worker A", "aadhaar_number": "211122223335"}).json()
 worker_b = client.post("/workers", headers=headers, json={"name": "Worker B", "aadhaar_number": "444455556666"}).json()
 
 am_shift = client.get("/shift-configs", headers=headers).json()[0]
@@ -118,7 +118,7 @@ unmapped_punch_id = unmapped.json()[0]["id"]
 print("Unmapped punch surfaced via GET /biometric/unmapped-punches: PASSED")
 
 # Need consent for a fresh worker to resolve the unmapped punch onto them
-worker_c = client.post("/workers", headers=headers, json={"name": "Worker C", "aadhaar_number": "777788889999"}).json()
+worker_c = client.post("/workers", headers=headers, json={"name": "Worker C", "aadhaar_number": "777788889996"}).json()
 client.post(f"/workers/{worker_c['id']}/biometric-consent", headers=headers, json={"notice_text": "Consent given verbally, recorded here."})
 
 resolve = client.post(f"/biometric/unmapped-punches/{unmapped_punch_id}/resolve?worker_id={worker_c['id']}", headers=headers)

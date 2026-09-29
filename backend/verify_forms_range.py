@@ -35,8 +35,8 @@ signup = client.post(
 assert signup.status_code == 201, signup.text
 headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
 
-worker_a = client.post("/workers", headers=headers, json={"name": "Range Worker A", "aadhaar_number": "555511112222"}).json()
-worker_b = client.post("/workers", headers=headers, json={"name": "Range Worker B", "aadhaar_number": "555533334444"}).json()
+worker_a = client.post("/workers", headers=headers, json={"name": "Range Worker A", "aadhaar_number": "555511112225"}).json()
+worker_b = client.post("/workers", headers=headers, json={"name": "Range Worker B", "aadhaar_number": "555533334443"}).json()
 
 for wid, day in ((worker_a["id"], "2026-06-10"), (worker_a["id"], "2026-07-10"), (worker_a["id"], "2026-08-10"), (worker_b["id"], "2026-08-10")):
     mark = client.post("/attendance", headers=headers, json={"worker_id": wid, "date": day, "slot": "AM", "status": "present"})

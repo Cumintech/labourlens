@@ -46,7 +46,7 @@ def audit_rows(worker_id: int) -> list[models.AuditLog]:
 
 # --- Deactivate: the one action already logged before this round --
 # confirmed still works, not regressed by the new additions below. ---
-worker1 = client.post("/workers", headers=headers, json={"name": "Deactivate Me", "aadhaar_number": "111100002222"}).json()
+worker1 = client.post("/workers", headers=headers, json={"name": "Deactivate Me", "aadhaar_number": "211100002226"}).json()
 deact = client.patch(f"/workers/{worker1['id']}/deactivate", headers=headers)
 assert deact.status_code == 200, deact.text
 rows1 = audit_rows(worker1["id"])
@@ -84,7 +84,7 @@ assert "500" in (rows3[0].reason or ""), f"expected the rate figure in the audit
 print("A manual wage-rate entry produces a wage_rate_set audit row with the figure in the reason: PASSED")
 
 # --- Wage rate: auto-created from a WorkerType default on assignment ---
-worker4 = client.post("/workers", headers=headers, json={"name": "Type Default Worker", "aadhaar_number": "999900001111"}).json()
+worker4 = client.post("/workers", headers=headers, json={"name": "Type Default Worker", "aadhaar_number": "999900001119"}).json()
 wtype = client.post("/worker-types", headers=headers, json={"name": "Electrician Test Type", "default_rate_type": "daily", "default_rate": 800}).json()
 assign = client.put(f"/workers/{worker4['id']}/worker-type", headers=headers, json={"worker_type_id": wtype["id"]})
 assert assign.status_code == 200, assign.text

@@ -40,7 +40,7 @@ headers = {"Authorization": f"Bearer {token}"}
 worker = client.post(
     "/workers",
     headers=headers,
-    json={"name": "Kumar Selvam", "aadhaar_number": "222233335555", "current_address": "12 North Street, Salem", "dob": "1995-06-01"},
+    json={"name": "Kumar Selvam", "aadhaar_number": "222233335556", "current_address": "12 North Street, Salem", "dob": "1995-06-01"},
 ).json()
 
 # --- No compliance/wage data on file yet -- must still generate, not crash ---

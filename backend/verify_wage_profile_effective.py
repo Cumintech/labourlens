@@ -27,7 +27,7 @@ signup = client.post(
 headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
 
 # --- No rate set at all: 404, not a crash or a fabricated zero ---
-w1 = client.post("/workers", headers=headers, json={"name": "No Rate", "aadhaar_number": "111122223333"}).json()
+w1 = client.post("/workers", headers=headers, json={"name": "No Rate", "aadhaar_number": "211122223335"}).json()
 none_resp = client.get(f"/workers/{w1['id']}/wage-profile", headers=headers)
 assert none_resp.status_code == 404, none_resp.text
 print("Effective rate for a worker with nothing set: 404, not fabricated: PASSED")

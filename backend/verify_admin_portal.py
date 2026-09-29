@@ -18,6 +18,15 @@ from database import Base, SessionLocal, engine
 import models
 from admin_auth import hash_password
 from main import app
+from verhoeff import validate_verhoeff
+
+
+def _valid_aadhaar(prefix11: str) -> str:
+    for last in range(10):
+        cand = prefix11 + str(last)
+        if validate_verhoeff(cand):
+            return cand
+    raise AssertionError("no valid checksum found")
 from monthly_employee_snapshot import snapshot_month
 
 Base.metadata.create_all(bind=engine)
@@ -82,7 +91,7 @@ for i in range(3):
     w = client.post(
         f"/workers",
         headers={"Authorization": f"Bearer {owner_a_token}"},
-        json={"name": f"Worker {i}", "aadhaar_number": f"11112222{i:04d}"},
+        json={"name": f"Worker {i}", "aadhaar_number": _valid_aadhaar(f"2111222{i:04d}")},
     )
     assert w.status_code == 201, w.text
 

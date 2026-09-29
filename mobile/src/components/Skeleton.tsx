@@ -21,7 +21,7 @@ export function SkeletonBlock({ width, height, style }: { width: number | `${num
     return () => loop.stop();
   }, [opacity]);
 
-  return <Animated.View style={[{ width, height, borderRadius: radius.sm, backgroundColor: colors.fieldBg, opacity }, style]} />;
+  return <Animated.View style={[{ width, height, borderRadius: radius.sm, backgroundColor: colors.ground, opacity }, style]} />;
 }
 
 // Matches Dashboard/WageRateWorkers/WageCalculation's row shape: a name
@@ -63,7 +63,7 @@ export function ListSkeleton({ rows = 5, variant = "worker" }: { rows?: number; 
 
 const styles = StyleSheet.create({
   row: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.sm + 4,
     marginHorizontal: spacing.md,

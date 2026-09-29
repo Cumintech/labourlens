@@ -1,34 +1,66 @@
-// Colors extracted directly from labour-lens-spec-v2.pptx's mockup slides
-// (shape fill/font colors read via python-pptx, not eyeballed from a
-// render) -- these are the actual intended values, not an approximation.
+// v2 redesign tokens (see the redesign/ui-v2 spec). Old names below are
+// kept as aliases to their original values -- not repointed at the new
+// palette -- so any screen not yet migrated to the new design keeps
+// rendering exactly as it did before, rather than picking up colors it
+// was never designed against mid-migration. Once every screen has moved
+// to the new token names (Phase 10), the aliases block gets deleted.
 export const colors = {
-  navy: "#1B2340", // headers, primary dark text, status bar chrome
-  teal: "#1F9D82", // brand accent -- primary buttons, active states, links
-  tealLight: "#E9F6F1", // highlighted stat blocks (e.g. "16/20 Present")
-  tealDark: "#0F6E56", // text-on-tealLight -- was hand-copied as a raw hex in 10+ places, promoted here
-  tealPale: "#BFE3D6", // chart/decorative fill
-  fieldBg: "#F4F6F9", // input field backgrounds, list row backgrounds
-  muted: "#6B7280", // secondary/label text
-  amber: "#E2A63D", // "owner fills this in" indicator
-  amberLight: "#FFF3DC",
-  amberPale: "#FFF8EC", // alt amber background -- was hand-copied as a raw hex in 5+ places, promoted here
-  amberDark: "#8A5A14", // text-on-amberLight/amberPale -- was hand-copied as a raw hex in 10+ places, promoted here
-  danger: "#D9534F", // a genuinely negative state only (marked Absent, a failed sync) -- never a "not yet marked" default
-  dangerLight: "#FBEAEA", // destructive-confirmation panel background
-  neutral: "#9CA3AF", // "not yet marked / no data" status color -- distinct from `muted` (which is for label/caption text, not status)
-  neutralLight: "#F0F1F3", // tile background for the neutral/unmarked status
-  white: "#FFFFFF",
-  // Decorative multi-hue palettes only (the shift-accent row, the wage
-  // donut chart) -- NOT status colors, so item 8's "single accent,
-  // status-only color" convention doesn't apply to these three: telling
-  // 5 shift boxes or N workers' wage slices apart needs several distinct
-  // hues, same reasoning a chart legend would.
+  // --- v2 tokens ---
+  navy: "#1B2340", // headers, primary text
+  primary: "#0F7A64", // buttons, active tab, links
+  primaryPressed: "#0B5E4D", // pressed state
+  brandTeal: "#1F9D82", // logo mark only -- never a UI action color
+  primaryTint: "#E6F4EF", // icon chips, active tab pill
+  ground: "#F5F7FA", // screen background
+  surface: "#FFFFFF", // cards
+  textSecondary: "#5B6275", // captions, labels
+  border: "#E6E9EF", // card borders
+  divider: "#EEF0F4",
+
+  // Status colors -- used ONLY for attendance/alert status, never decoration.
+  present: "#15803D",
+  presentTint: "#E8F5EC",
+  absent: "#C62828",
+  absentTint: "#FDECEC",
+  absentTintText: "#B42318", // text-on-absentTint (darker than `absent` for contrast on the tint)
+  leave: "#1D4ED8",
+  leaveTint: "#E8EFFD",
+  warning: "#B45309",
+  warningTint: "#FEF3E2",
+  warningTintText: "#8A4A0B",
+  warningBorder: "#F3D9B1",
+  unmarked: "#6B7280",
+  unmarkedTint: "#F0F1F4",
+  danger: "#B42318", // destructive text
+
+  // --- Decorative multi-hue palettes only (shift-accent row, wage donut
+  // chart) -- NOT status colors, the "status colors only for status"
+  // rule doesn't apply to these: telling N shifts/wage-slices apart
+  // needs several distinct hues, same reasoning a chart legend would. ---
   skyBlue: "#2E86DE",
   skyBlueLight: "#E8F1FC",
   violet: "#7C5CBF",
   violetLight: "#F1ECFA",
   coral: "#E8664F",
   coralLight: "#FCEAE6",
+
+  // --- Old names, kept as aliases to their ORIGINAL values (see file
+  // comment above) -- not part of the v2 palette, only here so
+  // not-yet-migrated screens don't shift colors mid-redesign. ---
+  teal: "#1F9D82",
+  tealLight: "#E9F6F1",
+  tealDark: "#0F6E56",
+  tealPale: "#BFE3D6",
+  fieldBg: "#F4F6F9",
+  muted: "#6B7280",
+  amber: "#E2A63D",
+  amberLight: "#FFF3DC",
+  amberPale: "#FFF8EC",
+  amberDark: "#8A5A14",
+  dangerLight: "#FBEAEA",
+  neutral: "#9CA3AF",
+  neutralLight: "#F0F1F3",
+  white: "#FFFFFF",
 } as const;
 
 export const spacing = {
@@ -40,7 +72,32 @@ export const spacing = {
 } as const;
 
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 20,
+  sm: 10,
+  md: 14,
+  lg: 16,
+  xl: 20,
+} as const;
+
+// Plus Jakarta Sans weights loaded via useFonts in App's root (see
+// index.ts/App.tsx) -- these map the scale to that font family + the
+// numeric weight PlusJakartaSans_* variants ship as separate families,
+// not a single family with a `fontWeight` prop (Expo Google Fonts
+// packages one font file per weight).
+export const type = {
+  display: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 28 },
+  title: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 20 },
+  section: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 17 },
+  body: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 15 },
+  small: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13 },
+  caption: {
+    fontFamily: "PlusJakartaSans_700Bold",
+    fontSize: 12,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.72, // 0.06em at 12px
+  },
+} as const;
+
+export const touchTarget = {
+  min: 44,
+  primary: 48,
 } as const;

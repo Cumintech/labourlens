@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- App icon source: navy full-bleed background with the brandTeal
+       mark (logo-mark.svg) centered and scaled down inside it. Needs
+       rasterizing to icon.png (1024x1024) - see mobile/assets/brand/README.md. -->
+  <rect x="0" y="0" width="1024" height="1024" fill="#1B2340"/>
+  <g transform="translate(112,112) scale(0.78)">
+    <rect x="0" y="0" width="1024" height="1024" rx="307" ry="307" fill="#1F9D82"/>
+    <g transform="translate(432,420)">
+      <circle cx="0" cy="-70" r="72" fill="none" stroke="#FFFFFF" stroke-width="34"/>
+      <path
+        d="M -128 158
+           C -128 48 -70 -6 0 -6
+           C 70 -6 128 48 128 158
+           L 128 170
+           C 128 178 121 185 113 185
+           L -113 185
+           C -121 185 -128 178 -128 170
+           Z"
+        fill="none" stroke="#FFFFFF" stroke-width="34" stroke-linejoin="round"
+      />
+    </g>
+    <circle cx="432" cy="420" r="268" fill="none" stroke="#FFFFFF" stroke-width="44"/>
+    <line x1="628" y1="616" x2="792" y2="780" stroke="#FFFFFF" stroke-width="56" stroke-linecap="round"/>
+  </g>
+</svg>

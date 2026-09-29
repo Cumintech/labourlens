@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react-native";
 import React, { useState } from "react";
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";
@@ -32,7 +33,7 @@ export default function SelectField<T extends string>({ label, value, options, o
         disabled={disabled}
       >
         <Text style={selected ? styles.valueText : styles.placeholderText}>{selected ? selected.label : placeholder}</Text>
-        <Text style={styles.chevron}>▾</Text>
+        <ChevronDown size={16} color={colors.textSecondary} />
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -67,27 +68,27 @@ export default function SelectField<T extends string>({ label, value, options, o
 
 const styles = StyleSheet.create({
   fieldWrap: { marginBottom: spacing.md },
-  label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
+  label: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   input: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.ground,
     borderRadius: radius.sm,
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    minHeight: 44,
   },
   inputDisabled: { opacity: 0.6 },
-  valueText: { fontSize: 16, color: colors.navy },
-  placeholderText: { fontSize: 16, color: colors.muted },
-  chevron: { color: colors.muted, fontSize: 14 },
+  valueText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.navy },
+  placeholderText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.textSecondary },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: colors.white, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, maxHeight: "70%" },
-  sheetTitle: { fontSize: 14, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, maxHeight: "70%" },
+  sheetTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.navy, marginBottom: spacing.sm },
   list: { flexGrow: 0 },
   option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
-  optionSelected: { backgroundColor: colors.tealLight },
-  optionText: { fontSize: 15, color: colors.navy },
-  optionTextSelected: { color: colors.tealDark, fontWeight: "700" },
+  optionSelected: { backgroundColor: colors.primaryTint },
+  optionText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 15, color: colors.navy },
+  optionTextSelected: { color: colors.primary, fontFamily: "PlusJakartaSans_700Bold" },
   cancelButton: { paddingVertical: 14, alignItems: "center", marginTop: spacing.xs },
-  cancelText: { color: colors.muted, fontWeight: "700" },
+  cancelText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.textSecondary },
 });

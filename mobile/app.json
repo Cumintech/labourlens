@@ -47,6 +47,13 @@
             "compileSdkVersion": 36
           }
         }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#1B2340"
+        }
       ]
     ]
   }

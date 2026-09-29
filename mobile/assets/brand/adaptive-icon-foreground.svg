@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Android adaptive icon FOREGROUND layer - transparent background;
+       the OS applies its own background/mask shape, so no teal square
+       here, just the white mark scaled to sit inside Android's safe
+       zone (roughly the inner 66% of the canvas). -->
+  <g transform="translate(174,174) scale(0.66)">
+    <g transform="translate(432,420)">
+      <circle cx="0" cy="-70" r="72" fill="none" stroke="#FFFFFF" stroke-width="34"/>
+      <path
+        d="M -128 158
+           C -128 48 -70 -6 0 -6
+           C 70 -6 128 48 128 158
+           L 128 170
+           C 128 178 121 185 113 185
+           L -113 185
+           C -121 185 -128 178 -128 170
+           Z"
+        fill="none" stroke="#FFFFFF" stroke-width="34" stroke-linejoin="round"
+      />
+    </g>
+    <circle cx="432" cy="420" r="268" fill="none" stroke="#FFFFFF" stroke-width="44"/>
+    <line x1="628" y1="616" x2="792" y2="780" stroke="#FFFFFF" stroke-width="56" stroke-linecap="round"/>
+  </g>
+</svg>

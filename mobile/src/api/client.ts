@@ -28,6 +28,10 @@ export type Owner = {
   // informational only, never blocks anything in this app.
   plan_status: string;
   trial_days_remaining: number | null;
+  // "YYYY-MM-DD" -- a fixed point in time (enrolled_at + TRIAL_DAYS),
+  // unlike trial_days_remaining which counts down. Also null outside
+  // plan_status === "trial". See planStatus.ts's trialStatusText.
+  trial_ends_at: string | null;
 };
 
 export function updateFactoryProfile(

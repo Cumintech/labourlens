@@ -6,7 +6,7 @@ import { ApiError, deleteAccount } from "../api/client";
 import { useAppLock } from "../context/AppLockContext";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { displayPlanStatus } from "../planStatus";
+import { displayPlanStatus, trialStatusText } from "../planStatus";
 import { colors, radius, spacing } from "../theme";
 
 // Rendered as the Settings tab's content inside MainTabs -- see
@@ -136,9 +136,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={styles.rowLabel}>Plan</Text>
             <Text style={styles.rowValue}>
               {displayPlanStatus(owner?.plan_status)}
-              {owner?.plan_status === "trial" && owner.trial_days_remaining != null
-                ? ` -- ${owner.trial_days_remaining} day${owner.trial_days_remaining === 1 ? "" : "s"} left`
-                : ""}
+              {owner?.plan_status === "trial" ? ` -- ${trialStatusText(owner)}` : ""}
             </Text>
           </View>
         </View>

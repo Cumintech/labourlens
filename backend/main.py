@@ -2,7 +2,7 @@ import io
 import os
 import secrets
 from contextlib import asynccontextmanager
-from datetime import date as date_, datetime, timezone
+from datetime import date as date_, datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -221,6 +221,7 @@ def _owner_out(db: Session, owner: models.Owner) -> OwnerOut:
     factory = db.query(models.Factory).filter(models.Factory.owner_id == owner.id).first()
     plan_status = factory.status if factory else "trial"
     trial_days_remaining = None
+    trial_ends_at = None
     if plan_status == "trial" and factory:
         # SQLite doesn't actually preserve timezone-awareness even for a
         # DateTime(timezone=True) column (unlike Postgres) -- it hands
@@ -233,7 +234,13 @@ def _owner_out(db: Session, owner: models.Owner) -> OwnerOut:
             enrolled_at = enrolled_at.replace(tzinfo=timezone.utc)
         elapsed_days = (datetime.now(timezone.utc) - enrolled_at).days
         trial_days_remaining = max(TRIAL_DAYS - elapsed_days, 0)
-    return OwnerOut(**owner.__dict__, plan_status=plan_status, trial_days_remaining=trial_days_remaining)
+        trial_ends_at = (enrolled_at + timedelta(days=TRIAL_DAYS)).date()
+    return OwnerOut(
+        **owner.__dict__,
+        plan_status=plan_status,
+        trial_days_remaining=trial_days_remaining,
+        trial_ends_at=trial_ends_at,
+    )
 
 
 @app.get("/health", response_model=HealthOut)

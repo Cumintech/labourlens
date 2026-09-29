@@ -113,6 +113,11 @@ class OwnerOut(BaseModel):
     # that blocks app usage -- see main.py's _owner_out.
     plan_status: str = "trial"
     trial_days_remaining: int | None = None
+    # Same single-source-of-truth rule as trial_days_remaining above --
+    # computed once in main.py's _owner_out from Factory.enrolled_at +
+    # TRIAL_DAYS, never recomputed client-side. Also None outside
+    # plan_status == "trial".
+    trial_ends_at: date | None = None
 
 
 class FactoryProfileIn(BaseModel):

@@ -8,7 +8,7 @@ import { isoDate } from "../components/DateField";
 import HomeBackground from "../components/HomeBackground";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { trialBannerText } from "../planStatus";
+import { trialStatusText } from "../planStatus";
 import { colors, radius, spacing } from "../theme";
 
 // Rendered as the "Home" tab's content inside MainTabs -- navigation
@@ -83,7 +83,7 @@ export default function HomeScreen({ navigation }: Props) {
 
       {owner?.plan_status === "trial" && (
         <View style={styles.trialBanner}>
-          <Text style={styles.trialBannerText}>{trialBannerText(owner)}</Text>
+          <Text style={styles.trialBannerText}>{trialStatusText(owner)}</Text>
         </View>
       )}
 

@@ -36,6 +36,10 @@ token = signup.json()["access_token"]
 owner_id = owner_body["id"]
 print(f"New signup: plan_status='trial', trial_days_remaining={TRIAL_DAYS}: PASSED")
 
+expected_ends_at = (datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)).date().isoformat()
+assert owner_body["trial_ends_at"] == expected_ends_at, owner_body
+print(f"New signup: trial_ends_at={expected_ends_at} (enrolled_at + {TRIAL_DAYS} days): PASSED")
+
 # --- /owners/me reflects the same thing ---
 me = client.get("/owners/me", headers={"Authorization": f"Bearer {token}"})
 assert me.status_code == 200
@@ -53,6 +57,13 @@ db.close()
 me_day1 = client.get("/owners/me", headers={"Authorization": f"Bearer {token}"})
 assert me_day1.json()["trial_days_remaining"] == TRIAL_DAYS - 1, me_day1.json()
 print(f"1 day elapsed: trial_days_remaining={TRIAL_DAYS - 1}: PASSED")
+
+# trial_ends_at is a fixed point in time (enrolled_at + TRIAL_DAYS) -- it
+# does NOT move as days elapse, unlike trial_days_remaining which counts
+# down. Recomputed here from the same backdated enrolled_at.
+day1_expected_ends_at = (datetime.now(timezone.utc) - timedelta(days=1) + timedelta(days=TRIAL_DAYS)).date().isoformat()
+assert me_day1.json()["trial_ends_at"] == day1_expected_ends_at, me_day1.json()
+print("trial_ends_at stays fixed at enrolled_at + TRIAL_DAYS as days elapse (doesn't move): PASSED")
 
 # --- Backdate well past the trial window -- must clamp at 0, never go negative ---
 db = SessionLocal()
@@ -91,6 +102,7 @@ assert update.status_code == 200, update.text
 me_active = client.get("/owners/me", headers={"Authorization": f"Bearer {token}"})
 assert me_active.json()["plan_status"] == "active", me_active.json()
 assert me_active.json()["trial_days_remaining"] is None, me_active.json()
-print("After admin marks the factory 'active': owner sees plan_status='active', trial_days_remaining=None: PASSED")
+assert me_active.json()["trial_ends_at"] is None, me_active.json()
+print("After admin marks the factory 'active': owner sees plan_status='active', trial_days_remaining and trial_ends_at both None: PASSED")
 
 print("\nALL ASSERTIONS PASSED")

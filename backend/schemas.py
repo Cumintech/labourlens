@@ -199,6 +199,13 @@ class WorkerOut(BaseModel):
     # URLs from); presence is what "ID Card: Generated" reads off of.
     photo_key: str | None = None
     created_at: datetime
+    # From WorkerCompliance, not a Worker column -- None means either no
+    # compliance record yet, or one exists but this field was never
+    # filled in. Included here (not just on WorkerComplianceOut) so
+    # attendance/leave screens can block editing a date before it
+    # without a second round-trip per worker -- see main.py's
+    # mark_attendance/create_leave_entry.
+    date_of_joining: date | None = None
 
 
 class WorkerTypeIn(BaseModel):

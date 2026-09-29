@@ -59,6 +59,11 @@ function formatDateLabel(dateStr: string): string {
   return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
+function formatJoinedLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
 // Purely presentational -- attendance/leave for every date in the range
 // live in the parent screen's state (see AttendanceRangeScreen below),
 // so the single shared OT popup can read and write any date's figure
@@ -101,21 +106,33 @@ function DayBlock({
   return (
     <View style={styles.dayBlock}>
       <Text style={styles.dayTitle}>{formatDateLabel(date)}</Text>
-      {workers.map((worker) => (
-        <View key={worker.id} style={styles.workerRow}>
-          <Text style={styles.workerName}>{workerLabel(worker)}</Text>
-          <DayAttendanceRow
-            shifts={shifts}
-            getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.status}
-            getShiftSource={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.source}
-            onSetShiftStatus={(slotKey, status) => onSetStatus(date, worker, slotKey, status)}
-            isOnLeave={leaveByWorker.has(worker.id)}
-            onToggleLeave={() => onToggleLeave(date, worker)}
-            otHours={dayOtHours(worker)}
-            onOpenOt={() => onOpenOt(date, worker)}
-          />
-        </View>
-      ))}
+      {workers.map((worker) => {
+        // Backend hard-rejects this anyway (main.py's mark_attendance) --
+        // showing it as disabled here is purely so the owner isn't left
+        // tapping tiles that silently fail one at a time.
+        const notYetJoined = !!worker.date_of_joining && date < worker.date_of_joining;
+        return (
+          <View key={worker.id} style={styles.workerRow}>
+            <Text style={styles.workerName}>{workerLabel(worker)}</Text>
+            {notYetJoined ? (
+              <View style={styles.notJoinedRow}>
+                <Text style={styles.notJoinedText}>Joined {formatJoinedLabel(worker.date_of_joining!)}</Text>
+              </View>
+            ) : (
+              <DayAttendanceRow
+                shifts={shifts}
+                getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.status}
+                getShiftSource={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.source}
+                onSetShiftStatus={(slotKey, status) => onSetStatus(date, worker, slotKey, status)}
+                isOnLeave={leaveByWorker.has(worker.id)}
+                onToggleLeave={() => onToggleLeave(date, worker)}
+                otHours={dayOtHours(worker)}
+                onOpenOt={() => onOpenOt(date, worker)}
+              />
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -378,4 +395,6 @@ const styles = StyleSheet.create({
   dayTitle: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
   workerRow: { marginBottom: spacing.sm },
   workerName: { fontSize: 13, fontWeight: "600", color: colors.navy, marginBottom: 4 },
+  notJoinedRow: { backgroundColor: colors.neutralLight, borderRadius: radius.sm, paddingVertical: spacing.sm + 2, alignItems: "center" },
+  notJoinedText: { fontSize: 12, fontWeight: "700", color: colors.neutral },
 });

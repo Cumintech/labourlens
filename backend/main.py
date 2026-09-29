@@ -103,6 +103,15 @@ def _add_years(d: date_, years: int) -> date_:
         return d.replace(year=d.year + years, day=28)
 
 
+def _get_joining_date(db: Session, worker_id: int) -> date_ | None:
+    row = (
+        db.query(models.WorkerCompliance.date_of_joining)
+        .filter(models.WorkerCompliance.worker_id == worker_id)
+        .first()
+    )
+    return row[0] if row else None
+
+
 def _validate_date_of_joining(date_of_joining: date_ | None, worker_dob: date_ | None) -> None:
     if date_of_joining is None:
         return
@@ -449,8 +458,18 @@ def list_workers(
         .filter(models.BiometricDevice.owner_id == owner.id)
         .all()
     )
+    joining_date_by_worker_id = dict(
+        db.query(models.WorkerCompliance.worker_id, models.WorkerCompliance.date_of_joining)
+        .join(models.Worker, models.Worker.id == models.WorkerCompliance.worker_id)
+        .filter(models.Worker.owner_id == owner.id)
+        .all()
+    )
     return [
-        WorkerOut(**w.__dict__, device_user_id=mapping_by_worker_id.get(w.id))
+        WorkerOut(
+            **w.__dict__,
+            device_user_id=mapping_by_worker_id.get(w.id),
+            date_of_joining=joining_date_by_worker_id.get(w.id),
+        )
         for w in workers
     ]
 
@@ -502,7 +521,16 @@ def get_worker(
         .filter(models.BiometricDevice.owner_id == owner.id, models.DeviceUserMapping.worker_id == worker.id)
         .first()
     )
-    return WorkerOut(**worker.__dict__, device_user_id=mapping[0] if mapping else None)
+    joining_date = (
+        db.query(models.WorkerCompliance.date_of_joining)
+        .filter(models.WorkerCompliance.worker_id == worker.id)
+        .first()
+    )
+    return WorkerOut(
+        **worker.__dict__,
+        device_user_id=mapping[0] if mapping else None,
+        date_of_joining=joining_date[0] if joining_date else None,
+    )
 
 
 # The mobile app compresses to ~400x500px JPEG at ~60-70% quality before
@@ -552,7 +580,16 @@ async def upload_worker_photo(
         .filter(models.BiometricDevice.owner_id == owner.id, models.DeviceUserMapping.worker_id == worker.id)
         .first()
     )
-    return WorkerOut(**worker.__dict__, device_user_id=mapping[0] if mapping else None)
+    joining_date = (
+        db.query(models.WorkerCompliance.date_of_joining)
+        .filter(models.WorkerCompliance.worker_id == worker.id)
+        .first()
+    )
+    return WorkerOut(
+        **worker.__dict__,
+        device_user_id=mapping[0] if mapping else None,
+        date_of_joining=joining_date[0] if joining_date else None,
+    )
 
 
 @app.post("/workers/{worker_id}/id-card")
@@ -968,6 +1005,12 @@ def create_leave_entry(
     _get_owned_worker(worker_id, owner, db)
     if body.date_to < body.date_from:
         raise HTTPException(status_code=422, detail="date_to must not be before date_from")
+    joining_date = _get_joining_date(db, worker_id)
+    if joining_date is not None and body.date_from < joining_date:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Leave can't start before this worker's date of entry into service ({joining_date.isoformat()})",
+        )
     entry = models.LeaveEntry(worker_id=worker_id, marked_by=owner.id, **body.model_dump())
     db.add(entry)
     db.commit()
@@ -1338,6 +1381,15 @@ def mark_attendance(
     )
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
+
+    if body.date > date_.today():
+        raise HTTPException(status_code=422, detail="Attendance can't be marked for a future date")
+    joining_date = _get_joining_date(db, body.worker_id)
+    if joining_date is not None and body.date < joining_date:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Attendance can't be marked before this worker's date of entry into service ({joining_date.isoformat()})",
+        )
 
     # Upsert on (worker_id, date, slot) -- re-marking the same slot updates
     # it rather than creating a duplicate row (matches the DB's own unique

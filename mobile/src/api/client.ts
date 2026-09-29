@@ -198,6 +198,11 @@ export type Worker = {
   // status row. null means no photo uploaded yet.
   photo_key: string | null;
   created_at: string;
+  // From the worker's compliance record, not a Worker column -- null
+  // means no joining date on file yet (in which case attendance/leave
+  // for them is unrestricted). See DayAttendanceRow's "Joined <date>"
+  // disabled state in AttendanceRangeScreen/WorkerAttendanceScreen.
+  date_of_joining: string | null;
 };
 
 export type WorkerType = {

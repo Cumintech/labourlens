@@ -110,6 +110,14 @@ def derive_attendance_for_punches(db: Session, punches: list[models.BiometricPun
     attendance for those already-stored punches too, not just future
     ones, or "map this worker" silently does nothing visible."""
     shifts_by_owner: dict[int, list[models.ShiftConfig]] = {}
+    # A device's clock (or a backlog of old punches after it reconnects)
+    # can easily predate when a worker actually joined -- a stray punch
+    # from a demo/mock run, or someone else's badge briefly mismapped to
+    # them, must not silently create a real attendance record for a day
+    # before they were even employed. The BiometricPunch row itself is
+    # left exactly as-is either way (never deleted or reassigned here) --
+    # only the derived Attendance write is skipped.
+    joining_date_by_worker: dict[int, date_type | None] = {}
     for row in punches:
         if row.worker_id is None:
             continue
@@ -126,6 +134,14 @@ def derive_attendance_for_punches(db: Session, punches: list[models.BiometricPun
             continue  # punch time doesn't fall inside any configured shift window -- can't attribute it, skip rather than guess
 
         punch_date: date_type = row.timestamp.date()
+
+        if row.worker_id not in joining_date_by_worker:
+            compliance = db.query(models.WorkerCompliance).filter(models.WorkerCompliance.worker_id == row.worker_id).first()
+            joining_date_by_worker[row.worker_id] = compliance.date_of_joining if compliance else None
+        joining_date = joining_date_by_worker[row.worker_id]
+        if joining_date is not None and punch_date < joining_date:
+            continue
+
         existing_attendance = (
             db.query(models.Attendance)
             .filter(

@@ -22,12 +22,20 @@ const NOTICE_TEXT =
 // the actual enrollment screens (device mapping) hard-block without a
 // captured consent record -- see biometric_api.py's create_device_mapping.
 export default function BiometricConsentScreen({ route, navigation }: Props) {
-  const { workerId, workerName, fromRegistration } = route.params;
+  const { workerId, workerName, fromRegistration, returnTo } = route.params;
   const { token } = useAuth();
   const [checked, setChecked] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Arrived from Worker Edit or a device-mapping screen (both still on
+  // the stack with their own state intact) rather than the registration
+  // flow -- go back into whichever one it was instead of forcing a stop
+  // at Wage Profile, which has nothing to do with why this was opened.
   function goNext() {
+    if (returnTo) {
+      navigation.goBack();
+      return;
+    }
     navigation.navigate("WageProfile", { workerId, workerName, fromRegistration });
   }
 

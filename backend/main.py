@@ -94,6 +94,29 @@ def _age_years(dob: date_, as_of: date_) -> int:
     return years
 
 
+def _add_years(d: date_, years: int) -> date_:
+    """Leap-day safe: a Feb 29 DOB landing on a non-leap target year
+    falls back to Feb 28 rather than raising (date.replace would)."""
+    try:
+        return d.replace(year=d.year + years)
+    except ValueError:
+        return d.replace(year=d.year + years, day=28)
+
+
+def _validate_date_of_joining(date_of_joining: date_ | None, worker_dob: date_ | None) -> None:
+    if date_of_joining is None:
+        return
+    if date_of_joining > date_.today():
+        raise HTTPException(status_code=422, detail="Date of entry into service can't be in the future")
+    if worker_dob is not None:
+        earliest = _add_years(worker_dob, MINIMUM_WORKING_AGE)
+        if date_of_joining < earliest:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Date of entry into service can't be before the worker turned {MINIMUM_WORKING_AGE} ({earliest.isoformat()})",
+            )
+
+
 def _shift_configs_for_owner(db: Session, owner_id: int) -> list[models.ShiftConfig]:
     return (
         db.query(models.ShiftConfig)
@@ -648,6 +671,7 @@ def create_worker_compliance(
     )
     if existing:
         raise HTTPException(status_code=409, detail="Compliance record already exists -- use PUT to update")
+    _validate_date_of_joining(body.date_of_joining, worker.dob)
 
     category = "young_person" if _age_years(worker.dob, date_.today()) < YOUNG_PERSON_AGE_CEILING else "adult"
     body_data = body.model_dump()
@@ -716,6 +740,12 @@ def update_worker_compliance(
     compliance.category = (
         "young_person" if _age_years(worker.dob, date_.today()) < YOUNG_PERSON_AGE_CEILING else "adult"
     )
+    # Only validated when this request actually touches the field --
+    # exclude_unset below means an omitted date_of_joining leaves
+    # whatever's already stored untouched, so there's nothing new here
+    # to validate.
+    if "date_of_joining" in body.model_fields_set:
+        _validate_date_of_joining(body.date_of_joining, worker.dob)
     # exclude_unset -- a field the client never included in the request
     # body (e.g. worker_code, which the mobile app no longer lets anyone
     # type since it's auto-generated) must be left alone, not silently

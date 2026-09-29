@@ -4,19 +4,25 @@ import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import {
   ApiError,
+  BiometricConsent,
   WorkerCompliance,
   createWorkerCompliance,
+  getBiometricConsent,
+  getWorker,
   getWorkerCompliance,
   recordWagePayment,
   updateWorkerCompliance,
 } from "../api/client";
-import DateField from "../components/DateField";
+import DateField, { addYearsIso, isoDate } from "../components/DateField";
 import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
 import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+
+// Matches the backend's MINIMUM_WORKING_AGE (main.py).
+const MINIMUM_WORKING_AGE = 14;
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkerEdit">;
 
@@ -51,9 +57,14 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
   const [fitnessCertValidTill, setFitnessCertValidTill] = useState("");
   const [compliance, setCompliance] = useState<WorkerCompliance | null>(null);
   const [saving, setSaving] = useState(false);
+  const [workerDob, setWorkerDob] = useState<string | null>(null);
+  const [biometricConsent, setBiometricConsent] = useState<BiometricConsent | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
+    const [worker, consent] = await Promise.all([getWorker(token, workerId), getBiometricConsent(token, workerId)]);
+    setWorkerDob(worker.dob);
+    setBiometricConsent(consent);
     try {
       const c = await getWorkerCompliance(token, workerId);
       setCompliance(c);
@@ -191,6 +202,24 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
         </View>
       )}
 
+      {isActive && (
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Biometric consent</Text>
+          {biometricConsent ? (
+            <Text style={styles.readOnlyValue}>Captured on {biometricConsent.consented_at.slice(0, 10)}</Text>
+          ) : (
+            <View style={styles.navLinkRow}>
+              <TouchableOpacity
+                style={styles.navLinkButton}
+                onPress={() => navigation.navigate("BiometricConsent", { workerId, workerName, returnTo: true })}
+              >
+                <Text style={styles.navLinkText}>Capture consent</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
       {compliance && (
         <View style={styles.badgeRow}>
           <View style={[styles.badge, compliance.category === "young_person" ? styles.badgeAmber : styles.badgeTeal]}>
@@ -215,7 +244,14 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
       <Field label="Designation / nature of work" value={designation} onChangeText={setDesignation} disabled={!isActive} />
       <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} disabled={!isActive} />
       <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} disabled={!isActive} />
-      <DateField label="Date of entry into service" value={dateOfJoining} onChange={setDateOfJoining} disabled={!isActive} />
+      <DateField
+        label="Date of entry into service"
+        value={dateOfJoining}
+        onChange={setDateOfJoining}
+        disabled={!isActive}
+        minDate={workerDob ? addYearsIso(workerDob, MINIMUM_WORKING_AGE) : undefined}
+        maxDate={isoDate(new Date())}
+      />
       <DateField label="Date made permanent" value={dateMadePermanent} onChange={setDateMadePermanent} disabled={!isActive} />
       <Field label="Period of suspension, if any" value={suspensionPeriod} onChangeText={setSuspensionPeriod} disabled={!isActive} />
 

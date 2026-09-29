@@ -31,7 +31,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "DeviceUserMapping">;
 // resolution. This screen exists for whenever that wasn't done, or
 // needs correcting, plus the verification-punch check every real
 // enrollment should end with.
-export default function DeviceUserMappingScreen({ route }: Props) {
+export default function DeviceUserMappingScreen({ route, navigation }: Props) {
   const { deviceId, deviceName } = route.params;
   const { token } = useAuth();
   const [mappings, setMappings] = useState<DeviceUserMapping[]>([]);
@@ -91,7 +91,29 @@ export default function DeviceUserMappingScreen({ route }: Props) {
       setSelectedWorkerId(null);
       await load();
     } catch (e) {
-      Alert.alert("Could not map", e instanceof ApiError ? e.message : "Couldn't reach the server.");
+      // The only 422 this endpoint returns is the missing-consent gate --
+      // offer to go capture it right here instead of just reporting the
+      // error, since consent was previously uncapturable from anywhere in
+      // the app (see BiometricConsentScreen.tsx). deviceUserId/
+      // selectedWorkerId survive untouched: navigating away and back via
+      // goBack() never unmounts this screen.
+      if (e instanceof ApiError && e.status === 422) {
+        const worker = workers.find((w) => w.id === selectedWorkerId);
+        Alert.alert("Consent required", e.message, [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Capture consent",
+            onPress: () =>
+              navigation.navigate("BiometricConsent", {
+                workerId: selectedWorkerId,
+                workerName: worker?.name ?? "this worker",
+                returnTo: true,
+              }),
+          },
+        ]);
+      } else {
+        Alert.alert("Could not map", e instanceof ApiError ? e.message : "Couldn't reach the server.");
+      }
     } finally {
       setSaving(false);
     }

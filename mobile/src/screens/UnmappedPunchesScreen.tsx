@@ -19,7 +19,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "UnmappedPunches">;
 // lost. Resolving one also backfills every other still-unmapped punch
 // on that device with the same raw ID (see biometric_api.py), since a
 // real-world miss like this usually isn't a one-off.
-export default function UnmappedPunchesScreen({}: Props) {
+export default function UnmappedPunchesScreen({ navigation }: Props) {
   const { token } = useAuth();
   const [punches, setPunches] = useState<UnmappedPunch[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -56,7 +56,27 @@ export default function UnmappedPunchesScreen({}: Props) {
       await resolveUnmappedPunch(token, punch.id, workerId);
       await load();
     } catch (e) {
-      Alert.alert("Could not resolve", e instanceof ApiError ? e.message : "Couldn't reach the server.");
+      // Same missing-consent gate as manual mapping (resolve calls the
+      // same backend code) -- offer to capture it right here rather than
+      // just reporting the error. selectedWorkerIds survives untouched
+      // since this screen is never unmounted, just backgrounded.
+      if (e instanceof ApiError && e.status === 422) {
+        const worker = workers.find((w) => w.id === workerId);
+        Alert.alert("Consent required", e.message, [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Capture consent",
+            onPress: () =>
+              navigation.navigate("BiometricConsent", {
+                workerId,
+                workerName: worker?.name ?? "this worker",
+                returnTo: true,
+              }),
+          },
+        ]);
+      } else {
+        Alert.alert("Could not resolve", e instanceof ApiError ? e.message : "Couldn't reach the server.");
+      }
     } finally {
       setResolvingId(null);
     }

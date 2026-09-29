@@ -35,7 +35,11 @@ export type RootStackParamList = {
   // AddWorkerScreen (scan + details + compliance + wage in one screen,
   // replacing the old 4-screen flow).
   NewWorkerScan: undefined;
-  BiometricConsent: { workerId: number; workerName: string; fromRegistration?: boolean };
+  // returnTo: true means the screen that navigated here (WorkerEdit,
+  // DeviceUserMapping, UnmappedPunches) is still on the stack with its
+  // own state intact -- confirming just calls goBack() into it rather
+  // than navigating forward to WageProfile.
+  BiometricConsent: { workerId: number; workerName: string; fromRegistration?: boolean; returnTo?: boolean };
   BiometricDevices: undefined;
   DeviceUserMapping: { deviceId: number; deviceName: string };
   UnmappedPunches: undefined;

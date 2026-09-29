@@ -10,6 +10,16 @@ export function isoDate(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Adds `years` to an ISO date string, safely for a Feb 29 DOB landing on
+// a non-leap year (falls back to Feb 28 rather than rolling forward into
+// March, which is what plain Date field mutation would otherwise do).
+export function addYearsIso(iso: string, years: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const daysInTargetFeb = new Date(y + years, 2, 0).getDate(); // 28 or 29
+  const day = m === 2 && d === 29 ? Math.min(d, daysInTargetFeb) : d;
+  return isoDate(new Date(y + years, m - 1, day));
+}
+
 function parseIso(value: string): { day: string; month: string; year: string } {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return { day: "", month: "", year: "" };
@@ -41,18 +51,36 @@ function toValidIso(day: string, month: string, year: string): string | null {
 // isn't reliably reachable in one tap even in "calendar"/"inline" mode
 // (that's ultimately up to the phone's own OEM skin, not something a
 // JS library option can fully guarantee).
+// "D MMM YYYY" -- e.g. "2 Oct 2026" -- used only for the minDate/maxDate
+// violation message below; parses the "YYYY-MM-DD" string directly
+// rather than via `new Date()` to avoid any UTC/local timezone shift.
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function formatIsoShort(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d} ${MONTH_ABBR[m - 1]} ${y}`;
+}
+
 export default function DateField({
   label,
   value,
   onChange,
   placeholder = "Select date",
   disabled = false,
+  minDate,
+  maxDate,
 }: {
   label: string;
   value: string; // "" | "YYYY-MM-DD"
   onChange: (isoValue: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  // Both "YYYY-MM-DD" -- shown as an inline error when the current
+  // value falls outside the range, same "keep it, but flag it" pattern
+  // as every other validated field in this app (never silently clamped
+  // or blocked mid-typing). The picker itself stays unrestricted; the
+  // caller is expected to also gate its own Continue/Save on this.
+  minDate?: string;
+  maxDate?: string;
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const [parts, setParts] = useState(() => parseIso(value));
@@ -150,6 +178,12 @@ export default function DateField({
       {!value && !parts.day && !parts.month && !parts.year && (
         <Text style={styles.placeholderHint}>{placeholder}</Text>
       )}
+      {value && minDate && value < minDate && (
+        <Text style={styles.errorText}>Must be on or after {formatIsoShort(minDate)}</Text>
+      )}
+      {value && maxDate && value > maxDate && (
+        <Text style={styles.errorText}>Must be on or before {formatIsoShort(maxDate)}</Text>
+      )}
       <YearMonthDayPicker
         visible={showPicker && !disabled}
         initialDate={value ? new Date(value) : new Date()}
@@ -189,4 +223,5 @@ const styles = StyleSheet.create({
   calendarButton: { marginLeft: "auto", padding: 8 },
   calendarButtonText: { fontSize: 18 },
   placeholderHint: { fontSize: 11, color: colors.muted, marginTop: 4 },
+  errorText: { fontSize: 11, color: colors.danger, marginTop: 4 },
 });

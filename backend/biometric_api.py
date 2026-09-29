@@ -187,7 +187,7 @@ def create_device_mapping(
     if not consent:
         raise HTTPException(
             status_code=422,
-            detail="Biometric consent has not been captured for this worker yet -- capture it in Worker Details before enrolling them on a device.",
+            detail="Biometric consent has not been captured for this worker yet -- capture it from Worker -> Edit details -> Biometric consent before enrolling them on a device.",
         )
 
     existing = (

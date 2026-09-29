@@ -32,7 +32,7 @@ import {
   scanAadhaar,
   uploadWorkerPhoto,
 } from "../api/client";
-import DateField, { isoDate } from "../components/DateField";
+import DateField, { addYearsIso, isoDate } from "../components/DateField";
 import SelectField from "../components/SelectField";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
@@ -62,6 +62,12 @@ const ID_PHOTO_WIDTH = 400;
 const ID_PHOTO_HEIGHT = 500;
 const ID_PHOTO_JPEG_QUALITY = 0.65;
 
+// Matches the backend's MINIMUM_WORKING_AGE (main.py) -- the Factories
+// Act's actual minimum working age, used both for the under-age warning
+// below and as the earliest valid "date of entry into service".
+const MINIMUM_WORKING_AGE = 14;
+const YOUNG_PERSON_AGE_CEILING = 18;
+
 // OCR text doesn't reliably come back as exactly "Male"/"Female"/"Other"
 // -- normalize onto one of the three canonical values the dropdown
 // offers, or drop it if it doesn't match anything recognizable.
@@ -84,7 +90,7 @@ function estimateCategory(dob: string): { category: "adult" | "young_person"; un
   const hadBirthdayThisYear =
     today.getMonth() > birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
   if (!hadBirthdayThisYear) age -= 1;
-  return { category: age < 18 ? "young_person" : "adult", underMinimumAge: age < 14 };
+  return { category: age < YOUNG_PERSON_AGE_CEILING ? "young_person" : "adult", underMinimumAge: age < MINIMUM_WORKING_AGE };
 }
 
 // Redesigned per add-worker-mockup.html (batch 3) as a 3-step wizard
@@ -575,7 +581,13 @@ export default function AddWorkerScreen({ navigation }: Props) {
             <Field label="Designation / nature of work" value={designation} onChangeText={setDesignation} />
             <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} />
             <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} />
-            <DateField label="Date of entry into service" value={dateOfJoining} onChange={setDateOfJoining} />
+            <DateField
+              label="Date of entry into service"
+              value={dateOfJoining}
+              onChange={setDateOfJoining}
+              minDate={dob ? addYearsIso(dob, MINIMUM_WORKING_AGE) : undefined}
+              maxDate={isoDate(new Date())}
+            />
             {estimate?.category === "young_person" && (
               <>
                 <Text style={styles.sectionLabelAmber}>Young person -- certificate of fitness</Text>

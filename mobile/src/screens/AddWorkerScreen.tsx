@@ -669,8 +669,8 @@ export default function AddWorkerScreen({ navigation }: Props) {
           <>
             <Text style={styles.sectionTitle}>ID card photo</Text>
             <Text style={styles.hint}>
-              {createdWorkerName} has been saved. Add a photo now to generate their ID card, or skip this and do it
-              later from Forms &amp; Reports.
+              {createdWorkerName} has been saved. Add a photo now to generate their ID card and appointment letter,
+              or skip this and do both later from Forms &amp; Reports.
             </Text>
 
             {!rawPhotoUri && !photoUploaded && (
@@ -707,6 +707,9 @@ export default function AddWorkerScreen({ navigation }: Props) {
                 <TouchableOpacity style={[styles.confirmButton, styles.generateCardButton, generatingCard && styles.buttonDisabled]} onPress={handleGenerateCard} disabled={generatingCard}>
                   {generatingCard ? <ActivityIndicator color={colors.white} /> : <Text style={styles.confirmButtonText}>Generate ID Card</Text>}
                 </TouchableOpacity>
+                <TouchableOpacity style={[styles.confirmButton, styles.generateCardButton, generatingLetter && styles.buttonDisabled]} onPress={handleGenerateLetter} disabled={generatingLetter}>
+                  {generatingLetter ? <ActivityIndicator color={colors.white} /> : <Text style={styles.confirmButtonText}>Generate Appointment Letter</Text>}
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.skipCardLink} onPress={() => setCardOfferDismissed(true)}>
                   <Text style={styles.skipCardLinkText}>Skip for now</Text>
                 </TouchableOpacity>
@@ -714,24 +717,19 @@ export default function AddWorkerScreen({ navigation }: Props) {
             )}
 
             {photoUploaded && cardOfferDismissed && (
-              <Text style={styles.skipNote}>
-                Photo saved. You can generate this worker's ID card anytime from Forms &amp; Reports.
-              </Text>
+              <>
+                <Text style={styles.skipNote}>
+                  Photo saved. You can generate this worker's ID card anytime from Forms &amp; Reports.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.confirmButton, styles.generateCardButton, generatingLetter && styles.buttonDisabled, { marginTop: spacing.sm }]}
+                  onPress={handleGenerateLetter}
+                  disabled={generatingLetter}
+                >
+                  {generatingLetter ? <ActivityIndicator color={colors.white} /> : <Text style={styles.confirmButtonText}>Generate Appointment Letter</Text>}
+                </TouchableOpacity>
+              </>
             )}
-
-            <View style={styles.letterSection}>
-              <Text style={styles.sectionTitle}>Appointment letter</Text>
-              <Text style={styles.hint}>
-                Generate {createdWorkerName}&apos;s appointment letter now, or do it later from Forms &amp; Reports.
-              </Text>
-              <TouchableOpacity
-                style={[styles.confirmButton, styles.generateCardButton, generatingLetter && styles.buttonDisabled]}
-                onPress={handleGenerateLetter}
-                disabled={generatingLetter}
-              >
-                {generatingLetter ? <ActivityIndicator color={colors.white} /> : <Text style={styles.confirmButtonText}>Generate Appointment Letter</Text>}
-              </TouchableOpacity>
-            </View>
           </>
         )}
       </ScrollView>
@@ -880,7 +878,6 @@ const styles = StyleSheet.create({
   confirmButton: { flex: 1, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
   confirmButtonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
   generateCardButton: { alignSelf: "center", width: "100%", marginBottom: spacing.sm },
-  letterSection: { marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.fieldBg },
   photoSavedTag: {
     alignSelf: "center",
     fontSize: 11,

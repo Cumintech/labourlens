@@ -6,6 +6,9 @@
 // `ipconfig` (Windows) and set it in .env as EXPO_PUBLIC_API_URL, e.g.
 // EXPO_PUBLIC_API_URL=http://192.168.1.23:8010 -- see mobile/README.md.
 
+import { File } from "expo-file-system";
+import { Platform } from "react-native";
+
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8010";
 
 export type Owner = {
@@ -292,9 +295,24 @@ export async function scanAadhaar(
 // AddWorkerScreen's use of expo-image-manipulator before calling this) --
 // the backend also enforces a hard size cap as a safety net, but this
 // call sends whatever it's given as-is, no client-side re-check.
+//
+// Expo SDK 57 installs expo/fetch as the global fetch on native, whose
+// multipart encoder only accepts a string, a Blob, or an object exposing
+// bytes() -- it throws "Unsupported FormDataPart implementation" for the
+// classic React Native { uri, name, type } object shape this used to send
+// (confirmed live: that's the exact error that broke every real-device
+// photo upload). expo-file-system's File implements bytes() so it works
+// under both fetch implementations; web has no expo-file-system support at
+// all, so it gets its own branch that fetches the uri into a real Blob
+// (which browsers' own FormData.append has always accepted natively).
 export async function uploadWorkerPhoto(token: string, workerId: number, uri: string): Promise<Worker> {
   const formData = new FormData();
-  formData.append("photo", { uri, name: "photo.jpg", type: "image/jpeg" } as any);
+  if (Platform.OS === "web") {
+    const blob = await fetch(uri).then((r) => r.blob());
+    formData.append("photo", blob, "photo.jpg");
+  } else {
+    formData.append("photo", new File(uri), "photo.jpg");
+  }
   const res = await fetch(`${API_BASE_URL}/workers/${workerId}/photo`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },

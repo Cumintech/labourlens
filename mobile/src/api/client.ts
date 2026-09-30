@@ -488,6 +488,23 @@ export function getDashboard(token: string, date: string): Promise<DashboardSumm
   });
 }
 
+export type HomeAlert = { code: string; message: string; count: number };
+
+export function getHomeAlerts(token: string): Promise<{ alerts: HomeAlert[] }> {
+  return request<{ alerts: HomeAlert[] }>("/home/alerts", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type MonthEndStep = { key: string; label: string; complete: boolean; detail: string };
+export type MonthEnd = { year: number; month: number; steps: MonthEndStep[] };
+
+export function getMonthEnd(token: string, year: number, month: number): Promise<MonthEnd> {
+  return request<MonthEnd>(`/month-end/${year}/${month}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 // PDF only -- Excel support was removed from this report.
 export function emailReport(
   token: string,

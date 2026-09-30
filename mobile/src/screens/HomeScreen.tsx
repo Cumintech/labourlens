@@ -1,14 +1,18 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { CreditCard, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
+import { AlertTriangle, ChevronRight, CreditCard, Fingerprint, FileText, ListChecks, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Attendance,
+  HomeAlert,
   LeaveEntry,
+  MonthEndStep,
   ShiftConfig,
   Worker,
+  getHomeAlerts,
+  getMonthEnd,
   listAttendance,
   listLeaveForDate,
   listShiftConfigs,
@@ -20,6 +24,16 @@ import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { trialStatusText } from "../planStatus";
 import { colors, radius, spacing, type } from "../theme";
+
+const ALERT_ICON: Record<string, typeof AlertTriangle> = {
+  missing_compliance: ListChecks,
+  unmapped_devices: Fingerprint,
+  not_marked_today: AlertTriangle,
+};
+
+// Only shown once the month is genuinely winding down -- a guided
+// "close out the month" flow doesn't make sense to surface on the 3rd.
+const MONTH_END_VISIBLE_FROM_DAY = 25;
 
 // Rendered as the "Today" tab's content inside MainTabs -- navigation
 // here is the composite prop React Navigation hands a screen nested
@@ -36,12 +50,10 @@ function formatLongDate(d: Date): string {
   return `${WEEKDAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
 }
 
-// Rebuilt per the v2 redesign spec. "Needs attention" and the
-// month-end card are intentionally NOT here yet -- both need real
-// backend data (GET /home/alerts, GET /month-end/{y}/{m}) that Phase 9
-// hasn't been built yet at the point this screen was redone; adding
-// them now would mean fake placeholder data. They get wired in once
-// Phase 9 lands, in a small follow-up to this screen specifically.
+// Rebuilt per the v2 redesign spec. "Needs attention" and the month-end
+// card were deferred when this screen was first redone (Phase 2) since
+// GET /home/alerts and GET /month-end/{y}/{m} didn't exist yet -- both
+// landed in Phase 9, and this is that follow-up wiring them in.
 export default function HomeScreen({ navigation }: Props) {
   const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
@@ -49,24 +61,33 @@ export default function HomeScreen({ navigation }: Props) {
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [leave, setLeave] = useState<LeaveEntry[]>([]);
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
+  const [alerts, setAlerts] = useState<HomeAlert[]>([]);
+  const [monthEndSteps, setMonthEndSteps] = useState<MonthEndStep[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const today = useMemo(() => new Date(), []);
   const todayIso = useMemo(() => isoDate(today), [today]);
+  const showMonthEnd = today.getDate() >= MONTH_END_VISIBLE_FROM_DAY;
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [w, a, l, s] = await Promise.all([
+    const [w, a, l, s, homeAlerts] = await Promise.all([
       listWorkers(token),
       listAttendance(token, todayIso),
       listLeaveForDate(token, todayIso),
       listShiftConfigs(token),
+      getHomeAlerts(token),
     ]);
     setWorkers(w.filter((x) => x.status === "active"));
     setAttendance(a);
     setLeave(l);
     setShifts(s);
-  }, [token, todayIso]);
+    setAlerts(homeAlerts.alerts);
+    if (showMonthEnd) {
+      const monthEnd = await getMonthEnd(token, today.getFullYear(), today.getMonth() + 1);
+      setMonthEndSteps(monthEnd.steps);
+    }
+  }, [token, todayIso, showMonthEnd, today]);
 
   // Switches to a sibling tab from a screen that's itself nested inside
   // that same tab navigator -- the documented React Navigation pattern
@@ -76,8 +97,14 @@ export default function HomeScreen({ navigation }: Props) {
   // screen sub-navigation isn't expressible there without a much wider
   // typing change for one call site); this works correctly at runtime
   // regardless.
-  function goToTab(tab: "AttendanceTab" | "WagesTab" | "ReportsTab", params?: Record<string, unknown>) {
+  function goToTab(tab: "WorkersTab" | "AttendanceTab" | "WagesTab" | "ReportsTab", params?: Record<string, unknown>) {
     (navigation as any).navigate("Home", { screen: tab, params });
+  }
+
+  function handleAlertPress(alert: HomeAlert) {
+    if (alert.code === "unmapped_devices") navigation.navigate("BiometricDevices");
+    else if (alert.code === "missing_compliance") goToTab("WorkersTab");
+    else goToTab("AttendanceTab");
   }
 
   useFocusEffect(
@@ -185,6 +212,41 @@ export default function HomeScreen({ navigation }: Props) {
           </Pressable>
         </View>
 
+        {alerts.length > 0 && (
+          <View style={styles.alertsWrap}>
+            <Text style={[type.caption, styles.quickActionsLabel]}>Needs attention</Text>
+            {alerts.map((alert) => {
+              const Icon = ALERT_ICON[alert.code] ?? AlertTriangle;
+              return (
+                <Pressable key={alert.code} style={styles.alertRow} onPress={() => handleAlertPress(alert)}>
+                  <View style={styles.alertIconWrap}>
+                    <Icon size={18} color={colors.warningTintText} />
+                  </View>
+                  <Text style={styles.alertMessage}>{alert.message}</Text>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {showMonthEnd && monthEndSteps.length > 0 && (
+          <Pressable style={styles.monthEndCard} onPress={() => navigation.navigate("MonthEnd")}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.monthEndTitle}>Month-end checklist</Text>
+              <Text style={styles.monthEndSubtitle}>
+                {monthEndSteps.filter((s) => s.complete).length} of {monthEndSteps.length} steps done
+              </Text>
+              <View style={styles.monthEndDots}>
+                {monthEndSteps.map((s) => (
+                  <View key={s.key} style={[styles.monthEndDot, s.complete && styles.monthEndDotDone]} />
+                ))}
+              </View>
+            </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </Pressable>
+        )}
+
         <View style={styles.quickActionsWrap}>
           <Text style={[type.caption, styles.quickActionsLabel]}>Quick actions</Text>
           <View style={styles.quickActionsGrid}>
@@ -268,6 +330,40 @@ const styles = StyleSheet.create({
   shiftTileValue: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 15, color: colors.navy, marginTop: 2, fontVariant: ["tabular-nums"] },
   markButton: { marginTop: spacing.md, backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
   markButtonText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.surface },
+  alertsWrap: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
+  alertRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.warningTint,
+    borderRadius: radius.md,
+    padding: spacing.sm + 4,
+    marginBottom: spacing.xs,
+  },
+  alertIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  alertMessage: { flex: 1, fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: colors.navy },
+  monthEndCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  monthEndTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.surface },
+  monthEndSubtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 2 },
+  monthEndDots: { flexDirection: "row", gap: 5, marginTop: spacing.sm },
+  monthEndDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.25)" },
+  monthEndDotDone: { backgroundColor: colors.present },
   quickActionsWrap: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
   quickActionsLabel: { color: colors.textSecondary, marginBottom: spacing.sm },
   quickActionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },

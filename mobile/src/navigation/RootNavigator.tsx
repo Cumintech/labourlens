@@ -10,6 +10,7 @@ import DeviceUserMappingScreen from "../screens/DeviceUserMappingScreen";
 import UnmappedPunchesScreen from "../screens/UnmappedPunchesScreen";
 import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
+import MonthEndScreen from "../screens/MonthEndScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import SettingsScreen from "../screens/SettingsScreen";
@@ -51,6 +52,8 @@ export type RootStackParamList = {
   };
   WorkerEdit: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
   WageProfile: { workerId: number; workerName: string; fromRegistration?: boolean };
+  // Always the current calendar month -- see MonthEndScreen.tsx.
+  MonthEnd: undefined;
   WorkerTypes: undefined;
   ShiftSettings: undefined;
   Profile: undefined;
@@ -122,6 +125,7 @@ export default function RootNavigator() {
         <Stack.Screen name="WorkerProfile" component={WorkerProfileScreen} options={{ title: "Worker" }} />
         <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ title: "Edit Worker" }} />
         <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ title: "Wage Rate" }} />
+        <Stack.Screen name="MonthEnd" component={MonthEndScreen} options={{ title: "Month-End Checklist" }} />
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />

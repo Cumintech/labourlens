@@ -205,7 +205,7 @@ export type Worker = {
   // From the worker's compliance record, not a Worker column -- null
   // means no joining date on file yet (in which case attendance/leave
   // for them is unrestricted). See DayAttendanceRow's "Joined <date>"
-  // disabled state in AttendanceRangeScreen/WorkerProfileScreen's Attendance tab.
+  // disabled state in AttendanceScreen's Range view / WorkerProfileScreen's Attendance tab.
   date_of_joining: string | null;
 };
 

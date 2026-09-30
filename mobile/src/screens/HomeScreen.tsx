@@ -76,8 +76,8 @@ export default function HomeScreen({ navigation }: Props) {
   // screen sub-navigation isn't expressible there without a much wider
   // typing change for one call site); this works correctly at runtime
   // regardless.
-  function goToTab(tab: "AttendanceTab" | "WagesTab" | "ReportsTab") {
-    (navigation as any).navigate("Home", { screen: tab });
+  function goToTab(tab: "AttendanceTab" | "WagesTab" | "ReportsTab", params?: Record<string, unknown>) {
+    (navigation as any).navigate("Home", { screen: tab, params });
   }
 
   useFocusEffect(
@@ -188,7 +188,7 @@ export default function HomeScreen({ navigation }: Props) {
         <View style={styles.quickActionsWrap}>
           <Text style={[type.caption, styles.quickActionsLabel]}>Quick actions</Text>
           <View style={styles.quickActionsGrid}>
-            <QuickAction icon={Users} label="Multiple days" onPress={() => navigation.navigate("AttendanceRange")} />
+            <QuickAction icon={Users} label="Multiple days" onPress={() => goToTab("AttendanceTab", { mode: "range" })} />
             <QuickAction icon={CreditCard} label="Record payment" onPress={() => goToTab("WagesTab")} />
             <QuickAction icon={FileText} label="Wage slips" onPress={() => goToTab("ReportsTab")} />
             <QuickAction icon={FileText} label="Statutory forms" onPress={() => goToTab("ReportsTab")} />

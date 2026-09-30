@@ -2,7 +2,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { CalendarCheck, FileText, IndianRupee, LayoutDashboard, LucideIcon, Users } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import DashboardScreen from "../screens/DashboardScreen";
+import AttendanceScreen from "../screens/AttendanceScreen";
 import HomeScreen from "../screens/HomeScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
 import WageCalculationScreen from "../screens/WageCalculationScreen";
@@ -58,7 +58,7 @@ export default function MainTabs() {
       />
       <Tab.Screen
         name="AttendanceTab"
-        component={DashboardScreen}
+        component={AttendanceScreen}
         options={{
           title: "Attendance",
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={CalendarCheck} color={color} focused={focused} />,

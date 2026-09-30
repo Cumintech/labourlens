@@ -1,8 +1,19 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import React, { useCallback, useMemo, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useRoute } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import {
   Attendance,
   AttendanceSlot,
@@ -24,35 +35,31 @@ import {
 } from "../api/client";
 import AttendanceRowCard from "../components/AttendanceRowCard";
 import DateField, { isoDate } from "../components/DateField";
+import DayAttendanceRow from "../components/DayAttendanceRow";
 import ErrorState from "../components/ErrorState";
 import OtHoursModal from "../components/OtHoursModal";
 import { ListSkeleton } from "../components/Skeleton";
+import { Chip, SegmentedControl, useToast } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { colors, radius, spacing } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
+import { workerLabel } from "../workerLabel";
 
-// Mounted as both the "Dashboard" stack route (pushed from Home's tile,
-// pre-Phase-4) AND the new "AttendanceTab" tab content -- a bottom-tab
-// navigator's own navigation prop type isn't the same nominal type as a
-// stack screen's, so this is typed loosely (same pattern already used
-// by HomeScreen/WageCalculationScreen/StatutoryFormsScreen for the same
-// reason) rather than tied to one specific route.
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
+type Mode = "day" | "range";
 
 // A different accent per shift dot, cycling if there are more shifts
-// than colors -- purely visual, so the stat strip and row toggle read
-// at a glance instead of every shift looking identical. Same palette
-// used by AttendanceRowCard's segmented toggle (teal = present there,
-// so the strip's dots stay consistent with what a filled segment means).
+// than colors -- purely visual, decorative multi-hue palette (see
+// theme.ts), not a status color.
 const SLOT_ACCENTS = [
-  { dot: colors.teal, fg: colors.tealDark },
+  { dot: colors.primary, fg: colors.primary },
   { dot: colors.skyBlue, fg: colors.skyBlue },
   { dot: colors.violet, fg: colors.violet },
   { dot: colors.coral, fg: colors.coral },
 ];
 
-// Local device date, not UTC -- "today" for attendance means the day the
-// owner is standing in, not the server's timezone.
+const MAX_RANGE_DAYS = 31;
+
 function todayString() {
   return isoDate(new Date());
 }
@@ -63,8 +70,49 @@ function addDays(dateStr: string, delta: number): string {
   return isoDate(d);
 }
 
-export default function DashboardScreen({ navigation }: Props) {
-  const { token, owner } = useAuth();
+// Merges the old standalone Dashboard (single-day marking) and
+// AttendanceRangeScreen (multi-day review/fix) into one Attendance tab,
+// per the v2 redesign spec -- a Day|Range SegmentedControl instead of a
+// separate "Edit multiple days" destination. Day and Range each keep
+// their original screen's logic close to verbatim (own data fetching,
+// own OT modal instance) rather than sharing state, since they were
+// never the same screen and forcing a shared model would be riskier
+// than keeping two well-tested pieces side by side.
+export default function AttendanceScreen({ navigation }: Props) {
+  const { owner } = useAuth();
+  const route = useRoute<{ key: string; name: string; params?: { mode?: Mode } }>();
+  const [mode, setMode] = useState<Mode>(route.params?.mode === "range" ? "range" : "day");
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={type.display}>Attendance</Text>
+        <Text style={styles.subtitle}>{owner?.factory_name ?? ""}</Text>
+        <View style={styles.modeWrap}>
+          <SegmentedControl<Mode>
+            options={[
+              { label: "Day", value: "day" },
+              { label: "Range", value: "range" },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+        </View>
+      </View>
+      {mode === "day" ? <DayView navigation={navigation} /> : <RangeView />}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Day view -- ported from the old DashboardScreen.tsx almost verbatim.
+// The factory-name/"Edit multiple days" header row is gone (factory name
+// now lives once in the shared header above; Range is a mode, not a
+// separate destination to link to).
+// ---------------------------------------------------------------------
+function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootStackParamList> }) {
+  const { token } = useAuth();
+  const { show: showToast } = useToast();
   const insets = useSafeAreaInsets();
   const today = useMemo(todayString, []);
   const [selectedDate, setSelectedDate] = useState(today);
@@ -76,6 +124,7 @@ export default function DashboardScreen({ navigation }: Props) {
   const [missingComplianceCount, setMissingComplianceCount] = useState(0);
   const [firstMissingWorker, setFirstMissingWorker] = useState<Worker | null>(null);
   const [search, setSearch] = useState("");
+  const [shiftFilter, setShiftFilter] = useState<string | "all">("all");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -278,23 +327,78 @@ export default function DashboardScreen({ navigation }: Props) {
 
   // Only the Morning shift -- Evening presence is a separate, explicit
   // action per worker, not something a single bulk tap should assume.
+  //
+  // Snapshots each active worker's pre-bulk morning-shift record (and
+  // any leave entry the bulk action would clear) so the Undo toast
+  // action can revert it. The backend only ever stores present/absent
+  // (see Attendance.status) -- there is no "delete this row" endpoint,
+  // so a worker who had no record at all before the bulk action reverts
+  // to "absent" on Undo, not back to fully unmarked. That's the closest
+  // available approximation, not a perfect round-trip.
   async function doBulkPresent() {
     if (!token || !morningShift) return;
     setBulkBusy(true);
+    const activeWorkersNow = workers.filter((w) => w.status === "active");
+    const preBulk = activeWorkersNow.map((worker) => ({
+      worker,
+      prevRecord: attendanceByWorkerSlot.get(`${worker.id}:${morningShift.slot_key}`) ?? null,
+      prevLeave: leaveByWorker.get(worker.id) ?? null,
+    }));
     try {
-      const activeWorkersNow = workers.filter((w) => w.status === "active");
+      let changedCount = 0;
       await Promise.all(
         activeWorkersNow.map(async (worker) => {
           const current = attendanceByWorkerSlot.get(`${worker.id}:${morningShift.slot_key}`);
           if (current?.status === "present") return;
+          changedCount += 1;
           await markAttendance(token, worker.id, selectedDate, morningShift.slot_key, "present", current?.overtime_hours ?? 0);
           const existingLeave = leaveByWorker.get(worker.id);
           if (existingLeave) await deleteLeaveEntry(token, existingLeave.id);
         }),
       );
       await load();
+      if (changedCount > 0) {
+        showToast(`Marked ${changedCount} worker${changedCount === 1 ? "" : "s"} present`, {
+          actionLabel: "Undo",
+          onAction: () => undoBulkPresent(preBulk),
+        });
+      }
     } catch {
       Alert.alert("Could not mark everyone present", "Some workers may not have been updated. Please check and try again.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function undoBulkPresent(
+    preBulk: { worker: Worker; prevRecord: Attendance | null; prevLeave: LeaveEntry | null }[],
+  ) {
+    if (!token || !morningShift) return;
+    setBulkBusy(true);
+    try {
+      await Promise.all(
+        preBulk.map(async ({ worker, prevRecord, prevLeave }) => {
+          await markAttendance(
+            token,
+            worker.id,
+            selectedDate,
+            morningShift.slot_key,
+            prevRecord?.status ?? "absent",
+            prevRecord?.overtime_hours ?? 0,
+          );
+          if (prevLeave) {
+            await createLeaveEntry(token, worker.id, {
+              leave_type: prevLeave.leave_type as any,
+              date_from: prevLeave.date_from,
+              date_to: prevLeave.date_to,
+              days: 1,
+            });
+          }
+        }),
+      );
+      await load();
+    } catch {
+      Alert.alert("Could not undo", "Please check attendance and fix manually if needed.");
     } finally {
       setBulkBusy(false);
     }
@@ -355,7 +459,7 @@ export default function DashboardScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={styles.dayContainer}>
         <ListSkeleton rows={4} />
       </View>
     );
@@ -363,35 +467,23 @@ export default function DashboardScreen({ navigation }: Props) {
 
   if (loadError && workers.length === 0) {
     return (
-      <View style={styles.container}>
+      <View style={styles.dayContainer}>
         <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.dayContainer}>
       <FlatList
         style={{ flex: 1 }}
         data={filtered}
         keyExtractor={(w) => String(w.id)}
         contentContainerStyle={{ paddingBottom: spacing.xl * 3 + insets.bottom }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
         ListHeaderComponent={
           <View>
-            {/* A1: header collapsed to factory name + one compact date-nav
-                row + the "Edit multiple days" link -- the old separate
-                colored summary panel underneath is gone, replaced by the
-                one-line dot strip below (A2). */}
-            <View style={styles.headerCard}>
-              <View style={styles.headerTopRow}>
-                <Text style={styles.factoryName} numberOfLines={1}>
-                  {owner?.factory_name ?? "Dashboard"}
-                </Text>
-                <TouchableOpacity onPress={() => navigation.navigate("AttendanceRange")}>
-                  <Text style={styles.rangeLink}>Edit multiple days →</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={styles.dateNavCard}>
               <View style={styles.dateNavRow}>
                 <TouchableOpacity style={styles.dateNavButton} onPress={() => setSelectedDate((d) => addDays(d, -1))}>
                   <Text style={styles.dateNavButtonText}>‹</Text>
@@ -414,13 +506,6 @@ export default function DashboardScreen({ navigation }: Props) {
               </View>
             </View>
 
-            {/* Section 6 (settings-mockup.html) -- two-line stat block,
-                supersedes the earlier one-line dot strip. Line 1 is
-                Total & Present, the two headline numbers, set larger
-                and bolder; line 2 is the per-shift + Leave breakdown as
-                a lighter secondary line below. Same underlying counts
-                as before, layout only. Copy Yesterday stays a small
-                icon chip alongside the block. */}
             <View style={styles.statBlock}>
               <View style={styles.statBlockText}>
                 <View style={styles.statPrimaryRow}>
@@ -446,7 +531,7 @@ export default function DashboardScreen({ navigation }: Props) {
                     );
                   })}
                   <View style={styles.statDot}>
-                    <View style={[styles.dot, { backgroundColor: colors.amber }]} />
+                    <View style={[styles.dot, { backgroundColor: colors.warning }]} />
                     <Text style={styles.statSecondaryText}>Leave {leave.length}</Text>
                   </View>
                 </View>
@@ -466,17 +551,25 @@ export default function DashboardScreen({ navigation }: Props) {
               </TouchableOpacity>
             )}
 
-            {/* A5: denser search + compact tabs */}
             <View style={styles.searchWrap}>
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search workers"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={colors.textSecondary}
                 value={search}
                 onChangeText={setSearch}
                 autoCapitalize="none"
               />
             </View>
+
+            {shifts.length > 1 && (
+              <View style={styles.shiftFilterRow}>
+                <Chip label="All shifts" selected={shiftFilter === "all"} onPress={() => setShiftFilter("all")} />
+                {shifts.map((s) => (
+                  <Chip key={s.slot_key} label={s.label} selected={shiftFilter === s.slot_key} onPress={() => setShiftFilter(s.slot_key)} />
+                ))}
+              </View>
+            )}
 
             <View style={styles.statusTabRow}>
               <TouchableOpacity
@@ -506,7 +599,7 @@ export default function DashboardScreen({ navigation }: Props) {
         renderItem={({ item }) => (
           <AttendanceRowCard
             worker={item}
-            shifts={shifts}
+            shifts={shiftFilter === "all" ? shifts : shifts.filter((s) => s.slot_key === shiftFilter)}
             getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.status}
             getShiftSource={(slotKey) => attendanceByWorkerSlot.get(`${item.id}:${slotKey}`)?.source}
             onSetShiftStatus={(slotKey, status) => handleSetShiftStatus(item, slotKey, status)}
@@ -527,17 +620,13 @@ export default function DashboardScreen({ navigation }: Props) {
         )}
       />
 
-      {/* A3: Mark All Present floats above the list as a FAB instead of
-          taking a full-width row inside the header -- keeps the header
-          compact and puts the single highest-frequency action within
-          thumb reach regardless of scroll position. */}
       {statusTab === "active" && activeWorkers.length > 0 && (
         <TouchableOpacity
           style={[styles.fab, { bottom: spacing.lg + insets.bottom }]}
           onPress={handleBulkPresent}
           disabled={bulkBusy}
         >
-          {bulkBusy ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.fabText}>✓ Mark All</Text>}
+          {bulkBusy ? <ActivityIndicator color={colors.surface} size="small" /> : <Text style={styles.fabText}>✓ Mark All</Text>}
         </TouchableOpacity>
       )}
 
@@ -554,13 +643,346 @@ export default function DashboardScreen({ navigation }: Props) {
   );
 }
 
+// ---------------------------------------------------------------------
+// Range view -- ported from the old AttendanceRangeScreen.tsx verbatim.
+// ---------------------------------------------------------------------
+function datesBetween(from: string, to: string): string[] {
+  const dates: string[] = [];
+  let d = from;
+  let guard = 0;
+  while (d <= to && guard <= MAX_RANGE_DAYS) {
+    dates.push(d);
+    d = addDays(d, 1);
+    guard += 1;
+  }
+  return dates;
+}
+
+function formatDateLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+
+function formatJoinedLabel(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+function DayBlock({
+  date,
+  workers,
+  shifts,
+  attendance,
+  leave,
+  onSetStatus,
+  onToggleLeave,
+  onOpenOt,
+}: {
+  date: string;
+  workers: Worker[];
+  shifts: ShiftConfig[];
+  attendance: Attendance[];
+  leave: LeaveEntry[];
+  onSetStatus: (date: string, worker: Worker, slot: AttendanceSlot, status: AttendanceStatus) => void;
+  onToggleLeave: (date: string, worker: Worker) => void;
+  onOpenOt: (date: string, worker: Worker) => void;
+}) {
+  const attendanceByWorkerSlot = useMemo(() => {
+    const map = new Map<string, Attendance>();
+    for (const a of attendance) map.set(`${a.worker_id}:${a.slot}`, a);
+    return map;
+  }, [attendance]);
+
+  const leaveByWorker = useMemo(() => {
+    const map = new Map<number, LeaveEntry>();
+    for (const l of leave) map.set(l.worker_id, l);
+    return map;
+  }, [leave]);
+
+  function dayOtHours(worker: Worker): number {
+    return shifts.reduce((sum, s) => sum + (attendanceByWorkerSlot.get(`${worker.id}:${s.slot_key}`)?.overtime_hours ?? 0), 0);
+  }
+
+  return (
+    <View style={styles.dayBlock}>
+      <Text style={styles.dayTitle}>{formatDateLabel(date)}</Text>
+      {workers.map((worker) => {
+        // Backend hard-rejects this anyway (main.py's mark_attendance) --
+        // showing it as disabled here is purely so the owner isn't left
+        // tapping tiles that silently fail one at a time.
+        const notYetJoined = !!worker.date_of_joining && date < worker.date_of_joining;
+        return (
+          <View key={worker.id} style={styles.workerRow}>
+            <Text style={styles.workerName}>{workerLabel(worker)}</Text>
+            {notYetJoined ? (
+              <View style={styles.notJoinedRow}>
+                <Text style={styles.notJoinedText}>Joined {formatJoinedLabel(worker.date_of_joining!)}</Text>
+              </View>
+            ) : (
+              <DayAttendanceRow
+                shifts={shifts}
+                getShiftStatus={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.status}
+                getShiftSource={(slotKey) => attendanceByWorkerSlot.get(`${worker.id}:${slotKey}`)?.source}
+                onSetShiftStatus={(slotKey, status) => onSetStatus(date, worker, slotKey, status)}
+                isOnLeave={leaveByWorker.has(worker.id)}
+                onToggleLeave={() => onToggleLeave(date, worker)}
+                otHours={dayOtHours(worker)}
+                onOpenOt={() => onOpenOt(date, worker)}
+              />
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function RangeView() {
+  const { token } = useAuth();
+  const insets = useSafeAreaInsets();
+  const today = useMemo(todayString, []);
+  const [fromDate, setFromDate] = useState(addDays(today, -6));
+  const [toDate, setToDate] = useState(today);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [shifts, setShifts] = useState<ShiftConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [rangeLoading, setRangeLoading] = useState(true);
+  const [rangeError, setRangeError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [attendanceByDate, setAttendanceByDate] = useState<Record<string, Attendance[]>>({});
+  const [leaveByDate, setLeaveByDate] = useState<Record<string, LeaveEntry[]>>({});
+  const [otModalTarget, setOtModalTarget] = useState<{ date: string; worker: Worker } | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    const [w, s] = await Promise.all([listWorkers(token), listShiftConfigs(token)]);
+    setWorkers(w.filter((worker) => worker.status === "active"));
+    setShifts(s);
+  }, [token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load()
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }, [load]),
+  );
+
+  const rangeInvalid = toDate < fromDate;
+  const dates = rangeInvalid ? [] : datesBetween(fromDate, toDate);
+  const rangeTooLong = !rangeInvalid && dates.length > MAX_RANGE_DAYS;
+  const datesKey = dates.join(",");
+
+  const loadRange = useCallback(async () => {
+    if (!token || dates.length === 0) return;
+    const results = await Promise.all(
+      dates.map((date) =>
+        Promise.all([listAttendance(token, date), listLeaveForDate(token, date)]).then(([a, l]) => [date, a, l] as const),
+      ),
+    );
+    const aMap: Record<string, Attendance[]> = {};
+    const lMap: Record<string, LeaveEntry[]> = {};
+    for (const [date, a, l] of results) {
+      aMap[date] = a;
+      lMap[date] = l;
+    }
+    setAttendanceByDate(aMap);
+    setLeaveByDate(lMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- datesKey stands in for the dates array's identity
+  }, [token, datesKey]);
+
+  useEffect(() => {
+    if (!token || rangeInvalid || rangeTooLong || dates.length === 0) return;
+    let cancelled = false;
+    setRangeLoading(true);
+    loadRange()
+      .then(() => {
+        if (!cancelled) setRangeError(false);
+      })
+      .catch(() => {
+        if (!cancelled) setRangeError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setRangeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, loadRange, rangeInvalid, rangeTooLong, dates.length]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await loadRange();
+      setRangeError(false);
+    } catch {
+      // Keep whatever's already on screen -- see Day view's identical note.
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  function canonicalOtShift() {
+    return shifts[shifts.length - 1];
+  }
+
+  async function handleSetStatus(date: string, worker: Worker, slot: AttendanceSlot, status: AttendanceStatus) {
+    if (!token) return;
+    const dayRecords = attendanceByDate[date] ?? [];
+    const current = dayRecords.find((a) => a.worker_id === worker.id && a.slot === slot);
+    try {
+      const updated = await markAttendance(token, worker.id, date, slot, status, current?.overtime_hours ?? 0);
+      setAttendanceByDate((prev) => ({
+        ...prev,
+        [date]: [...(prev[date] ?? []).filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated],
+      }));
+      if (status === "present") {
+        const existingLeave = (leaveByDate[date] ?? []).find((l) => l.worker_id === worker.id);
+        if (existingLeave) {
+          await deleteLeaveEntry(token, existingLeave.id);
+          setLeaveByDate((prev) => ({ ...prev, [date]: (prev[date] ?? []).filter((l) => l.id !== existingLeave.id) }));
+        }
+      }
+    } catch {
+      Alert.alert("Could not update attendance", `Please try again (${formatDateLabel(date)}).`);
+    }
+  }
+
+  async function handleToggleLeave(date: string, worker: Worker) {
+    if (!token) return;
+    const existing = (leaveByDate[date] ?? []).find((l) => l.worker_id === worker.id);
+    try {
+      if (existing) {
+        await deleteLeaveEntry(token, existing.id);
+        setLeaveByDate((prev) => ({ ...prev, [date]: (prev[date] ?? []).filter((l) => l.id !== existing.id) }));
+      } else {
+        const dayRecords = attendanceByDate[date] ?? [];
+        const presentShifts = shifts.filter((s) => dayRecords.find((a) => a.worker_id === worker.id && a.slot === s.slot_key)?.status === "present");
+        for (const shift of presentShifts) {
+          const cleared = await markAttendance(token, worker.id, date, shift.slot_key, "absent", 0);
+          setAttendanceByDate((prev) => ({
+            ...prev,
+            [date]: [...(prev[date] ?? []).filter((a) => !(a.worker_id === worker.id && a.slot === shift.slot_key)), cleared],
+          }));
+        }
+        const created = await createLeaveEntry(token, worker.id, { leave_type: "earned", date_from: date, date_to: date, days: 1 });
+        setLeaveByDate((prev) => ({ ...prev, [date]: [...(prev[date] ?? []), created] }));
+      }
+    } catch {
+      Alert.alert("Could not update leave", `Please try again (${formatDateLabel(date)}).`);
+    }
+  }
+
+  function getDayOtHours(date: string, worker: Worker): number {
+    const dayRecords = attendanceByDate[date] ?? [];
+    return shifts.reduce((sum, s) => sum + (dayRecords.find((a) => a.worker_id === worker.id && a.slot === s.slot_key)?.overtime_hours ?? 0), 0);
+  }
+
+  async function handleSetDayOt(date: string, worker: Worker, hours: number) {
+    if (!token) return;
+    const canonical = canonicalOtShift();
+    if (!canonical) return;
+    try {
+      const dayRecords = attendanceByDate[date] ?? [];
+      for (const shift of shifts) {
+        if (shift.slot_key === canonical.slot_key) continue;
+        const current = dayRecords.find((a) => a.worker_id === worker.id && a.slot === shift.slot_key);
+        if (current && current.overtime_hours) {
+          const cleared = await markAttendance(token, worker.id, date, shift.slot_key, current.status, 0);
+          setAttendanceByDate((prev) => ({
+            ...prev,
+            [date]: [...(prev[date] ?? []).filter((a) => !(a.worker_id === worker.id && a.slot === shift.slot_key)), cleared],
+          }));
+        }
+      }
+      const currentCanonical = dayRecords.find((a) => a.worker_id === worker.id && a.slot === canonical.slot_key);
+      const updated = await markAttendance(token, worker.id, date, canonical.slot_key, currentCanonical?.status ?? "absent", hours);
+      setAttendanceByDate((prev) => ({
+        ...prev,
+        [date]: [...(prev[date] ?? []).filter((a) => !(a.worker_id === worker.id && a.slot === canonical.slot_key)), updated],
+      }));
+    } catch {
+      Alert.alert("Could not update overtime", `Please try again (${formatDateLabel(date)}).`);
+    }
+  }
+
+  if (loading || !token) {
+    return (
+      <View style={styles.dayContainer}>
+        <ListSkeleton rows={3} variant="simple" />
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <ScrollView
+        style={styles.dayContainer}
+        contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2 + insets.bottom }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+      >
+        <Text style={styles.rangeSubtitle}>
+          Pick a date range below -- every day in it shows up as its own editable section, so you can review or fix
+          several days of attendance without leaving this screen.
+        </Text>
+        <View style={styles.rangeRow}>
+          <View style={{ flex: 1 }}>
+            <DateField label="From" value={fromDate} onChange={setFromDate} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <DateField label="To" value={toDate} onChange={setToDate} />
+          </View>
+        </View>
+
+        {rangeInvalid && <Text style={styles.warning}>"To" must be on or after "From".</Text>}
+        {rangeTooLong && <Text style={styles.warning}>Pick a range of {MAX_RANGE_DAYS} days or fewer.</Text>}
+
+        {workers.length === 0 ? (
+          <Text style={styles.empty}>No active workers yet.</Text>
+        ) : rangeError && !rangeInvalid && !rangeTooLong ? (
+          <ErrorState onRetry={handleRefresh} />
+        ) : rangeLoading && !rangeInvalid && !rangeTooLong ? (
+          <ListSkeleton rows={3} variant="simple" />
+        ) : (
+          !rangeInvalid &&
+          !rangeTooLong &&
+          dates.map((date) => (
+            <DayBlock
+              key={date}
+              date={date}
+              workers={workers}
+              shifts={shifts}
+              attendance={attendanceByDate[date] ?? []}
+              leave={leaveByDate[date] ?? []}
+              onSetStatus={handleSetStatus}
+              onToggleLeave={handleToggleLeave}
+              onOpenOt={(d, worker) => setOtModalTarget({ date: d, worker })}
+            />
+          ))
+        )}
+      </ScrollView>
+      <OtHoursModal
+        visible={otModalTarget !== null}
+        initialHours={otModalTarget ? getDayOtHours(otModalTarget.date, otModalTarget.worker) : 0}
+        onConfirm={async (hours) => {
+          if (otModalTarget) await handleSetDayOt(otModalTarget.date, otModalTarget.worker, hours);
+          setOtModalTarget(null);
+        }}
+        onCancel={() => setOtModalTarget(null)}
+      />
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  headerCard: { backgroundColor: colors.navy, paddingHorizontal: spacing.md, paddingTop: spacing.sm + 2, paddingBottom: spacing.sm + 4 },
-  headerTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  factoryName: { color: colors.white, fontSize: 16, fontWeight: "700", flexShrink: 1, marginRight: spacing.sm },
-  rangeLink: { color: colors.tealPale, fontSize: 11, fontWeight: "700" },
-  dateNavRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm },
+  container: { flex: 1, backgroundColor: colors.ground },
+  header: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  subtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
+  modeWrap: {},
+  dayContainer: { flex: 1, backgroundColor: colors.ground },
+
+  dateNavCard: { backgroundColor: colors.navy, marginHorizontal: spacing.md, marginTop: spacing.md, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
+  dateNavRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   dateNavButton: {
     width: 28,
     height: 28,
@@ -570,23 +992,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dateNavButtonDisabled: { opacity: 0.3 },
-  dateNavButtonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
+  dateNavButtonText: { color: colors.surface, fontSize: 16, fontWeight: "700" },
   dateNavField: { flex: 1 },
-  todayLink: { paddingHorizontal: spacing.sm, paddingVertical: 5, backgroundColor: colors.teal, borderRadius: radius.sm },
-  todayLinkText: { color: colors.white, fontSize: 11, fontWeight: "700" },
+  todayLink: { paddingHorizontal: spacing.sm, paddingVertical: 5, backgroundColor: colors.primary, borderRadius: radius.sm },
+  todayLinkText: { color: colors.surface, fontSize: 11, fontWeight: "700" },
   statBlock: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.fieldBg,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     gap: spacing.sm,
   },
   statBlockText: { flex: 1 },
   statPrimaryRow: { flexDirection: "row", gap: spacing.md, alignItems: "baseline" },
   statPrimaryItem: { fontSize: 18, fontWeight: "800", color: colors.navy },
-  statPrimaryLabel: { fontSize: 12, fontWeight: "600", color: colors.muted },
+  statPrimaryLabel: { fontSize: 12, fontWeight: "600", color: colors.textSecondary },
   statSecondaryRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm + 2, rowGap: 4, marginTop: 6 },
   statDot: { flexDirection: "row", alignItems: "center", gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },
@@ -595,15 +1019,15 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.ground,
     alignItems: "center",
     justifyContent: "center",
   },
   copyChipText: { fontSize: 14 },
-  sundayNote: { color: colors.muted, fontSize: 11, marginTop: spacing.xs, textAlign: "center" },
+  sundayNote: { color: colors.textSecondary, fontSize: 11, marginTop: spacing.xs, textAlign: "center" },
   complianceBanner: {
-    backgroundColor: colors.amberPale,
-    borderColor: colors.amber,
+    backgroundColor: colors.warningTint,
+    borderColor: colors.warningBorder,
     borderWidth: 1,
     borderRadius: radius.sm,
     marginHorizontal: spacing.md,
@@ -613,25 +1037,26 @@ const styles = StyleSheet.create({
   complianceBannerText: { color: colors.navy, fontSize: 12, fontWeight: "700" },
   searchWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   searchInput: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.surface,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.sm - 2,
     fontSize: 13,
     color: colors.navy,
   },
+  shiftFilterRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm },
   statusTabRow: { flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm, marginBottom: spacing.xs },
-  statusTab: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: spacing.sm - 2, alignItems: "center" },
-  statusTabActive: { backgroundColor: colors.teal },
+  statusTab: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: spacing.sm - 2, alignItems: "center" },
+  statusTabActive: { backgroundColor: colors.primary },
   statusTabActiveMuted: { backgroundColor: colors.navy },
-  statusTabText: { fontSize: 12.5, fontWeight: "700", color: colors.muted },
-  statusTabTextActive: { color: colors.white },
-  statusTabTextActiveMuted: { color: colors.white },
-  empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
+  statusTabText: { fontSize: 12.5, fontWeight: "700", color: colors.textSecondary },
+  statusTabTextActive: { color: colors.surface },
+  statusTabTextActiveMuted: { color: colors.surface },
+  empty: { textAlign: "center", color: colors.textSecondary, marginTop: 40 },
   fab: {
     position: "absolute",
     right: spacing.md,
-    backgroundColor: colors.teal,
+    backgroundColor: colors.primary,
     borderRadius: 999,
     paddingHorizontal: spacing.md + 2,
     paddingVertical: spacing.sm + 4,
@@ -643,5 +1068,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  fabText: { color: colors.white, fontSize: 13, fontWeight: "700" },
+  fabText: { color: colors.surface, fontSize: 13, fontWeight: "700" },
+
+  // Range view
+  rangeSubtitle: { fontSize: 13, color: colors.textSecondary, marginBottom: spacing.md },
+  rangeRow: { flexDirection: "row", gap: spacing.sm },
+  warning: { fontSize: 12, color: colors.danger, marginTop: spacing.xs, marginBottom: spacing.sm },
+  dayBlock: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.sm + 2,
+    marginTop: spacing.md,
+  },
+  dayTitle: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
+  workerRow: { marginBottom: spacing.sm },
+  workerName: { fontSize: 13, fontWeight: "600", color: colors.navy, marginBottom: 4 },
+  notJoinedRow: { backgroundColor: colors.unmarkedTint, borderRadius: radius.sm, paddingVertical: spacing.sm + 2, alignItems: "center" },
+  notJoinedText: { fontSize: 12, fontWeight: "700", color: colors.unmarked },
 });

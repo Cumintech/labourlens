@@ -4,12 +4,10 @@ import React from "react";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import AddWorkerScreen from "../screens/AddWorkerScreen";
-import AttendanceRangeScreen from "../screens/AttendanceRangeScreen";
 import BiometricConsentScreen from "../screens/BiometricConsentScreen";
 import BiometricDevicesScreen from "../screens/BiometricDevicesScreen";
 import DeviceUserMappingScreen from "../screens/DeviceUserMappingScreen";
 import UnmappedPunchesScreen from "../screens/UnmappedPunchesScreen";
-import DashboardScreen from "../screens/DashboardScreen";
 import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
@@ -26,8 +24,6 @@ import MainTabs from "./MainTabs";
 
 export type RootStackParamList = {
   Home: undefined;
-  Dashboard: undefined;
-  AttendanceRange: undefined;
   // Route name kept as "NewWorkerScan" (not renamed to "AddWorker")
   // so HomeScreen's existing navigation.navigate("NewWorkerScan") call
   // needs no change -- the component behind it is the new merged
@@ -60,7 +56,6 @@ export type RootStackParamList = {
   WorkerTypes: undefined;
   ShiftSettings: undefined;
   Profile: undefined;
-  StatutoryForms: undefined;
   PrivacyPolicy: undefined;
   HelpSupport: undefined;
   // No longer a tab -- reached via the gear IconButton in Today's
@@ -121,8 +116,6 @@ export default function RootNavigator() {
       >
         <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
-        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Labour Attendance" }} />
-        <Stack.Screen name="AttendanceRange" component={AttendanceRangeScreen} options={{ title: "Edit Multiple Days" }} />
         <Stack.Screen name="NewWorkerScan" component={AddWorkerScreen} options={{ title: "Add Worker" }} />
         <Stack.Screen name="BiometricConsent" component={BiometricConsentScreen} options={{ title: "Biometric Consent" }} />
         <Stack.Screen name="BiometricDevices" component={BiometricDevicesScreen} options={{ title: "Biometric Devices" }} />

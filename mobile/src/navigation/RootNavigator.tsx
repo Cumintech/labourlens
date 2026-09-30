@@ -14,8 +14,8 @@ import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import SettingsScreen from "../screens/SettingsScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
-import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
 import WageRateWorkerDetailScreen from "../screens/WageRateWorkerDetailScreen";
 import WageRateWorkersScreen from "../screens/WageRateWorkersScreen";
@@ -23,7 +23,7 @@ import WorkerAttendanceScreen from "../screens/WorkerAttendanceScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
 import WorkerTypesScreen from "../screens/WorkerTypesScreen";
 import { colors } from "../theme";
-import AppDrawer from "./AppDrawer";
+import MainTabs from "./MainTabs";
 
 export type RootStackParamList = {
   Home: undefined;
@@ -54,6 +54,10 @@ export type RootStackParamList = {
   StatutoryForms: undefined;
   PrivacyPolicy: undefined;
   HelpSupport: undefined;
+  // No longer a tab -- reached via the gear IconButton in Today's
+  // header (see HomeScreen.tsx). Its own layout is still the pre-v2
+  // one until Phase 7; only *where it's reached from* changed here.
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -84,9 +88,9 @@ export default function RootNavigator() {
       <NavigationContainer>
         <AuthStack.Navigator
           screenOptions={{
-            headerStyle: { backgroundColor: colors.white },
-            headerTitleStyle: { color: colors.navy, fontWeight: "700" },
-            headerTintColor: colors.teal,
+            headerStyle: { backgroundColor: colors.surface },
+            headerTitleStyle: { color: colors.navy, fontFamily: "PlusJakartaSans_700Bold", fontSize: 17 },
+            headerTintColor: colors.primary,
           }}
         >
           <AuthStack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
@@ -101,12 +105,13 @@ export default function RootNavigator() {
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{
-          headerStyle: { backgroundColor: colors.white },
-          headerTitleStyle: { color: colors.navy, fontWeight: "700" },
-          headerTintColor: colors.teal,
+          headerStyle: { backgroundColor: colors.surface },
+          headerTitleStyle: { color: colors.navy, fontFamily: "PlusJakartaSans_700Bold", fontSize: 17 },
+          headerTintColor: colors.primary,
         }}
       >
-        <Stack.Screen name="Home" component={AppDrawer} options={{ headerShown: false }} />
+        <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Labour Attendance" }} />
         <Stack.Screen name="AttendanceRange" component={AttendanceRangeScreen} options={{ title: "Edit Multiple Days" }} />
         <Stack.Screen name="NewWorkerScan" component={AddWorkerScreen} options={{ title: "Add Worker" }} />
@@ -122,7 +127,6 @@ export default function RootNavigator() {
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
-        <Stack.Screen name="StatutoryForms" component={StatutoryFormsScreen} options={{ title: "Forms & Reports" }} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} options={{ title: "Help & Support" }} />
       </Stack.Navigator>

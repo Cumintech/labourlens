@@ -8,6 +8,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import { ToastProvider } from "./src/components/ui";
 import { AppLockProvider, useAppLock } from "./src/context/AppLockContext";
@@ -56,18 +57,27 @@ export default function App() {
 
   if (!fontsLoaded) return null;
 
+  // SafeAreaProvider at the true root -- react-native-screens' Screen
+  // component gives insets to content *inside* a navigator for free in
+  // some configurations, but nothing outside the navigator tree (like
+  // ToastProvider, which wraps RootNavigator) ever gets a value without
+  // this. Confirmed live: ToastProvider crashed with "No safe area
+  // value available" before this was added -- there was no
+  // SafeAreaProvider anywhere in the app until now.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <AppLockProvider>
-          <ToastProvider>
-            <ErrorBoundary>
-              <Gate />
-            </ErrorBoundary>
-            <StatusBar style="auto" />
-          </ToastProvider>
-        </AppLockProvider>
-      </AuthProvider>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <AppLockProvider>
+            <ToastProvider>
+              <ErrorBoundary>
+                <Gate />
+              </ErrorBoundary>
+              <StatusBar style="auto" />
+            </ToastProvider>
+          </AppLockProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

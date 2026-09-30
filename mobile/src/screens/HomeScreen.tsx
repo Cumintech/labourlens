@@ -1,4 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Settings as SettingsIcon } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -6,6 +7,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { DashboardSummary, getDashboard, listLeaveForDate } from "../api/client";
 import { isoDate } from "../components/DateField";
 import HomeBackground from "../components/HomeBackground";
+import { IconButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { trialStatusText } from "../planStatus";
@@ -21,10 +23,10 @@ type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
 // Home shows exactly two primary cards -- Labour Attendance (the daily
 // task) and Biometric Mapping -- per explicit request to declutter a
-// Home page that had 6 competing actions. Everything else that used to
-// live here as a small tile (Add Worker, Wage Rate, Shifts & Profile)
-// moved to the left drawer (see AppDrawer.tsx), reachable via the menu
-// button below. Logout is on the Settings tab.
+// Home page that had 6 competing actions. Add Worker moved to the
+// Workers tab's FAB; Worker Types and Shifts & Profile moved into the
+// Settings hub (reached via the gear icon below, no longer a tab); Wage
+// Rate moved into the Wages tab. Logout lives in Settings.
 export default function HomeScreen({ navigation }: Props) {
   const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
@@ -62,13 +64,12 @@ export default function HomeScreen({ navigation }: Props) {
       >
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
-          <TouchableOpacity
-            style={styles.menuButton}
-            onPress={() => navigation.dispatch({ type: "OPEN_DRAWER" })}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.menuButtonText}>☰</Text>
-          </TouchableOpacity>
+          <IconButton
+            icon={SettingsIcon}
+            color={colors.surface}
+            accessibilityLabel="Open settings"
+            onPress={() => navigation.navigate("Settings")}
+          />
           <View style={styles.heroTopRowRight}>
             <Text style={styles.heroEmoji}>🏭</Text>
             <View style={styles.heroBadge}>
@@ -130,8 +131,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   heroTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  menuButton: { padding: 4 },
-  menuButtonText: { fontSize: 24, color: colors.white },
   heroTopRowRight: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   heroEmoji: { fontSize: 32 },
   heroBadge: { backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },

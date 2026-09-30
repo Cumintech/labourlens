@@ -30,9 +30,10 @@ type Props = NativeStackScreenProps<RootStackParamList, "ShiftSettings">;
 
 // Factory profile fields (name, address, licence, state, industry) used
 // to live on this screen too, despite it being named for shift
-// management -- moved to a real Profile screen (Section 4) so that data
-// exists in exactly one editable place. The helper link below is for
-// anyone who lands here out of habit looking for those fields.
+// management -- moved to a real Profile screen so that data exists in
+// exactly one editable place. The cross-link that used to sit here
+// pointing at Profile was removed once Settings gained its own
+// "Factory profile" row (Phase 7) -- Profile now lives in Settings.
 export default function ShiftSettingsScreen({ navigation }: Props) {
   const { token } = useAuth();
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
@@ -150,13 +151,6 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
       contentContainerStyle={{ padding: spacing.md }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
     >
-      <TouchableOpacity style={styles.helpbox} onPress={() => navigation.navigate("Profile")}>
-        <Text style={styles.helpboxText}>
-          Looking for factory name, address, licence, state, or industry? Edit those from{" "}
-          <Text style={styles.helpboxLink}>Profile ›</Text>
-        </Text>
-      </TouchableOpacity>
-
       <Text style={styles.sectionLabel}>Shifts</Text>
       <Text style={styles.helper}>
         Up to 3 shifts is typical, but there's no hard limit. Workers can be marked present in more than one
@@ -233,9 +227,6 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-  helpbox: { backgroundColor: colors.skyBlueLight, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
-  helpboxText: { fontSize: 12, color: colors.navy, lineHeight: 17 },
-  helpboxLink: { fontWeight: "700", color: colors.skyBlue },
   sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.xs },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },

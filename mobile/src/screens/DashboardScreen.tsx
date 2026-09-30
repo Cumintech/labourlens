@@ -1,4 +1,4 @@
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,7 +31,13 @@ import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Dashboard">;
+// Mounted as both the "Dashboard" stack route (pushed from Home's tile,
+// pre-Phase-4) AND the new "AttendanceTab" tab content -- a bottom-tab
+// navigator's own navigation prop type isn't the same nominal type as a
+// stack screen's, so this is typed loosely (same pattern already used
+// by HomeScreen/WageCalculationScreen/StatutoryFormsScreen for the same
+// reason) rather than tied to one specific route.
+type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
 // A different accent per shift dot, cycling if there are more shifts
 // than colors -- purely visual, so the stat strip and row toggle read

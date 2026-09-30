@@ -9,8 +9,8 @@ import { RootStackParamList } from "../navigation/RootNavigator";
 import { displayPlanStatus, trialStatusText } from "../planStatus";
 import { colors, radius, spacing } from "../theme";
 
-// Rendered as the Settings tab's content inside MainTabs -- see
-// StatutoryFormsScreen for why the nav prop is typed this loosely.
+// A real stack screen now, reached via the gear icon in Today's header
+// -- no longer a tab (see MainTabs.tsx / RootNavigator.tsx).
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
 const PIN_PATTERN = /^\d{4}$/;

@@ -28,6 +28,12 @@ import models
 
 PORTAL_BASE_URL = os.environ.get("PORTAL_BASE_URL", "http://127.0.0.1:8020")
 MAX_SYNC_ATTEMPTS = 5
+# The Portal's own create form and deactivate-by-search both strictly
+# require the real Aadhaar number (see module docstring -- no safe
+# substitute: name collides across workers, external_ref has no
+# equivalent on the real Portal). Default false: sending PII to a third
+# party is an explicit opt-in, not silently on.
+SEND_AADHAAR_EXTERNAL = os.environ.get("SEND_AADHAAR_EXTERNAL", "false").lower() == "true"
 
 
 class PortalAutomation:
@@ -51,11 +57,15 @@ class PortalAutomation:
         self.page.fill('input[name="external_ref"]', external_ref)
         self.page.click('button[type="submit"]')
         self.page.wait_for_load_state("networkidle")
+        if "/workers/new" in self.page.url:
+            raise RuntimeError("Portal did not confirm worker creation (still on the form)")
 
     def deactivate_worker(self, aadhaar_number: str) -> None:
         # page.request shares the browser context's cookies, so this
         # carries the session from login() above.
         resp = self.page.request.get(f"{PORTAL_BASE_URL}/workers/search?aadhaar={aadhaar_number}")
+        if not resp.ok:
+            raise RuntimeError(f"Portal search request failed (HTTP {resp.status})")
         matches = resp.json().get("matches", [])
         if len(matches) == 0:
             raise RuntimeError("No Portal entry found for this Aadhaar number -- nothing to deactivate")
@@ -121,6 +131,13 @@ def reconcile_owner(db: Session, owner: models.Owner) -> None:
             worker = db.get(models.Worker, row.worker_id)
             row.attempts += 1
             row.last_attempted_at = datetime.now(timezone.utc)
+            if not SEND_AADHAAR_EXTERNAL:
+                # Blocked, not silently skipped -- worker.id only, never
+                # the Aadhaar itself, in this message.
+                row.state = "failed"
+                row.last_error = f"Aadhaar send to Labour Portal disabled (SEND_AADHAAR_EXTERNAL=false) for worker {worker.id}"
+                db.commit()
+                continue
             try:
                 if row.action == "create":
                     automation.create_worker(

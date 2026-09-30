@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from crypto import EncryptedString
-from database import Base
+from database import Base, TenantScoped
 
 
 class Owner(Base):
@@ -69,7 +69,7 @@ class Owner(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class WorkerType(Base):
+class WorkerType(Base, TenantScoped):
     """Wage Rate feature -- a factory-defined category (Skilled/Unskilled/
     Helper, etc.) with a default rate. Assigning a type to a worker who has
     no WageProfile yet auto-creates one from these defaults (see
@@ -92,7 +92,7 @@ class WorkerType(Base):
     )
 
 
-class Worker(Base):
+class Worker(Base, TenantScoped):
     __tablename__ = "workers"
     __table_args__ = (UniqueConstraint("owner_id", "numeric_employee_code", name="uq_worker_employee_code"),)
 
@@ -129,7 +129,7 @@ class Worker(Base):
     native_address: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     native_district: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     bank_account_number: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
-    bank_ifsc: Mapped[str | None] = mapped_column(String, nullable=True)
+    bank_ifsc: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
     # "active" | "deactivated"
     status: Mapped[str] = mapped_column(String, default="active", nullable=False)
@@ -190,7 +190,7 @@ class SyncStatus(Base):
     last_error: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
-class PortalCredential(Base):
+class PortalCredential(Base, TenantScoped):
     """One row per owner -- confirmed each factory owner has their own
     separate login on the real Portal, not one shared account. Password
     encrypted the same way as Worker PII (EncryptedString); username
@@ -208,7 +208,7 @@ class PortalCredential(Base):
     )
 
 
-class AuditLog(Base):
+class AuditLog(Base, TenantScoped):
     """Append-only. Every activate/deactivate action."""
 
     __tablename__ = "audit_log"
@@ -224,7 +224,7 @@ class AuditLog(Base):
     )
 
 
-class ShiftConfig(Base):
+class ShiftConfig(Base, TenantScoped):
     """Phase 3 Day 1 -- replaces the old hardcoded AM/PM/Evening slots
     with owner-configurable shifts (shift scheme varies by factory, per
     PHASE3_STATUTORY_FORMS_PLAN.md). Attendance.slot stores slot_key."""
@@ -347,7 +347,7 @@ class WagePayment(Base):
     )
 
 
-class Factory(Base):
+class Factory(Base, TenantScoped):
     """Admin-portal-only business/billing overlay on top of Owner --
     every Owner in this app already IS one factory, so rather than a
     second, independently-maintained factory directory, one Factory row
@@ -420,7 +420,7 @@ class AdminUser(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class FormGenerationLog(Base):
+class FormGenerationLog(Base, TenantScoped):
     """Phase 3 Day 3 -- one row per successful form generation/email.
     worker_id is null for the two factory-wide forms (Form 25, Form 15),
     set for the three per-worker ones (Form 25-B, Form 12, Wage Slip)."""
@@ -441,7 +441,7 @@ class FormGenerationLog(Base):
     )
 
 
-class BiometricDevice(Base):
+class BiometricDevice(Base, TenantScoped):
     """One row per fingerprint terminal (e.g. "Main Gate"). Real device
     mechanics live in biometric.py, kept behind a single connector
     interface so this table and everything downstream of it (mapping,

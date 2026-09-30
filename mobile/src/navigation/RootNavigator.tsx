@@ -8,6 +8,7 @@ import BiometricConsentScreen from "../screens/BiometricConsentScreen";
 import BiometricDevicesScreen from "../screens/BiometricDevicesScreen";
 import DeviceUserMappingScreen from "../screens/DeviceUserMappingScreen";
 import UnmappedPunchesScreen from "../screens/UnmappedPunchesScreen";
+import ForgotPasswordScreen from "../screens/ForgotPasswordScreen";
 import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
 import MonthEndScreen from "../screens/MonthEndScreen";
@@ -75,6 +76,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 // of a summary baked into the login form.
 export type AuthStackParamList = {
   Login: undefined;
+  ForgotPassword: undefined;
   PrivacyPolicy: undefined;
 };
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -101,6 +103,7 @@ export default function RootNavigator() {
           }}
         >
           <AuthStack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+          <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: "Reset Password" }} />
           <AuthStack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
         </AuthStack.Navigator>
       </NavigationContainer>

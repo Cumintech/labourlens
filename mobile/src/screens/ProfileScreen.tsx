@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import React, { useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity } from "react-native";
-import { updateFactoryProfile } from "../api/client";
+import { updateAccount, updateFactoryProfile } from "../api/client";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
 import { useAuth } from "../context/AuthContext";
@@ -9,6 +9,7 @@ import { INDIAN_STATE_OPTIONS } from "../indianStates";
 import { INDUSTRY_OPTIONS } from "../industries";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
+import { isValidEmail, isValidUsername } from "../validators";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Profile">;
 
@@ -20,6 +21,8 @@ type Props = NativeStackScreenProps<RootStackParamList, "Profile">;
 // updateFactoryProfile call) changed, only which screen edits it.
 export default function ProfileScreen({}: Props) {
   const { token, owner, updateOwner } = useAuth();
+  const [username, setUsername] = useState(owner?.username ?? "");
+  const [email, setEmail] = useState(owner?.email ?? "");
   const [factoryName, setFactoryName] = useState(owner?.factory_name ?? "");
   const [factoryAddress, setFactoryAddress] = useState(owner?.factory_address ?? "");
   const [factoryLicenceNo, setFactoryLicenceNo] = useState(owner?.factory_licence_no ?? "");
@@ -33,9 +36,21 @@ export default function ProfileScreen({}: Props) {
       Alert.alert("Factory name required", "This is the name shown on your Home screen and every statutory form.");
       return;
     }
+    if (username.trim() && !isValidUsername(username)) {
+      Alert.alert("Check your username", "3-30 characters, starting with a letter (letters, numbers, \".\" or \"_\" only).");
+      return;
+    }
+    if (email.trim() && !isValidEmail(email)) {
+      Alert.alert("Check your email", "Enter a valid email address.");
+      return;
+    }
     setSaving(true);
     try {
-      const updated = await updateFactoryProfile(
+      let updated = owner!;
+      if (username.trim() !== (owner?.username ?? "") || email.trim() !== (owner?.email ?? "")) {
+        updated = await updateAccount(token, username.trim() || undefined, email.trim() || undefined);
+      }
+      updated = await updateFactoryProfile(
         token,
         factoryName.trim(),
         factoryAddress.trim() || undefined,
@@ -44,7 +59,7 @@ export default function ProfileScreen({}: Props) {
         industry || undefined,
       );
       await updateOwner(updated);
-      Alert.alert("Saved", "Factory profile updated.");
+      Alert.alert("Saved", "Profile updated.");
     } catch (e: any) {
       Alert.alert("Could not save", e?.message ?? "Please try again.");
     } finally {
@@ -56,6 +71,28 @@ export default function ProfileScreen({}: Props) {
     <KeyboardScreen contentContainerStyle={styles.container}>
       <Text style={styles.title}>Profile</Text>
       <Text style={styles.subtitle}>Factory details used across Home, statutory forms, and reports.</Text>
+
+      <Text style={styles.label}>Username (used to log in)</Text>
+      <TextInput
+        style={styles.input}
+        value={username}
+        onChangeText={setUsername}
+        placeholder="e.g. salemfactory"
+        placeholderTextColor={colors.muted}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <Text style={styles.label}>Email (needed for Forgot Password)</Text>
+      <TextInput
+        style={styles.input}
+        value={email}
+        onChangeText={setEmail}
+        placeholder="owner@example.com"
+        placeholderTextColor={colors.muted}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+      />
 
       <Text style={styles.label}>Factory name</Text>
       <TextInput

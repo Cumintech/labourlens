@@ -28,14 +28,16 @@ from attendance_service import upsert_attendance
 from auth import create_token, get_current_owner, hash_password, verify_password
 from crypto import mask_aadhaar
 from database import Base, SessionLocal, engine, get_db
-from email_service import send_report_email
+from email_service import send_plain_email, send_report_email
 from schemas import (
+    AccountUpdateIn,
     AttendanceMarkIn,
     AttendanceOut,
     DailyWageSummaryOut,
     DailyWorkerWageOut,
     DashboardOut,
     FactoryProfileIn,
+    ForgotPasswordIn,
     FormTemplateOut,
     FormEmailIn,
     HealthOut,
@@ -51,6 +53,7 @@ from schemas import (
     OwnerSignupIn,
     PortalCredentialIn,
     ReportEmailIn,
+    ResetPasswordIn,
     ShiftConfigIn,
     ShiftConfigOut,
     SlotSummary,
@@ -280,9 +283,19 @@ def signup(request: Request, body: OwnerSignupIn, db: Session = Depends(get_db))
     if existing:
         raise HTTPException(status_code=409, detail="An owner with this mobile number already exists")
 
+    # Falls back to the mobile number when no username was sent (every
+    # verify_*.py script, and any other API caller that predates this
+    # field) -- mobile is already unique, so this can't collide.
+    username = body.username or body.mobile
+    existing_username = db.query(models.Owner).filter(models.Owner.username == username).first()
+    if existing_username:
+        raise HTTPException(status_code=409, detail="That username is already taken")
+
     owner = models.Owner(
         name=body.name,
         mobile=body.mobile,
+        username=username,
+        email=body.email,
         password_hash=hash_password(body.password),
         factory_name=body.factory_name,
         consent_given_at=datetime.now(timezone.utc),
@@ -327,14 +340,98 @@ def signup(request: Request, body: OwnerSignupIn, db: Session = Depends(get_db))
 @app.post("/owners/login", response_model=TokenOut)
 @limiter.limit("10/minute")
 def login(request: Request, body: OwnerLoginIn, db: Session = Depends(get_db)):
-    owner = db.query(models.Owner).filter(models.Owner.mobile == body.mobile).first()
+    owner = db.query(models.Owner).filter(models.Owner.username == body.username).first()
     if not owner or not verify_password(body.password, owner.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid mobile number or password")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
     if owner.deleted_at is not None:
-        raise HTTPException(status_code=401, detail="Invalid mobile number or password")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
     token = create_token(owner.id)
     return TokenOut(access_token=token, owner=_owner_out(db, owner))
+
+
+def _find_owner_by_identifier(db: Session, identifier: str) -> models.Owner | None:
+    ident = identifier.strip().lower()
+    return (
+        db.query(models.Owner)
+        .filter((models.Owner.username == ident) | (models.Owner.email == ident))
+        .first()
+    )
+
+
+RESET_CODE_TTL_MINUTES = 15
+
+
+@app.post("/owners/forgot-password", status_code=202)
+@limiter.limit("5/hour")
+def forgot_password(request: Request, body: ForgotPasswordIn, db: Session = Depends(get_db)):
+    # Always the same response whether or not an account was found (or
+    # has no email on file) -- a different response would let anyone
+    # probe which usernames/emails exist in the system.
+    generic = {"message": "If an account exists, a reset code has been sent to the email on file."}
+    owner = _find_owner_by_identifier(db, body.identifier)
+    if not owner or owner.deleted_at is not None or not owner.email:
+        return generic
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    owner.reset_code_hash = hash_password(code)
+    owner.reset_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=RESET_CODE_TTL_MINUTES)
+    db.commit()
+    try:
+        send_plain_email(
+            owner.email,
+            "Labour Lens password reset code",
+            f"Your password reset code is {code}. It expires in {RESET_CODE_TTL_MINUTES} minutes.\n\n"
+            "If you didn't request this, you can ignore this email.",
+        )
+    except Exception:
+        # Never surface an SMTP failure here -- doing so would both leak
+        # whether the account/email exists and expose server config
+        # details to an unauthenticated caller.
+        pass
+    return generic
+
+
+@app.post("/owners/reset-password")
+@limiter.limit("10/hour")
+def reset_password(request: Request, body: ResetPasswordIn, db: Session = Depends(get_db)):
+    owner = _find_owner_by_identifier(db, body.identifier)
+    if not owner or owner.deleted_at is not None or not owner.reset_code_hash or not owner.reset_code_expires_at:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    # SQLite hands back a naive datetime even for DateTime(timezone=True)
+    # (unlike Postgres) -- see the same handling in _owner_out above.
+    expires_at = owner.reset_code_expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc) or not verify_password(body.code, owner.reset_code_hash):
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    owner.password_hash = hash_password(body.new_password)
+    owner.reset_code_hash = None
+    owner.reset_code_expires_at = None
+    db.commit()
+    return {"message": "Password updated. Log in with your new password."}
+
+
+@app.put("/owners/me/account", response_model=OwnerOut)
+def update_account(
+    body: AccountUpdateIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    if body.username:
+        existing = (
+            db.query(models.Owner)
+            .filter(models.Owner.username == body.username, models.Owner.id != owner.id)
+            .first()
+        )
+        if existing:
+            raise HTTPException(status_code=409, detail="That username is already taken")
+        owner.username = body.username
+    if body.email is not None:
+        owner.email = body.email
+    db.commit()
+    return _owner_out(db, owner)
 
 
 @app.get("/owners/me", response_model=OwnerOut)

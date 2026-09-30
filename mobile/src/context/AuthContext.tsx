@@ -25,8 +25,16 @@ type AuthContextValue = {
   token: string | null;
   owner: Owner | null;
   loading: boolean;
-  login: (mobile: string, password: string) => Promise<void>;
-  signup: (name: string, mobile: string, password: string, factoryName: string, consentGiven: boolean) => Promise<Owner>;
+  login: (username: string, password: string) => Promise<void>;
+  signup: (
+    name: string,
+    username: string,
+    email: string,
+    mobile: string,
+    password: string,
+    factoryName: string,
+    consentGiven: boolean,
+  ) => Promise<Owner>;
   logout: () => Promise<void>;
   updateOwner: (updated: Owner) => Promise<void>;
 };
@@ -52,8 +60,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  async function login(mobile: string, password: string) {
-    const res = await apiLogin(mobile, password);
+  async function login(username: string, password: string) {
+    const res = await apiLogin(username, password);
     await Store.setItemAsync(TOKEN_KEY, res.access_token);
     await Store.setItemAsync(OWNER_KEY, JSON.stringify(res.owner));
     setToken(res.access_token);
@@ -65,8 +73,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // up and only ever see their own workers/attendance/forms. Only one
   // account is the active session on this device at a time (log out,
   // then log in as a different one to switch), same as login().
-  async function signup(name: string, mobile: string, password: string, factoryName: string, consentGiven: boolean) {
-    const res = await apiSignup(name, mobile, password, factoryName, consentGiven);
+  async function signup(
+    name: string,
+    username: string,
+    email: string,
+    mobile: string,
+    password: string,
+    factoryName: string,
+    consentGiven: boolean,
+  ) {
+    const res = await apiSignup(name, username, email, mobile, password, factoryName, consentGiven);
     await Store.setItemAsync(TOKEN_KEY, res.access_token);
     await Store.setItemAsync(OWNER_KEY, JSON.stringify(res.owner));
     setToken(res.access_token);

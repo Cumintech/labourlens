@@ -43,7 +43,7 @@ assert delete_resp.status_code == 204, delete_resp.text
 print("DELETE /owners/me returns 204: PASSED")
 
 # The old password must never work again.
-relogin = client.post("/owners/login", json={"mobile": MOBILE, "password": PASSWORD})
+relogin = client.post("/owners/login", json={"username": MOBILE, "password": PASSWORD})
 assert relogin.status_code == 401, relogin.text
 print("After deletion: login with the old password now fails: PASSED")
 

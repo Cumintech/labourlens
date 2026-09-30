@@ -15,6 +15,12 @@ export type Owner = {
   id: number;
   name: string;
   mobile: string;
+  // The login identifier -- null only in principle (every owner gets
+  // one, backfilled from mobile for pre-existing accounts).
+  username: string | null;
+  // Only set once an owner adds one (ProfileScreen) -- required for
+  // "Forgot password" to work, since there's no SMS gateway.
+  email: string | null;
   factory_name: string;
   factory_address: string | null;
   factory_licence_no: string | null;
@@ -146,15 +152,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-export function login(mobile: string, password: string): Promise<AuthResponse> {
+export function login(username: string, password: string): Promise<AuthResponse> {
   return request<AuthResponse>("/owners/login", {
     method: "POST",
-    body: JSON.stringify({ mobile, password }),
+    body: JSON.stringify({ username, password }),
   });
 }
 
 export function signup(
   name: string,
+  username: string,
+  email: string,
   mobile: string,
   password: string,
   factoryName: string,
@@ -162,7 +170,29 @@ export function signup(
 ): Promise<AuthResponse> {
   return request<AuthResponse>("/owners/signup", {
     method: "POST",
-    body: JSON.stringify({ name, mobile, password, factory_name: factoryName, consent_given: consentGiven }),
+    body: JSON.stringify({ name, username, email, mobile, password, factory_name: factoryName, consent_given: consentGiven }),
+  });
+}
+
+export function forgotPassword(identifier: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/owners/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ identifier }),
+  });
+}
+
+export function resetPassword(identifier: string, code: string, newPassword: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/owners/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ identifier, code, new_password: newPassword }),
+  });
+}
+
+export function updateAccount(token: string, username: string | undefined, email: string | undefined): Promise<Owner> {
+  return request<Owner>("/owners/me/account", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ username, email }),
   });
 }
 

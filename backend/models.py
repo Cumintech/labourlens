@@ -15,6 +15,26 @@ class Owner(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     mobile: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    # The actual login identifier now -- mobile above is kept only as a
+    # contact number (still shown on the admin portal's Factory row).
+    # Nullable at the DB/ORM level even though every owner ends up with
+    # one: the migration backfills existing rows to their old mobile
+    # number, but leaving the column nullable means every other place
+    # that constructs an Owner row (verify_*.py fixtures, etc.) didn't
+    # need to change. Uniqueness is still enforced by a real DB index --
+    # unique+NULL is fine since NULLs are never considered equal to each
+    # other.
+    username: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    # Only channel "Forgot password" can use -- there's no SMS gateway.
+    # Optional: an owner who never set one (every pre-existing account)
+    # simply can't self-serve a reset until they add it (ProfileScreen).
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
+    # A short-lived OTP for the forgot-password flow -- hashed with the
+    # same bcrypt helper as the real password, never stored in plain
+    # text. Both cleared the moment a reset succeeds or a new one is
+    # requested.
+    reset_code_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    reset_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     factory_name: Mapped[str] = mapped_column(String, nullable=False)
     # Printed on every Phase 3 statutory form header -- not PII, plain columns.
     factory_address: Mapped[str | None] = mapped_column(String, nullable=True)

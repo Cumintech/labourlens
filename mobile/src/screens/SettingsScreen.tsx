@@ -151,13 +151,14 @@ export default function SettingsScreen({ navigation }: Props) {
         </View>
       </View>
 
-      {/* Temporary safety-net section: these 4 screens lost their only
+      {/* Temporary safety-net section: these screens lost their only
           entry point when AppDrawer.tsx was deleted (redesign v2 Phase 1)
           / when the Home redesign (Phase 2) dropped the old Biometric
-          Devices card. Phase 5 moves Wage Rates into the Wages tab and
-          Phase 7 gives Shift Settings / Worker Types / Biometric Devices
-          a proper home in this same Settings screen -- until then, plain
-          rows here keep every feature reachable. */}
+          Devices card. Wage Rates moved to the Wages tab's own Rates
+          segment in Phase 5, so it no longer needs a row here. Phase 7
+          gives Shift Settings / Worker Types / Biometric Devices a
+          proper home in this same Settings screen -- until then, plain
+          rows here keep them reachable. */}
       <Text style={styles.sectionLabel}>Factory</Text>
       <View style={styles.card}>
         <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("ShiftSettings")}>
@@ -168,11 +169,6 @@ export default function SettingsScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("WorkerTypes")}>
           <Text style={styles.rowIcon}>🏷️</Text>
           <Text style={styles.rowValue}>Worker Types</Text>
-        </TouchableOpacity>
-        <View style={styles.divider} />
-        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("WageRateWorkers")}>
-          <Text style={styles.rowIcon}>💰</Text>
-          <Text style={styles.rowValue}>Wage Rates</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
         <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("BiometricDevices")}>

@@ -5,7 +5,7 @@ import { StyleSheet, View } from "react-native";
 import AttendanceScreen from "../screens/AttendanceScreen";
 import HomeScreen from "../screens/HomeScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
-import WageCalculationScreen from "../screens/WageCalculationScreen";
+import WagesScreen from "../screens/WagesScreen";
 import WorkersScreen from "../screens/WorkersScreen";
 import { colors } from "../theme";
 
@@ -66,7 +66,7 @@ export default function MainTabs() {
       />
       <Tab.Screen
         name="WagesTab"
-        component={WageCalculationScreen}
+        component={WagesScreen}
         options={{
           title: "Wages",
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={IndianRupee} color={color} focused={focused} />,

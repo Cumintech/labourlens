@@ -15,7 +15,6 @@ import ProfileScreen from "../screens/ProfileScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
-import WageRateWorkersScreen from "../screens/WageRateWorkersScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
 import WorkerProfileScreen from "../screens/WorkerProfileScreen";
 import WorkerTypesScreen from "../screens/WorkerTypesScreen";
@@ -52,7 +51,6 @@ export type RootStackParamList = {
   };
   WorkerEdit: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
   WageProfile: { workerId: number; workerName: string; fromRegistration?: boolean };
-  WageRateWorkers: undefined;
   WorkerTypes: undefined;
   ShiftSettings: undefined;
   Profile: undefined;
@@ -124,7 +122,6 @@ export default function RootNavigator() {
         <Stack.Screen name="WorkerProfile" component={WorkerProfileScreen} options={{ title: "Worker" }} />
         <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ title: "Edit Worker" }} />
         <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ title: "Wage Rate" }} />
-        <Stack.Screen name="WageRateWorkers" component={WageRateWorkersScreen} options={{ title: "Wage Rate" }} />
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />

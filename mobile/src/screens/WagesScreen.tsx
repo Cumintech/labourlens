@@ -1,27 +1,51 @@
+import { useFocusEffect, useRoute } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useMemo, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ActivityIndicator, Alert, FlatList, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  ApiError,
   DailyWageSummary,
+  WageProfile,
   WageSummary,
+  Worker,
+  WorkerType,
   WorkerWage,
   getDailyWageSummary,
+  getWageProfile,
   getWageSummary,
+  listWorkerTypes,
+  listWorkers,
   recordWagePayment,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import DonutChart from "../components/DonutChart";
 import ErrorState from "../components/ErrorState";
 import { ListSkeleton } from "../components/Skeleton";
+import { SegmentedControl } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
-import { colors, radius, spacing } from "../theme";
+import { RootStackParamList } from "../navigation/RootNavigator";
+import { colors, radius, spacing, type } from "../theme";
+import { workerLabel } from "../workerLabel";
 
-type Mode = "daily" | "monthly";
+type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
+type Segment = "payroll" | "rates";
+type PayrollMode = "daily" | "monthly";
 
 const SLICE_COLORS = [
-  colors.teal, colors.skyBlue, colors.violet, colors.amber,
-  colors.coral, colors.danger, colors.tealDark, colors.amberDark, "#2B4C7E",
+  colors.primary, colors.skyBlue, colors.violet, colors.warning,
+  colors.coral, colors.danger, colors.primaryPressed, "#2B4C7E",
 ];
 
 const MONTH_NAMES = [
@@ -33,19 +57,48 @@ function todayString() {
   return isoDate(new Date());
 }
 
+// Merges the old standalone WageCalculationScreen (Payroll: a period's
+// total cost + per-worker breakdown + record-payment) and
+// WageRateWorkersScreen (Rates: each active worker's assigned type and
+// current rate) into one Wages tab with a Payroll|Rates
+// SegmentedControl, per the v2 redesign spec -- Rates is no longer a
+// standalone destination.
+export default function WagesScreen({ navigation }: Props) {
+  const route = useRoute<{ key: string; name: string; params?: { segment?: Segment } }>();
+  const [segment, setSegment] = useState<Segment>(route.params?.segment === "rates" ? "rates" : "payroll");
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={type.display}>Wages</Text>
+        <View style={styles.segmentWrap}>
+          <SegmentedControl<Segment>
+            options={[
+              { label: "Payroll", value: "payroll" },
+              { label: "Rates", value: "rates" },
+            ]}
+            value={segment}
+            onChange={setSegment}
+          />
+        </View>
+      </View>
+      {segment === "payroll" ? <PayrollView /> : <RatesView navigation={navigation} />}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Payroll -- ported from the old WageCalculationScreen.tsx verbatim,
+// minus its own "Wage Calculation" title (the shared header above
+// already reads "Wages").
+// ---------------------------------------------------------------------
 type Row = { workerId: number; workerName: string; amount: number; hasRate: boolean; paid?: boolean; present?: boolean };
 
-// A dedicated place to answer "what's this month/day costing me, and
-// who's it going to" -- previously this figure only existed buried
-// inside Form 15's PDF, one worker's wage slip at a time, or a mental
-// sum across each worker's own screen. Also the only place payments get
-// recorded for more than one worker without opening each of their
-// screens individually.
-export default function WageCalculationScreen() {
+function PayrollView() {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const today = useMemo(() => new Date(), []);
-  const [mode, setMode] = useState<Mode>("monthly");
+  const [mode, setMode] = useState<PayrollMode>("monthly");
   const [date, setDate] = useState(todayString());
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [year, setYear] = useState(today.getFullYear());
@@ -87,7 +140,7 @@ export default function WageCalculationScreen() {
       await load();
       setLoadError(false);
     } catch {
-      // Keep whatever's already on screen -- see Dashboard's identical note.
+      // Keep whatever's already on screen -- see other screens' identical note.
     } finally {
       setRefreshing(false);
     }
@@ -174,7 +227,7 @@ export default function WageCalculationScreen() {
 
   if (loading || !token) {
     return (
-      <View style={styles.container}>
+      <View style={styles.viewContainer}>
         <ListSkeleton rows={4} variant="simple" />
       </View>
     );
@@ -182,7 +235,7 @@ export default function WageCalculationScreen() {
 
   if (loadError) {
     return (
-      <View style={styles.container}>
+      <View style={styles.viewContainer}>
         <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
       </View>
     );
@@ -191,15 +244,13 @@ export default function WageCalculationScreen() {
   return (
     <>
     <FlatList
-      style={styles.container}
+      style={styles.viewContainer}
       data={rows}
       keyExtractor={(r) => String(r.workerId)}
       contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl + insets.bottom }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View>
-          <Text style={styles.title}>Wage Calculation</Text>
-
           <View style={styles.modeRow}>
             <TouchableOpacity
               style={[styles.modeButton, mode === "daily" && styles.modeButtonActive]}
@@ -221,7 +272,7 @@ export default function WageCalculationScreen() {
                 <Text style={styles.periodArrowText}>‹</Text>
               </TouchableOpacity>
               <Text style={styles.periodLabel}>
-                📅 {MONTH_NAMES[month - 1]} {year}
+                {MONTH_NAMES[month - 1]} {year}
               </Text>
               <TouchableOpacity style={styles.periodArrow} onPress={() => changeMonth(1)}>
                 <Text style={styles.periodArrowText}>›</Text>
@@ -315,7 +366,7 @@ export default function WageCalculationScreen() {
                 value={paymentReference}
                 onChangeText={setPaymentReference}
                 placeholder="Optional"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={colors.textSecondary}
               />
               <View style={styles.modalButtonRow}>
                 <TouchableOpacity style={styles.modalCancelButton} onPress={() => setPaymentTarget(null)}>
@@ -326,7 +377,7 @@ export default function WageCalculationScreen() {
                   onPress={handleRecordPayment}
                   disabled={savingPayment}
                 >
-                  {savingPayment ? <ActivityIndicator color={colors.white} /> : <Text style={styles.modalConfirmText}>Save</Text>}
+                  {savingPayment ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.modalConfirmText}>Save</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -346,12 +397,12 @@ export default function WageCalculationScreen() {
               </Text>
 
               <View style={styles.daysRow}>
-                <View style={[styles.dayStat, { backgroundColor: colors.tealLight }]}>
-                  <Text style={[styles.dayStatValue, { color: colors.tealDark }]}>{detailTarget.days_worked}</Text>
+                <View style={[styles.dayStat, { backgroundColor: colors.presentTint }]}>
+                  <Text style={[styles.dayStatValue, { color: colors.present }]}>{detailTarget.days_worked}</Text>
                   <Text style={styles.dayStatLabel}>Days Worked</Text>
                 </View>
-                <View style={[styles.dayStat, { backgroundColor: colors.dangerLight }]}>
-                  <Text style={[styles.dayStatValue, { color: colors.danger }]}>{detailTarget.days_absent}</Text>
+                <View style={[styles.dayStat, { backgroundColor: colors.absentTint }]}>
+                  <Text style={[styles.dayStatValue, { color: colors.absentTintText }]}>{detailTarget.days_absent}</Text>
                   <Text style={styles.dayStatLabel}>Days Absent</Text>
                 </View>
               </View>
@@ -410,7 +461,7 @@ export default function WageCalculationScreen() {
               <View style={styles.detailDivider} />
               <View style={styles.detailRowTotal}>
                 <Text style={styles.detailLabelBold}>Net Wages</Text>
-                <Text style={[styles.detailValueBold, { color: colors.teal }]}>₹{detailTarget.net_wage.toFixed(2)}</Text>
+                <Text style={[styles.detailValueBold, { color: colors.primary }]}>₹{detailTarget.net_wage.toFixed(2)}</Text>
               </View>
               <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDetailTarget(null)}>
                 <Text style={styles.modalCancelText}>Close</Text>
@@ -424,14 +475,150 @@ export default function WageCalculationScreen() {
   );
 }
 
+// ---------------------------------------------------------------------
+// Rates -- ported from the old WageRateWorkersScreen.tsx verbatim,
+// minus its own "Wage Rate" title (the shared header above already
+// reads "Wages"). Navigates into the Worker Profile hub's Wages tab
+// instead of the deleted WageRateWorkerDetail screen.
+// ---------------------------------------------------------------------
+function byEmployeeIdAscending(a: Worker, b: Worker): number {
+  const aCode = a.numeric_employee_code ? parseInt(a.numeric_employee_code, 10) : Infinity;
+  const bCode = b.numeric_employee_code ? parseInt(b.numeric_employee_code, 10) : Infinity;
+  return aCode - bCode;
+}
+
+function RatesView({ navigation }: { navigation: NativeStackNavigationProp<RootStackParamList> }) {
+  const { token } = useAuth();
+  const insets = useSafeAreaInsets();
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
+  const [rates, setRates] = useState<Record<number, WageProfile | null>>({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    const [w, types] = await Promise.all([listWorkers(token), listWorkerTypes(token)]);
+    const active = w.filter((worker) => worker.status === "active").sort(byEmployeeIdAscending);
+    setWorkers(active);
+    setWorkerTypes(types);
+    const rateEntries = await Promise.all(
+      active.map(async (worker): Promise<[number, WageProfile | null]> => {
+        try {
+          return [worker.id, await getWageProfile(token, worker.id)];
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 404) return [worker.id, null]; // no rate set yet -- not an error
+          throw e;
+        }
+      }),
+    );
+    setRates(Object.fromEntries(rateEntries));
+  }, [token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load()
+        .then(() => setLoadError(false))
+        .catch(() => setLoadError(true))
+        .finally(() => setLoading(false));
+    }, [load]),
+  );
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+      setLoadError(false);
+    } catch {
+      // Keep whatever's already on screen -- see other screens' identical note.
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.viewContainer}>
+        <ListSkeleton rows={5} variant="simple" />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.viewContainer}>
+        <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      style={styles.viewContainer}
+      contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
+      data={workers}
+      keyExtractor={(w) => String(w.id)}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+      ListHeaderComponent={
+        <>
+          <View style={styles.headerRow}>
+            <TouchableOpacity style={styles.typesLink} onPress={() => navigation.navigate("WorkerTypes")}>
+              <Text style={styles.typesLinkText}>Worker Types →</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.infoNote}>
+            <Text style={styles.infoNoteText}>
+              If a worker's device ID isn't mapped yet, their attendance won't be clocked automatically from the fingerprint
+              machine — map them from the Biometric Mapping screen.
+            </Text>
+          </View>
+        </>
+      }
+      ListEmptyComponent={<Text style={styles.empty}>No active workers yet.</Text>}
+      renderItem={({ item }) => {
+        const wtype = workerTypes.find((t) => t.id === item.worker_type_id);
+        const rate = rates[item.id];
+        return (
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() =>
+              navigation.navigate("WorkerProfile", {
+                workerId: item.id,
+                workerName: item.name,
+                workerStatus: item.status,
+                deactivatedAt: item.deactivated_at,
+                initialTab: "wages",
+              })
+            }
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.name}>{workerLabel(item)}</Text>
+              <Text style={styles.meta}>
+                {wtype ? wtype.name : "No type"} · {rate ? `₹${rate.basic} / ${rate.rate_type === "daily" ? "day" : "month"}` : "no rate set"}
+              </Text>
+            </View>
+            <View style={[styles.dot, item.device_user_id ? styles.dotGreen : styles.dotAmber]} />
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+        );
+      }}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy, marginBottom: spacing.md },
-  modeRow: { flexDirection: "row", backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 4, marginBottom: spacing.md },
+  container: { flex: 1, backgroundColor: colors.ground },
+  header: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  segmentWrap: { marginTop: spacing.md },
+  viewContainer: { flex: 1, backgroundColor: colors.ground },
+
+  // Payroll
+  modeRow: { flexDirection: "row", backgroundColor: colors.ground, borderRadius: radius.sm, padding: 4, marginBottom: spacing.md },
   modeButton: { flex: 1, paddingVertical: spacing.sm + 2, alignItems: "center", borderRadius: radius.sm - 2 },
-  modeButtonActive: { backgroundColor: colors.teal },
-  modeText: { fontSize: 14, fontWeight: "700", color: colors.muted },
-  modeTextActive: { color: colors.white },
+  modeButtonActive: { backgroundColor: colors.primary },
+  modeText: { fontSize: 14, fontWeight: "700", color: colors.textSecondary },
+  modeTextActive: { color: colors.surface },
   periodRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -439,16 +626,16 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.md,
   },
-  periodArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.fieldBg, alignItems: "center", justifyContent: "center" },
+  periodArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   periodArrowText: { fontSize: 18, fontWeight: "700", color: colors.navy },
   periodLabel: { fontSize: 15, fontWeight: "700", color: colors.navy },
   summaryCard: { backgroundColor: colors.navy, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
   summaryStatRow: { flexDirection: "row" },
   summaryStat: { flex: 1, alignItems: "center" },
-  summaryStatValue: { color: colors.white, fontSize: 24, fontWeight: "700" },
+  summaryStatValue: { color: colors.surface, fontSize: 24, fontWeight: "700" },
   summaryStatLabel: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 4, textAlign: "center" },
   chartCard: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.md,
     alignItems: "center",
@@ -458,47 +645,69 @@ const styles = StyleSheet.create({
   legendRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
   legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: spacing.xs },
   legendName: { flex: 1, fontSize: 12, color: colors.navy, fontWeight: "600" },
-  legendPercent: { fontSize: 12, color: colors.muted, fontWeight: "700" },
-  noRateNote: { fontSize: 11, color: colors.muted, marginBottom: spacing.sm, fontStyle: "italic" },
+  legendPercent: { fontSize: 12, color: colors.textSecondary, fontWeight: "700" },
+  noRateNote: { fontSize: 11, color: colors.textSecondary, marginBottom: spacing.sm, fontStyle: "italic" },
   sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginTop: spacing.sm, marginBottom: spacing.xs },
-  empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
+  empty: { textAlign: "center", color: colors.textSecondary, marginTop: 40 },
   workerRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.surface,
     borderRadius: radius.sm,
     padding: spacing.sm + 4,
     marginBottom: spacing.xs,
   },
   workerName: { fontSize: 14, fontWeight: "700", color: colors.navy },
-  workerAmount: { fontSize: 16, fontWeight: "700", color: colors.teal, marginTop: 2 },
+  workerAmount: { fontSize: 16, fontWeight: "700", color: colors.primary, marginTop: 2 },
   workerDetailLink: { fontSize: 11, color: colors.skyBlue, fontWeight: "700", marginTop: 4 },
   daysRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
   dayStat: { flex: 1, borderRadius: radius.sm, paddingVertical: spacing.sm, alignItems: "center" },
   dayStatValue: { fontSize: 20, fontWeight: "700" },
-  dayStatLabel: { fontSize: 10, color: colors.muted, marginTop: 2, fontWeight: "600" },
-  detailFormula: { fontSize: 10, color: colors.muted, marginTop: 1 },
-  detailDivider: { height: 1, backgroundColor: colors.fieldBg, marginVertical: spacing.sm },
+  dayStatLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, fontWeight: "600" },
+  detailFormula: { fontSize: 10, color: colors.textSecondary, marginTop: 1 },
+  detailDivider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.sm },
   detailRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
-  detailLabel: { fontSize: 13, color: colors.muted },
+  detailLabel: { fontSize: 13, color: colors.textSecondary },
   detailValue: { fontSize: 13, color: colors.navy, fontWeight: "600" },
   detailValueNegative: { fontSize: 13, color: colors.danger, fontWeight: "600" },
   detailRowTotal: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
   detailLabelBold: { fontSize: 14, color: colors.navy, fontWeight: "700" },
   detailValueBold: { fontSize: 14, color: colors.navy, fontWeight: "700" },
-  paidBadge: { backgroundColor: colors.tealLight, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
-  paidBadgeText: { color: colors.tealDark, fontSize: 12, fontWeight: "700" },
-  recordButton: { backgroundColor: colors.teal, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
-  recordButtonText: { color: colors.white, fontSize: 12, fontWeight: "700" },
+  paidBadge: { backgroundColor: colors.presentTint, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
+  paidBadgeText: { color: colors.present, fontSize: 12, fontWeight: "700" },
+  recordButton: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
+  recordButtonText: { color: colors.surface, fontSize: 12, fontWeight: "700" },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
-  modalCard: { backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.lg, width: "85%" },
+  modalCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, width: "85%" },
   modalTitle: { fontSize: 17, fontWeight: "700", color: colors.navy },
-  modalSubtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
-  modalLabel: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },
-  modalInput: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 14, color: colors.navy },
+  modalSubtitle: { fontSize: 13, color: colors.textSecondary, marginBottom: spacing.md },
+  modalLabel: { fontSize: 12, fontWeight: "600", color: colors.textSecondary, marginBottom: spacing.xs, marginTop: spacing.sm },
+  modalInput: { backgroundColor: colors.ground, borderRadius: radius.sm, padding: 12, fontSize: 14, color: colors.navy },
   modalButtonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
-  modalCancelButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
-  modalCancelText: { color: colors.muted, fontWeight: "700" },
-  modalConfirmButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.teal },
-  modalConfirmText: { color: colors.white, fontWeight: "700" },
+  modalCancelButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.ground },
+  modalCancelText: { color: colors.textSecondary, fontWeight: "700" },
+  modalConfirmButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.primary },
+  modalConfirmText: { color: colors.surface, fontWeight: "700" },
+
+  // Rates
+  content: { padding: spacing.md, paddingBottom: spacing.xl },
+  headerRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", marginBottom: spacing.sm },
+  typesLink: { paddingVertical: spacing.xs },
+  typesLinkText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  infoNote: { backgroundColor: colors.primaryTint, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
+  infoNoteText: { color: colors.primaryPressed, fontSize: 12, lineHeight: 17 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    padding: spacing.sm + 4,
+    marginBottom: spacing.xs,
+  },
+  name: { fontSize: 15, fontWeight: "700", color: colors.navy },
+  meta: { fontSize: 11.5, color: colors.textSecondary, marginTop: 2 },
+  dot: { width: 8, height: 8, borderRadius: 4, marginRight: spacing.sm },
+  dotGreen: { backgroundColor: colors.primary },
+  dotAmber: { backgroundColor: colors.warning },
+  arrow: { fontSize: 22, color: colors.textSecondary },
 });

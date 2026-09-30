@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { ChevronDown, FileText } from "lucide-react-native";
+import { FileText } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -15,11 +15,15 @@ import { sharePdfBytes } from "../pdfShare";
 import { colors, radius, spacing, type } from "../theme";
 import { workerLabel } from "../workerLabel";
 
-// Registered both as a flat screen on the root stack ("StatutoryForms")
-// and as the Forms & Reports tab's content inside MainTabs -- it only
-// ever calls `navigation.navigate(...)`/`.goBack()` with no `route`
-// access, so a plain root-stack nav prop type covers both mount points.
-type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
+// Mounted as the Forms & Reports tab's content inside MainTabs. `route`
+// is only ever populated when reached via HomeScreen's "Wage slips"
+// quick action, which passes { formCode, lockForm: true } through the
+// nested-tab params pattern (see HomeScreen's goToTab) to pre-pick and
+// lock the Report field to a single form.
+type Props = {
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+  route?: { params?: { formCode?: string; lockForm?: boolean } };
+};
 
 // UI behavior per form_code -- genuinely static (which forms have a
 // period, which accept/require a worker), unlike the label/availability
@@ -42,6 +46,22 @@ const FORM_METADATA: Record<string, { hasPeriod: boolean; workerFilterable: bool
   appointment_letter: { hasPeriod: false, workerFilterable: true, workerRequired: true },
 };
 const DEFAULT_FORM_METADATA = { hasPeriod: true, workerFilterable: false, workerRequired: false };
+
+// Purely presentational grouping for the Report dropdown -- lets a long,
+// state-dependent form list read as sections instead of one flat list.
+// A code with no entry (a brand-new state's form before this is updated)
+// falls under "Other" rather than being dropped.
+const FORM_CATEGORY: Record<string, string> = {
+  attendance: "Attendance",
+  form25: "Statutory Registers",
+  form25b: "Statutory Registers",
+  form12: "Statutory Registers",
+  form15: "Statutory Registers",
+  wageslip: "Payroll",
+  id_card: "ID & Letters",
+  appointment_letter: "ID & Letters",
+};
+const FORM_CATEGORY_ORDER = ["Attendance", "Payroll", "Statutory Registers", "ID & Letters", "Other"];
 
 // Forms generated through their own dedicated POST endpoint (see
 // backend/main.py) rather than the generic GET /forms/{code} dispatcher
@@ -123,13 +143,14 @@ function rangeForPreset(preset: PeriodPreset, today: Date): { start: string; end
 // of its options rather than a separate screen), pick a worker if
 // relevant, download or email it. PDF only -- Excel export was removed
 // from every form per explicit request.
-export default function StatutoryFormsScreen({}: Props) {
+export default function StatutoryFormsScreen({ route }: Props) {
   const { token, owner } = useAuth();
   const today = useMemo(() => new Date(), []);
+  const lockForm = route?.params?.lockForm ?? false;
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [state, setState] = useState(owner?.state ?? INDIAN_STATE_OPTIONS[0].value);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
-  const [formCode, setFormCode] = useState<string>("attendance");
+  const [formCode, setFormCode] = useState<string>(route?.params?.formCode ?? "attendance");
   const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
   const [preset, setPreset] = useState<PeriodPreset>("current_month");
   const [customStart, setCustomStart] = useState(dateStr(today.getFullYear(), today.getMonth() + 1, 1));
@@ -178,6 +199,18 @@ export default function StatutoryFormsScreen({}: Props) {
   const formOption =
     availableForms.find((f) => f.code === formCode) ?? availableForms[0] ?? { code: "", label: "", isAvailable: true, ...DEFAULT_FORM_METADATA };
   const computed = preset === "custom" ? { start: customStart, end: customEnd } : rangeForPreset(preset, today)!;
+
+  // Grouped, headed dropdown options for the Report field -- see
+  // FORM_CATEGORY/FORM_CATEGORY_ORDER above.
+  const formSelectOptions: { label: string; value: string; header?: boolean }[] = [];
+  for (const category of FORM_CATEGORY_ORDER) {
+    const inCategory = availableForms.filter((f) => (FORM_CATEGORY[f.code] ?? "Other") === category);
+    if (inCategory.length === 0) continue;
+    formSelectOptions.push({ label: category, value: `__header_${category}`, header: true });
+    for (const f of inCategory) {
+      formSelectOptions.push({ label: f.isAvailable ? f.label : `${f.label} (coming soon)`, value: f.code });
+    }
+  }
 
   function validateSelection(): boolean {
     if (!formOption.isAvailable) {
@@ -280,105 +313,95 @@ export default function StatutoryFormsScreen({}: Props) {
       {availableForms.length === 0 ? (
         <Text style={styles.empty}>No forms available for this state yet.</Text>
       ) : (
-        availableForms.map((form) => {
-          const expanded = formCode === form.code;
-          const isDirect = !!DIRECT_PDF_GENERATORS[form.code];
-          return (
-            <Card key={form.code} style={styles.formCard}>
-              <TouchableOpacity
-                style={styles.formCardHead}
-                onPress={() => {
-                  setFormCode(form.code);
-                  setSelectedWorkerId(null);
-                }}
-                accessibilityRole="button"
-                accessibilityState={{ expanded }}
-              >
-                <View style={styles.formCardIcon}>
-                  <FileText size={20} color={colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.formCardTitle}>{form.label}</Text>
-                  {!form.isAvailable && <Text style={styles.formCardComingSoon}>Coming soon</Text>}
-                </View>
-                <ChevronDown
-                  size={18}
-                  color={colors.textSecondary}
-                  style={expanded ? styles.chevronExpanded : undefined}
+        <Card style={styles.formCard}>
+          <Text style={styles.sectionLabel}>Report</Text>
+          {lockForm ? (
+            <View style={styles.lockedField}>
+              <FileText size={18} color={colors.primary} />
+              <Text style={styles.lockedFieldText}>{formOption.label}</Text>
+            </View>
+          ) : (
+            <SelectField
+              label=""
+              value={formCode}
+              options={formSelectOptions}
+              onChange={(v) => {
+                setFormCode(v);
+                setSelectedWorkerId(null);
+              }}
+            />
+          )}
+          {!formOption.isAvailable && <Text style={styles.formCardComingSoon}>Coming soon</Text>}
+
+          <Text style={styles.sectionLabel}>Time Period</Text>
+          <SelectField
+            label=""
+            value={preset}
+            options={PRESETS.map((p) => ({ label: p.label, value: p.key }))}
+            onChange={(v) => setPreset(v as PeriodPreset)}
+            disabled={!formOption.hasPeriod}
+          />
+          {!formOption.hasPeriod ? (
+            <Text style={styles.helper}>{formOption.label} isn't scoped to a period.</Text>
+          ) : preset === "custom" ? (
+            <View style={styles.customRow}>
+              <View style={{ flex: 1 }}>
+                <DateField label="From" value={customStart} onChange={setCustomStart} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <DateField label="To" value={customEnd} onChange={setCustomEnd} />
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.rangePreview}>
+              {computed.start} to {computed.end}
+            </Text>
+          )}
+
+          <Text style={styles.sectionLabel}>Worker</Text>
+          {!formOption.workerFilterable ? (
+            <SelectField label="" value="all" options={[{ label: "All workers", value: "all" }]} onChange={() => {}} disabled />
+          ) : workers.length === 0 ? (
+            <Text style={styles.empty}>No workers yet.</Text>
+          ) : (
+            <SelectField
+              label=""
+              value={selectedWorkerId !== null ? String(selectedWorkerId) : "all"}
+              options={workerOptions}
+              onChange={(v) => setSelectedWorkerId(v === "all" ? null : parseInt(v, 10))}
+            />
+          )}
+
+          <TouchableOpacity style={[styles.button, downloading && styles.buttonDisabled]} onPress={handleDownload} disabled={downloading}>
+            {downloading ? (
+              <ActivityIndicator color={colors.surface} />
+            ) : (
+              <Text style={styles.buttonText}>{DIRECT_PDF_GENERATORS[formCode] ? "Download / Share PDF" : "Download PDF"}</Text>
+            )}
+          </TouchableOpacity>
+          {DIRECT_PDF_HELPER_TEXT[formCode] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[formCode]}</Text>}
+
+          {!DIRECT_PDF_GENERATORS[formCode] && (
+            <>
+              <Text style={styles.sectionLabel}>Or email it</Text>
+              <View style={styles.emailRow}>
+                <TextInput
+                  style={[styles.input, styles.emailInput]}
+                  value={recipientEmail}
+                  onChangeText={setRecipientEmail}
+                  placeholder="owner@example.com"
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
                 />
-              </TouchableOpacity>
-
-              {expanded && (
-                <View style={styles.formCardBody}>
-                  <Text style={styles.sectionLabel}>Time Period</Text>
-                  <SelectField
-                    label=""
-                    value={preset}
-                    options={PRESETS.map((p) => ({ label: p.label, value: p.key }))}
-                    onChange={(v) => setPreset(v as PeriodPreset)}
-                    disabled={!form.hasPeriod}
-                  />
-                  {!form.hasPeriod ? (
-                    <Text style={styles.helper}>{form.label} isn't scoped to a period.</Text>
-                  ) : preset === "custom" ? (
-                    <View style={styles.customRow}>
-                      <View style={{ flex: 1 }}>
-                        <DateField label="From" value={customStart} onChange={setCustomStart} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <DateField label="To" value={customEnd} onChange={setCustomEnd} />
-                      </View>
-                    </View>
-                  ) : (
-                    <Text style={styles.rangePreview}>
-                      {computed.start} to {computed.end}
-                    </Text>
-                  )}
-
-                  <Text style={styles.sectionLabel}>Worker</Text>
-                  {!form.workerFilterable ? (
-                    <SelectField label="" value="all" options={[{ label: "All workers", value: "all" }]} onChange={() => {}} disabled />
-                  ) : workers.length === 0 ? (
-                    <Text style={styles.empty}>No workers yet.</Text>
-                  ) : (
-                    <SelectField
-                      label=""
-                      value={selectedWorkerId !== null ? String(selectedWorkerId) : "all"}
-                      options={workerOptions}
-                      onChange={(v) => setSelectedWorkerId(v === "all" ? null : parseInt(v, 10))}
-                    />
-                  )}
-
-                  <TouchableOpacity style={[styles.button, downloading && styles.buttonDisabled]} onPress={handleDownload} disabled={downloading}>
-                    {downloading ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>{isDirect ? "Download / Share PDF" : "Download PDF"}</Text>}
-                  </TouchableOpacity>
-                  {DIRECT_PDF_HELPER_TEXT[form.code] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[form.code]}</Text>}
-
-                  {!isDirect && (
-                    <>
-                      <Text style={styles.sectionLabel}>Or email it</Text>
-                      <View style={styles.emailRow}>
-                        <TextInput
-                          style={[styles.input, styles.emailInput]}
-                          value={recipientEmail}
-                          onChangeText={setRecipientEmail}
-                          placeholder="owner@example.com"
-                          placeholderTextColor={colors.textSecondary}
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          keyboardType="email-address"
-                        />
-                        <TouchableOpacity style={[styles.buttonGhost, styles.emailButton, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
-                          {emailing ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  )}
-                </View>
-              )}
-            </Card>
-          );
-        })
+                <TouchableOpacity style={[styles.buttonGhost, styles.emailButton, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
+                  {emailing ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </Card>
       )}
     </KeyboardScreen>
   );
@@ -422,18 +445,16 @@ const styles = StyleSheet.create({
   emailInput: { flex: 1 },
   emailButton: { marginTop: 0, paddingHorizontal: spacing.md },
 
-  formCard: { marginTop: spacing.sm, padding: 0, overflow: "hidden" },
-  formCardHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md },
-  formCardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primaryTint,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  formCardTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.navy },
+  formCard: { marginTop: spacing.sm, padding: spacing.md },
   formCardComingSoon: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.warningTintText, marginTop: 2 },
-  chevronExpanded: { transform: [{ rotate: "180deg" }] },
-  formCardBody: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
+  lockedField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.ground,
+    borderRadius: radius.sm,
+    padding: 12,
+    minHeight: 44,
+  },
+  lockedFieldText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.navy },
 });

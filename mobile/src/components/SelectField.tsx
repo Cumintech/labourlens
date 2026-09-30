@@ -3,7 +3,10 @@ import React, { useState } from "react";
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";
 
-export type SelectOption<T extends string> = { label: string; value: T };
+// `header: true` marks a non-selectable section heading row (value is
+// never matched against the field's current value) -- used to group
+// long option lists, e.g. the Reports form-type picker, under headings.
+export type SelectOption<T extends string> = { label: string; value: T; header?: boolean };
 
 type Props<T extends string> = {
   label: string;
@@ -44,17 +47,21 @@ export default function SelectField<T extends string>({ label, value, options, o
               data={options}
               keyExtractor={(o) => o.value}
               style={styles.list}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.option, item.value === value && styles.optionSelected]}
-                  onPress={() => {
-                    onChange(item.value);
-                    setOpen(false);
-                  }}
-                >
-                  <Text style={[styles.optionText, item.value === value && styles.optionTextSelected]}>{item.label}</Text>
-                </TouchableOpacity>
-              )}
+              renderItem={({ item }) =>
+                item.header ? (
+                  <Text style={styles.optionHeader}>{item.label}</Text>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.option, item.value === value && styles.optionSelected]}
+                    onPress={() => {
+                      onChange(item.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.optionText, item.value === value && styles.optionTextSelected]}>{item.label}</Text>
+                  </TouchableOpacity>
+                )
+              }
             />
             <TouchableOpacity style={styles.cancelButton} onPress={() => setOpen(false)}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -85,6 +92,15 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, maxHeight: "70%" },
   sheetTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.navy, marginBottom: spacing.sm },
   list: { flexGrow: 0 },
+  optionHeader: {
+    fontFamily: "PlusJakartaSans_700Bold",
+    fontSize: 11,
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
   option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
   optionSelected: { backgroundColor: colors.primaryTint },
   optionText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 15, color: colors.navy },

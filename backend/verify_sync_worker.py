@@ -48,7 +48,7 @@ headers = {"Authorization": f"Bearer {token}"}
 cred_resp = client.post(
     "/portal-credentials",
     headers=headers,
-    json={"portal_username": "portaladmin", "portal_password": "portalpass12345"},
+    json={"portal_username": "portaladmin", "portal_password": "portalpass123"},
 )
 assert cred_resp.status_code == 204, cred_resp.text
 print("portal credentials set")
@@ -84,7 +84,7 @@ print("search endpoint correctly requires login (401 without a session): PASSED"
 
 # Use a real logged-in session to actually verify the Portal-side entry
 portal_session = requests.Session()
-login_resp = portal_session.post(f"{PORTAL_URL}/login", data={"username": "portaladmin", "password": "portalpass12345"})
+login_resp = portal_session.post(f"{PORTAL_URL}/login", data={"username": "portaladmin", "password": "portalpass123"})
 assert login_resp.status_code == 200
 portal_check = portal_session.get(f"{PORTAL_URL}/workers/search?aadhaar=211122223335").json()
 assert len(portal_check["matches"]) == 1, f"worker not found on Portal after sync: {portal_check}"

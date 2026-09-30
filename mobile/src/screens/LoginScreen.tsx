@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import KeyboardScreen from "../components/KeyboardScreen";
 import { AuthStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
-import { isValidIndianMobile, normalizeIndianMobile } from "../validators";
+import { isValidEmail, isValidIndianMobile, isValidUsername, normalizeIndianMobile } from "../validators";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "Login">;
 
@@ -20,6 +20,8 @@ export default function LoginScreen({ navigation }: Props) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [factoryName, setFactoryName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [consentChecked, setConsentChecked] = useState(false);
@@ -28,21 +30,29 @@ export default function LoginScreen({ navigation }: Props) {
 
   async function handleSubmit() {
     setError(null);
-    // Checked before either branch even reaches the network -- a
-    // malformed mobile number is never a legitimate login attempt or a
-    // signup the backend would accept, so there's no reason to make a
-    // request just to get the same rejection back from the server.
-    if (!isValidIndianMobile(mobile)) {
-      setError("Enter a valid 10-digit mobile number.");
+    if (!username.trim() || !password) {
+      setError(mode === "login" ? "Enter your username and password." : "Choose a username and password.");
       return;
     }
     setSubmitting(true);
     try {
       if (mode === "login") {
-        await login(mobile, password);
+        await login(username.trim(), password);
       } else {
         if (!name.trim() || !factoryName.trim()) {
           setError("Owner name and factory name are required.");
+          return;
+        }
+        if (!isValidUsername(username)) {
+          setError("Username must be 3-30 characters, starting with a letter (letters, numbers, \".\" or \"_\" only).");
+          return;
+        }
+        if (!isValidEmail(email)) {
+          setError("Enter a valid email address -- needed for Forgot Password.");
+          return;
+        }
+        if (!isValidIndianMobile(mobile)) {
+          setError("Enter a valid 10-digit mobile number.");
           return;
         }
         // Decorative-only wouldn't be a real gate -- the backend itself
@@ -52,7 +62,7 @@ export default function LoginScreen({ navigation }: Props) {
           setError("Please accept the Privacy Policy to create an account.");
           return;
         }
-        const newOwner = await signup(name.trim(), mobile, password, factoryName.trim(), consentChecked);
+        const newOwner = await signup(name.trim(), username.trim(), email.trim(), mobile, password, factoryName.trim(), consentChecked);
         if (newOwner.plan_status === "trial") {
           Alert.alert(
             "Welcome to Labour Lens",
@@ -108,17 +118,44 @@ export default function LoginScreen({ navigation }: Props) {
         </>
       )}
 
-      <Text style={styles.label}>OWNER MOBILE</Text>
+      <Text style={styles.label}>USERNAME</Text>
       <TextInput
         style={styles.input}
-        value={mobile}
-        onChangeText={(v) => setMobile(normalizeIndianMobile(v))}
-        keyboardType="phone-pad"
-        maxLength={10}
-        placeholder="9840XXXXXX"
+        value={username}
+        onChangeText={setUsername}
+        placeholder="e.g. salemfactory"
         placeholderTextColor={colors.muted}
         autoCapitalize="none"
+        autoCorrect={false}
       />
+
+      {mode === "signup" && (
+        <>
+          <Text style={styles.label}>EMAIL</Text>
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="owner@example.com"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+          />
+
+          <Text style={styles.label}>OWNER MOBILE</Text>
+          <TextInput
+            style={styles.input}
+            value={mobile}
+            onChangeText={(v) => setMobile(normalizeIndianMobile(v))}
+            keyboardType="phone-pad"
+            maxLength={10}
+            placeholder="9840XXXXXX"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+          />
+        </>
+      )}
 
       <Text style={styles.label}>PASSWORD</Text>
       <TextInput
@@ -131,6 +168,12 @@ export default function LoginScreen({ navigation }: Props) {
         autoCapitalize="none"
         autoCorrect={false}
       />
+
+      {mode === "login" && (
+        <TouchableOpacity onPress={() => navigation.navigate("ForgotPassword")}>
+          <Text style={styles.forgotLink}>Forgot password?</Text>
+        </TouchableOpacity>
+      )}
 
       {mode === "signup" && (
         <TouchableOpacity style={styles.consentRow} onPress={() => setConsentChecked((v) => !v)}>
@@ -203,6 +246,7 @@ const styles = StyleSheet.create({
   checkboxTick: { color: colors.white, fontSize: 14, fontWeight: "700" },
   consentText: { flex: 1, fontSize: 12, color: colors.muted, lineHeight: 17 },
   consentLink: { color: colors.teal, fontWeight: "700" },
+  forgotLink: { color: colors.teal, fontSize: 13, fontWeight: "700", textAlign: "right", marginTop: spacing.sm },
   error: { color: colors.danger, marginTop: spacing.md, textAlign: "center" },
   button: {
     backgroundColor: colors.teal,

@@ -49,11 +49,44 @@ def _validate_mobile_optional(v: str | None) -> str | None:
     return digits
 
 
+_USERNAME_PATTERN = re.compile(r"^[a-z][a-z0-9_.]{2,29}$")
+_EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def _normalize_username(v: str) -> str:
+    return v.strip().lower()
+
+
+def _validate_username_optional(v: str | None) -> str | None:
+    if v is None or not v.strip():
+        return None
+    normalized = _normalize_username(v)
+    if not _USERNAME_PATTERN.match(normalized):
+        raise ValueError("Username must be 3-30 characters: start with a letter, then letters, numbers, \".\" or \"_\"")
+    return normalized
+
+
+def _validate_email_optional(v: str | None) -> str | None:
+    if v is None or not v.strip():
+        return None
+    normalized = v.strip().lower()
+    if not _EMAIL_PATTERN.match(normalized):
+        raise ValueError("Enter a valid email address")
+    return normalized
+
+
 class OwnerSignupIn(BaseModel):
     name: str
     mobile: str
     password: str
     factory_name: str
+    # Both optional so every existing caller of this endpoint (32
+    # verify_*.py scripts, none of which know about this field) keeps
+    # working unchanged -- signup() falls back to the mobile number as
+    # the username when this is omitted. The mobile app's own Sign Up
+    # screen always sends a real one.
+    username: str | None = None
+    email: str | None = None
     # Must be explicitly True -- the endpoint itself rejects signup
     # without it (a real gate, not just a UI checkbox that could be
     # bypassed by any other client of this API).
@@ -77,30 +110,71 @@ class OwnerSignupIn(BaseModel):
     def _validate_mobile(cls, v: str) -> str:
         return _validate_mobile_required(v)
 
+    @field_validator("username")
+    @classmethod
+    def _validate_username(cls, v: str | None) -> str | None:
+        return _validate_username_optional(v)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: str | None) -> str | None:
+        return _validate_email_optional(v)
+
 
 class OwnerLoginIn(BaseModel):
-    mobile: str
+    # Replaces mobile as the login identifier -- see Owner.username in
+    # models.py. Deliberately not format-validated here (unlike signup):
+    # a pre-existing account's username was backfilled from its mobile
+    # number, so this just needs to reach the DB lookup unchanged.
+    username: str
     password: str
 
-    # Deliberately lenient, unlike signup: normalize a pasted +91/0
-    # prefix so lookup still matches, but never hard-reject the format
-    # here. Signup had NO mobile validation at all before this change,
-    # so some already-existing production accounts could in principle
-    # have a mobile value that wouldn't pass the strict pattern below --
-    # rejecting login on format would lock a real owner out of their own
-    # account. An unrecognized/malformed value just won't match any
-    # stored mobile and falls through to the existing generic "Invalid
-    # mobile number or password" 401, same as any other wrong credential.
-    @field_validator("mobile")
+    @field_validator("username")
     @classmethod
-    def _normalize_mobile(cls, v: str) -> str:
-        return _normalize_mobile_digits(v) or v
+    def _normalize(cls, v: str) -> str:
+        return _normalize_username(v)
+
+
+class ForgotPasswordIn(BaseModel):
+    # Username or email -- whichever the owner has on hand.
+    identifier: str
+
+
+class ResetPasswordIn(BaseModel):
+    identifier: str
+    code: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_min_length(cls, v: str) -> str:
+        if len(v) < MIN_OWNER_PASSWORD_LENGTH:
+            raise ValueError(f"Password must be at least {MIN_OWNER_PASSWORD_LENGTH} characters")
+        return v
+
+
+class AccountUpdateIn(BaseModel):
+    # Both optional -- ProfileScreen sends only what actually changed.
+    username: str | None = None
+    email: str | None = None
+
+    @field_validator("username")
+    @classmethod
+    def _validate_username(cls, v: str | None) -> str | None:
+        return _validate_username_optional(v)
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: str | None) -> str | None:
+        return _validate_email_optional(v)
 
 
 class OwnerOut(BaseModel):
     id: int
     name: str
     mobile: str
+    username: str | None = None
+    email: str | None = None
     factory_name: str
     factory_address: str | None = None
     factory_licence_no: str | None = None

@@ -56,3 +56,32 @@ def send_report_email(
         if user and password:
             smtp.login(user, password)
         smtp.send_message(msg)
+
+
+def send_plain_email(to_email: str, subject: str, body_text: str) -> None:
+    """Same SMTP_* config/behavior as send_report_email above, minus the
+    PDF/Excel attachment -- used for the forgot-password OTP email."""
+    host = os.environ.get("SMTP_HOST")
+    if not host:
+        raise RuntimeError(
+            "SMTP_HOST is not set -- email delivery has no mail server configured. "
+            "Set SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD in .env."
+        )
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    user = os.environ.get("SMTP_USER")
+    password = os.environ.get("SMTP_PASSWORD")
+    from_addr = os.environ.get("SMTP_FROM", user or "labourlens@localhost")
+    use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
+
+    msg = EmailMessage()
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body_text)
+
+    with smtplib.SMTP(host, port, timeout=15) as smtp:
+        if use_tls:
+            smtp.starttls()
+        if user and password:
+            smtp.login(user, password)
+        smtp.send_message(msg)

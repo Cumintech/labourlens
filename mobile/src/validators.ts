@@ -65,3 +65,19 @@ export function normalizeIndianMobile(value: string): string {
 export function isValidIndianMobile(value: string): boolean {
   return /^[6-9]\d{9}$/.test(value);
 }
+
+// Mirrors backend/schemas.py's _USERNAME_PATTERN exactly.
+const _USERNAME_PATTERN = /^[a-z][a-z0-9_.]{2,29}$/;
+
+export function isValidUsername(value: string): boolean {
+  return _USERNAME_PATTERN.test(value.trim().toLowerCase());
+}
+
+// Mirrors backend/schemas.py's _EMAIL_PATTERN exactly -- deliberately
+// simple (not RFC 5322), same reasoning as the backend: good enough to
+// catch typos, not meant to be a full validator.
+const _EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isValidEmail(value: string): boolean {
+  return _EMAIL_PATTERN.test(value.trim());
+}

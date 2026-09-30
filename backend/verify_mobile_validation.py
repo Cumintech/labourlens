@@ -1,9 +1,10 @@
 """Verifies the mobile-number validation rules: 10 digits starting 6-9,
 a pasted +91/0 prefix reduced to the bare 10 digits, worker mobile is
 optional (empty is fine, a partial number isn't), owner signup mobile
-is required and strictly validated, and owner login stays lenient
-(normalizes but never hard-rejects, so no already-existing account can
-be locked out by a format it doesn't recognize).
+is required and strictly validated, and owner login (by username, which
+defaults to the mobile number when signup doesn't send one explicitly)
+never hard-rejects on format, so no already-existing account can be
+locked out.
 
     DATABASE_URL=sqlite:///./scratch.db JWT_SECRET=x ENCRYPTION_KEY=<fernet key> python verify_mobile_validation.py
 """
@@ -47,14 +48,16 @@ token = r.json()["access_token"]
 headers = {"Authorization": f"Bearer {token}"}
 print("Owner signup with +91-prefixed mobile normalized to 10 digits: PASSED")
 
-# --- Owner login: lenient, never locks out on format ---
-r = client.post("/owners/login", json={"mobile": "09000004001", "password": "pass12345"})
+# --- Owner login: by username now, not mobile (see schemas.OwnerLoginIn)
+# -- a signup with no explicit username falls back to the mobile number,
+# so the account above logs in with "9000004001" as its username. ---
+r = client.post("/owners/login", json={"username": "9000004001", "password": "pass12345"})
 assert r.status_code == 200, r.text
-print("Owner login with 0-prefixed mobile normalizes and matches: PASSED")
+print("Owner login with mobile-derived default username: PASSED")
 
-r = client.post("/owners/login", json={"mobile": "not-a-real-mobile", "password": "pass12345"})
+r = client.post("/owners/login", json={"username": "not-a-real-user", "password": "pass12345"})
 assert r.status_code == 401, r.text  # falls through to generic invalid-credentials, never a 422
-print("Owner login with unparseable mobile falls through to 401, not 422: PASSED")
+print("Owner login with unknown username falls through to 401, not 422: PASSED")
 
 # --- Worker mobile: optional ---
 r = client.post("/workers", headers=headers, json={"name": "W1", "aadhaar_number": find_valid_aadhaar("2"), "dob": "1995-01-01"})

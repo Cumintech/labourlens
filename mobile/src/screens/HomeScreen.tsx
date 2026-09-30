@@ -71,21 +71,36 @@ export default function HomeScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [w, a, l, s, homeAlerts] = await Promise.all([
+    // Core data (required) and the newer home-alerts/month-end endpoints
+    // (optional -- may 404 against a backend deploy that predates them)
+    // are fetched separately: one failing Promise.all used to reject the
+    // whole batch and leave workers/attendance stuck at their initial
+    // empty state forever, which read as "0 of 0 marked" no matter how
+    // many workers actually existed.
+    const [w, a, l, s] = await Promise.all([
       listWorkers(token),
       listAttendance(token, todayIso),
       listLeaveForDate(token, todayIso),
       listShiftConfigs(token),
-      getHomeAlerts(token),
     ]);
     setWorkers(w.filter((x) => x.status === "active"));
     setAttendance(a);
     setLeave(l);
     setShifts(s);
-    setAlerts(homeAlerts.alerts);
+
+    try {
+      const homeAlerts = await getHomeAlerts(token);
+      setAlerts(homeAlerts.alerts);
+    } catch {
+      // older backend deploy without this endpoint -- leave alerts empty
+    }
     if (showMonthEnd) {
-      const monthEnd = await getMonthEnd(token, today.getFullYear(), today.getMonth() + 1);
-      setMonthEndSteps(monthEnd.steps);
+      try {
+        const monthEnd = await getMonthEnd(token, today.getFullYear(), today.getMonth() + 1);
+        setMonthEndSteps(monthEnd.steps);
+      } catch {
+        // older backend deploy without this endpoint -- leave month-end hidden
+      }
     }
   }, [token, todayIso, showMonthEnd, today]);
 

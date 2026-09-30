@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { CalendarCheck, FileText, IndianRupee, LayoutDashboard, LucideIcon, Users } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AttendanceScreen from "../screens/AttendanceScreen";
 import HomeScreen from "../screens/HomeScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
@@ -30,13 +31,25 @@ function TabIcon({ Icon, color, focused }: { Icon: LucideIcon; color: string; fo
 // React Navigation resolves an unrecognized route name by walking up
 // to the parent stack automatically.
 export default function MainTabs() {
+  // A fixed tabBarStyle.height (needed for a consistent look) disables
+  // react-navigation's own automatic safe-area padding, so the bottom
+  // inset has to be added back by hand here -- otherwise Android's
+  // edge-to-edge gesture bar (mandatory since Expo 57/targetSdk 36)
+  // overlaps and washes out the bottom of the tab bar.
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
-        tabBarStyle: { borderTopColor: colors.divider, height: 60, paddingBottom: 8, paddingTop: 4 },
+        tabBarStyle: {
+          borderTopColor: colors.divider,
+          backgroundColor: colors.surface,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 8,
+          paddingTop: 4,
+        },
         tabBarLabelStyle: { fontSize: 11, fontFamily: "PlusJakartaSans_700Bold" },
       }}
     >

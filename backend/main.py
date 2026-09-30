@@ -176,7 +176,18 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Labour Lens API", lifespan=lifespan)
+# No existing ENV/settings variable in this repo (checked) -- introduced
+# here, defaulting to "production" (docs closed) so Render needs no new
+# config to get this fix; local dev sets ENVIRONMENT=development in .env.
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+_docs_enabled = ENVIRONMENT != "production"
+app = FastAPI(
+    title="Labour Lens API",
+    lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 
 # Security audit finding: was allow_origins=["*"], marked in its own
 # comment as "Day 1... tighten by Day 5+" and never revisited despite

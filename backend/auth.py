@@ -66,4 +66,9 @@ def get_current_owner(
         # unexpired -- reject it explicitly here too, not just at login,
         # so a deleted account can't keep using an old token.
         raise HTTPException(status_code=401, detail="This account has been deleted")
+    # Marks this session for database.py's do_orm_execute hook, which
+    # auto-filters TenantScoped models by this id -- defense in depth on
+    # top of every endpoint's own explicit owner_id filter, not instead
+    # of it.
+    db.info["tenant_id"] = owner.id
     return owner

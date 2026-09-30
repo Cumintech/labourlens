@@ -9,10 +9,17 @@ not silently swallowed).
     DATABASE_URL=sqlite:///./scratch.db JWT_SECRET=x ENCRYPTION_KEY=<fernet key> python verify_sync_worker.py
 """
 
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+
+# This test's whole job is exercising the real Portal-sync send path
+# against the safe Test Portal -- SEND_AADHAAR_EXTERNAL now defaults to
+# false (see sync_worker.py) so a real deploy doesn't send PII to a
+# third party unreviewed; this test explicitly opts back in.
+os.environ["SEND_AADHAAR_EXTERNAL"] = "true"
 
 import requests
 from fastapi.testclient import TestClient

@@ -1,4 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { ChevronDown, FileText } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -6,11 +7,12 @@ import { FormTemplate, Worker, emailForm, generateAppointmentLetter, generateIdC
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
+import { Card } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { INDIAN_STATE_OPTIONS } from "../indianStates";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
-import { colors, radius, spacing } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
 import { workerLabel } from "../workerLabel";
 
 // Registered both as a flat screen on the root stack ("StatutoryForms")
@@ -269,106 +271,129 @@ export default function StatutoryFormsScreen({}: Props) {
 
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Forms & Reports</Text>
+      <Text style={type.display}>Reports</Text>
       <Text style={styles.subtitle}>Download or email any statutory form or report, for any period, for any worker.</Text>
 
       <Text style={styles.sectionLabel}>State</Text>
       <SelectField label="" value={state} options={INDIAN_STATE_OPTIONS} onChange={setState} />
 
-      <Text style={styles.sectionLabel}>Time Period</Text>
-      <SelectField
-        label=""
-        value={preset}
-        options={PRESETS.map((p) => ({ label: p.label, value: p.key }))}
-        onChange={(v) => setPreset(v as PeriodPreset)}
-        disabled={!formOption.hasPeriod}
-      />
-      {!formOption.hasPeriod ? (
-        <Text style={styles.helper}>{formOption.label} isn't scoped to a period.</Text>
-      ) : preset === "custom" ? (
-        <View style={styles.customRow}>
-          <View style={{ flex: 1 }}>
-            <DateField label="From" value={customStart} onChange={setCustomStart} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <DateField label="To" value={customEnd} onChange={setCustomEnd} />
-          </View>
-        </View>
-      ) : (
-        <Text style={styles.rangePreview}>
-          {computed.start} to {computed.end}
-        </Text>
-      )}
-
-      <Text style={styles.sectionLabel}>Form Type</Text>
       {availableForms.length === 0 ? (
         <Text style={styles.empty}>No forms available for this state yet.</Text>
       ) : (
-        <SelectField
-          label=""
-          value={formCode}
-          options={availableForms.map((o) => ({ label: o.label, value: o.code }))}
-          onChange={(v) => {
-            setFormCode(v);
-            setSelectedWorkerId(null);
-          }}
-        />
-      )}
+        availableForms.map((form) => {
+          const expanded = formCode === form.code;
+          const isDirect = !!DIRECT_PDF_GENERATORS[form.code];
+          return (
+            <Card key={form.code} style={styles.formCard}>
+              <TouchableOpacity
+                style={styles.formCardHead}
+                onPress={() => {
+                  setFormCode(form.code);
+                  setSelectedWorkerId(null);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ expanded }}
+              >
+                <View style={styles.formCardIcon}>
+                  <FileText size={20} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.formCardTitle}>{form.label}</Text>
+                  {!form.isAvailable && <Text style={styles.formCardComingSoon}>Coming soon</Text>}
+                </View>
+                <ChevronDown
+                  size={18}
+                  color={colors.textSecondary}
+                  style={expanded ? styles.chevronExpanded : undefined}
+                />
+              </TouchableOpacity>
 
-      <Text style={styles.sectionLabel}>Worker</Text>
-      {!formOption.workerFilterable ? (
-        <SelectField label="" value="all" options={[{ label: "All workers", value: "all" }]} onChange={() => {}} disabled />
-      ) : workers.length === 0 ? (
-        <Text style={styles.empty}>No workers yet.</Text>
-      ) : (
-        <SelectField
-          label=""
-          value={selectedWorkerId !== null ? String(selectedWorkerId) : "all"}
-          options={workerOptions}
-          onChange={(v) => setSelectedWorkerId(v === "all" ? null : parseInt(v, 10))}
-        />
-      )}
+              {expanded && (
+                <View style={styles.formCardBody}>
+                  <Text style={styles.sectionLabel}>Time Period</Text>
+                  <SelectField
+                    label=""
+                    value={preset}
+                    options={PRESETS.map((p) => ({ label: p.label, value: p.key }))}
+                    onChange={(v) => setPreset(v as PeriodPreset)}
+                    disabled={!form.hasPeriod}
+                  />
+                  {!form.hasPeriod ? (
+                    <Text style={styles.helper}>{form.label} isn't scoped to a period.</Text>
+                  ) : preset === "custom" ? (
+                    <View style={styles.customRow}>
+                      <View style={{ flex: 1 }}>
+                        <DateField label="From" value={customStart} onChange={setCustomStart} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <DateField label="To" value={customEnd} onChange={setCustomEnd} />
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.rangePreview}>
+                      {computed.start} to {computed.end}
+                    </Text>
+                  )}
 
-      <TouchableOpacity style={[styles.button, downloading && styles.buttonDisabled]} onPress={handleDownload} disabled={downloading}>
-        {downloading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>{DIRECT_PDF_GENERATORS[formCode] ? "Download / Share PDF" : "Download PDF"}</Text>}
-      </TouchableOpacity>
-      {DIRECT_PDF_HELPER_TEXT[formCode] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[formCode]}</Text>}
+                  <Text style={styles.sectionLabel}>Worker</Text>
+                  {!form.workerFilterable ? (
+                    <SelectField label="" value="all" options={[{ label: "All workers", value: "all" }]} onChange={() => {}} disabled />
+                  ) : workers.length === 0 ? (
+                    <Text style={styles.empty}>No workers yet.</Text>
+                  ) : (
+                    <SelectField
+                      label=""
+                      value={selectedWorkerId !== null ? String(selectedWorkerId) : "all"}
+                      options={workerOptions}
+                      onChange={(v) => setSelectedWorkerId(v === "all" ? null : parseInt(v, 10))}
+                    />
+                  )}
 
-      {!DIRECT_PDF_GENERATORS[formCode] && (
-        <>
-          <Text style={styles.sectionLabel}>Or email it</Text>
-          <View style={styles.emailRow}>
-            <TextInput
-              style={[styles.input, styles.emailInput]}
-              value={recipientEmail}
-              onChangeText={setRecipientEmail}
-              placeholder="owner@example.com"
-              placeholderTextColor={colors.muted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-            />
-            <TouchableOpacity style={[styles.buttonGhost, styles.emailButton, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
-              {emailing ? <ActivityIndicator color={colors.teal} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
-            </TouchableOpacity>
-          </View>
-        </>
+                  <TouchableOpacity style={[styles.button, downloading && styles.buttonDisabled]} onPress={handleDownload} disabled={downloading}>
+                    {downloading ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>{isDirect ? "Download / Share PDF" : "Download PDF"}</Text>}
+                  </TouchableOpacity>
+                  {DIRECT_PDF_HELPER_TEXT[form.code] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[form.code]}</Text>}
+
+                  {!isDirect && (
+                    <>
+                      <Text style={styles.sectionLabel}>Or email it</Text>
+                      <View style={styles.emailRow}>
+                        <TextInput
+                          style={[styles.input, styles.emailInput]}
+                          value={recipientEmail}
+                          onChangeText={setRecipientEmail}
+                          placeholder="owner@example.com"
+                          placeholderTextColor={colors.textSecondary}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          keyboardType="email-address"
+                        />
+                        <TouchableOpacity style={[styles.buttonGhost, styles.emailButton, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
+                          {emailing ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              )}
+            </Card>
+          );
+        })
       )}
     </KeyboardScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1, paddingBottom: spacing.xl * 2 },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
-  subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
+  container: { padding: spacing.lg, backgroundColor: colors.ground, flexGrow: 1, paddingBottom: spacing.xl * 2 },
+  subtitle: { ...type.small, color: colors.textSecondary, marginBottom: spacing.md },
   sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs, textTransform: "uppercase" },
-  empty: { fontSize: 13, color: colors.muted },
-  helper: { fontSize: 12, color: colors.muted },
+  empty: { fontSize: 13, color: colors.textSecondary },
+  helper: { fontSize: 12, color: colors.textSecondary },
   customRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
-  rangePreview: { fontSize: 13, color: colors.muted, marginTop: spacing.sm },
+  rangePreview: { fontSize: 13, color: colors.textSecondary, marginTop: spacing.sm },
   input: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.ground,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.sm + 2,
@@ -376,24 +401,39 @@ const styles = StyleSheet.create({
     color: colors.navy,
   },
   button: {
-    backgroundColor: colors.teal,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm + 4,
     alignItems: "center",
     marginTop: spacing.md,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+  buttonText: { color: colors.surface, fontSize: 14, fontWeight: "700" },
   buttonGhost: {
     borderWidth: 1.5,
-    borderColor: colors.teal,
+    borderColor: colors.primary,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm + 4,
     alignItems: "center",
     marginTop: spacing.sm,
   },
-  buttonGhostText: { color: colors.teal, fontSize: 14, fontWeight: "700" },
+  buttonGhostText: { color: colors.primary, fontSize: 14, fontWeight: "700" },
   emailRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
   emailInput: { flex: 1 },
   emailButton: { marginTop: 0, paddingHorizontal: spacing.md },
+
+  formCard: { marginTop: spacing.sm, padding: 0, overflow: "hidden" },
+  formCardHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md },
+  formCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryTint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formCardTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.navy },
+  formCardComingSoon: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.warningTintText, marginTop: 2 },
+  chevronExpanded: { transform: [{ rotate: "180deg" }] },
+  formCardBody: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider },
 });

@@ -6,9 +6,11 @@ URL Play Console's Data Safety form and App Store Connect's App
 Privacy section both require). Editing the text here updates both --
 neither the app nor the HTML page hardcodes its own copy.
 
-This is a hosting/reachability fix only: the content below is a
-verbatim mirror of what PrivacyPolicyScreen.tsx already said before
-this file existed, not a rewrite of what's disclosed.
+Originally a verbatim mirror of what PrivacyPolicyScreen.tsx said
+before this file existed; since then, biometric attendance, bank/IFSC
+collection, and the Labour Portal sync feature were built without this
+text being updated to disclose them -- added here ahead of Play Store
+submission, since Data Safety declarations must match actual behavior.
 """
 
 TITLE = "Privacy Policy"
@@ -34,6 +36,22 @@ SECTIONS = [
         ),
     },
     {
+        "heading": "Biometric attendance",
+        "body": (
+            "If your factory uses a fingerprint attendance terminal, punch records read from that device "
+            "(a worker's fingerprint-linked ID number and the time of each punch, not the fingerprint image "
+            "itself) are stored the same way as manually-marked attendance -- scoped to your factory's account "
+            "only, never shared with any other Labour Lens account."
+        ),
+    },
+    {
+        "heading": "Bank & payment details",
+        "body": (
+            "If you enter a worker's bank account number or IFSC code for wage payment records, both are "
+            "encrypted before storage, the same way Aadhaar numbers are."
+        ),
+    },
+    {
         "heading": "Who can see it",
         "body": (
             "Only your own login can see your factory's data. Every record is scoped to your account on the "
@@ -43,8 +61,12 @@ SECTIONS = [
     {
         "heading": "Where it goes",
         "body": (
-            "Data stays on this app's backend unless you explicitly download or email a form or report yourself. "
-            "We don't sell or share worker data with advertisers or other third parties."
+            "Data stays on this app's backend unless you explicitly download or email a form or report yourself, "
+            "with one exception: if your factory has connected a third-party government/industry Labour Portal "
+            "account, a worker's name and Aadhaar number are sent to that Portal when you register or deactivate "
+            "them, for the sole purpose of keeping that statutory record in sync -- this only happens for "
+            "factories that have explicitly set up Portal credentials. We don't sell or share worker data with "
+            "advertisers or any other third party."
         ),
     },
     {

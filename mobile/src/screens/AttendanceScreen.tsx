@@ -1,5 +1,6 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
+import { Copy } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -536,8 +537,13 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
                   </View>
                 </View>
               </View>
-              <TouchableOpacity style={styles.copyChip} onPress={handleCopyYesterday} disabled={bulkBusy}>
-                {bulkBusy ? <ActivityIndicator color={colors.navy} size="small" /> : <Text style={styles.copyChipText}>📋</Text>}
+              <TouchableOpacity
+                style={styles.copyChip}
+                onPress={handleCopyYesterday}
+                disabled={bulkBusy}
+                accessibilityLabel="Copy yesterday's attendance"
+              >
+                {bulkBusy ? <ActivityIndicator color={colors.navy} size="small" /> : <Copy size={14} color={colors.navy} />}
               </TouchableOpacity>
             </View>
 
@@ -1023,7 +1029,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  copyChipText: { fontSize: 14 },
   sundayNote: { color: colors.textSecondary, fontSize: 11, marginTop: spacing.xs, textAlign: "center" },
   complianceBanner: {
     backgroundColor: colors.warningTint,

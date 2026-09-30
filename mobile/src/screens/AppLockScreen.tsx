@@ -1,3 +1,4 @@
+import { Lock } from "lucide-react-native";
 import React, { useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useAppLock } from "../context/AppLockContext";
@@ -54,7 +55,9 @@ export default function AppLockScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.emoji}>🔒</Text>
+      <View style={styles.lockIcon}>
+        <Lock size={40} color={colors.white} />
+      </View>
       <Text style={styles.title}>Enter PIN to unlock Labour Lens</Text>
       <View style={styles.dotsRow}>
         {[0, 1, 2, 3].map((i) => (
@@ -80,7 +83,7 @@ const KEY_SIZE = 84;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.navy, alignItems: "center", justifyContent: "center", padding: spacing.lg },
-  emoji: { fontSize: 40, marginBottom: spacing.sm },
+  lockIcon: { marginBottom: spacing.sm },
   title: { color: colors.white, fontSize: 16, fontWeight: "700", marginBottom: spacing.lg, textAlign: "center" },
   dotsRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.sm },
   dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.5, borderColor: colors.white },

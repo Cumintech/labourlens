@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import { Camera, Images } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -506,7 +507,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                       </>
                     ) : (
                       <>
-                        <Text style={styles.scanEmoji}>📷</Text>
+                        <Camera size={28} color={colors.teal} style={styles.scanIcon} />
                         <Text style={styles.scanCardLabel}>Scan front of ID</Text>
                       </>
                     )}
@@ -519,7 +520,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                       </>
                     ) : (
                       <>
-                        <Text style={styles.scanEmoji}>📷</Text>
+                        <Camera size={28} color={colors.teal} style={styles.scanIcon} />
                         <Text style={styles.scanCardLabel}>Scan back of ID</Text>
                       </>
                     )}
@@ -676,11 +677,11 @@ export default function AddWorkerScreen({ navigation }: Props) {
             {!rawPhotoUri && !photoUploaded && (
               <View style={styles.scanRow}>
                 <TouchableOpacity style={styles.scanCard} onPress={() => pickPhoto("camera")}>
-                  <Text style={styles.scanEmoji}>📷</Text>
+                  <Camera size={28} color={colors.teal} style={styles.scanIcon} />
                   <Text style={styles.scanCardLabel}>Take Photo</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.scanCard} onPress={() => pickPhoto("gallery")}>
-                  <Text style={styles.scanEmoji}>🖼️</Text>
+                  <Images size={28} color={colors.teal} style={styles.scanIcon} />
                   <Text style={styles.scanCardLabel}>Choose from Gallery</Text>
                 </TouchableOpacity>
               </View>
@@ -825,7 +826,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  scanEmoji: { fontSize: 28, marginBottom: spacing.xs },
+  scanIcon: { marginBottom: spacing.xs },
   scanCardLabel: { fontSize: 12, color: colors.tealDark, fontWeight: "700", textAlign: "center", paddingHorizontal: spacing.xs },
   scanPreview: StyleSheet.absoluteFill,
   scanDoneText: { position: "absolute", bottom: 6, alignSelf: "center", fontSize: 11, fontWeight: "700", color: colors.white, backgroundColor: "rgba(15,110,86,0.85)", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },

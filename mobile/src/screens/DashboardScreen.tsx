@@ -516,7 +516,7 @@ export default function DashboardScreen({ navigation }: Props) {
             onOpenOt={() => setOtModalWorker(item)}
             onDeactivate={() => handleDeactivate(item)}
             onPressDetail={() =>
-              navigation.navigate("WorkerAttendance", {
+              navigation.navigate("WorkerProfile", {
                 workerId: item.id,
                 workerName: item.name,
                 workerStatus: item.status,

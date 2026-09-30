@@ -131,7 +131,15 @@ export default function WageRateWorkersScreen({ navigation }: Props) {
         return (
           <TouchableOpacity
             style={styles.row}
-            onPress={() => navigation.navigate("WageRateWorkerDetail", { workerId: item.id, workerName: item.name })}
+            onPress={() =>
+              navigation.navigate("WorkerProfile", {
+                workerId: item.id,
+                workerName: item.name,
+                workerStatus: item.status,
+                deactivatedAt: item.deactivated_at,
+                initialTab: "wages",
+              })
+            }
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{workerLabel(item)}</Text>

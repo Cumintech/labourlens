@@ -105,8 +105,8 @@ export default function WageProfileScreen({ route, navigation }: Props) {
   }, [token, workerId]);
 
   // Selecting a type here both assigns it to the worker (so it behaves
-  // identically to picking one on WageRateWorkerDetailScreen -- one
-  // worker type master list, used consistently everywhere it appears)
+  // identically to picking one on the Worker Profile hub's Wages tab --
+  // one worker type master list, used consistently everywhere it appears)
   // and auto-fills the rate/PF fields below from its defaults, still
   // fully editable afterward. Only pre-fills fields that are currently
   // blank/zero, so picking a type after already typing a custom basic

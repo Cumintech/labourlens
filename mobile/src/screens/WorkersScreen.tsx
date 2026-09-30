@@ -98,7 +98,7 @@ export default function WorkersScreen({ navigation }: Props) {
   }, [workers, filter, search, missingComplianceIds]);
 
   function openWorker(worker: Worker) {
-    navigation.navigate("WorkerAttendance", {
+    navigation.navigate("WorkerProfile", {
       workerId: worker.id,
       workerName: worker.name,
       workerStatus: worker.status,

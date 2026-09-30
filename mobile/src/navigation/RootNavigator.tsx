@@ -17,10 +17,9 @@ import ProfileScreen from "../screens/ProfileScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
-import WageRateWorkerDetailScreen from "../screens/WageRateWorkerDetailScreen";
 import WageRateWorkersScreen from "../screens/WageRateWorkersScreen";
-import WorkerAttendanceScreen from "../screens/WorkerAttendanceScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
+import WorkerProfileScreen from "../screens/WorkerProfileScreen";
 import WorkerTypesScreen from "../screens/WorkerTypesScreen";
 import { colors } from "../theme";
 import MainTabs from "./MainTabs";
@@ -43,11 +42,21 @@ export type RootStackParamList = {
   BiometricDevices: undefined;
   DeviceUserMapping: { deviceId: number; deviceName: string };
   UnmappedPunches: undefined;
-  WorkerAttendance: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
+  // Replaces the old standalone WorkerAttendance destination -- one hub
+  // (header + Form 12 completeness card + Overview/Attendance/Wages/
+  // Documents SegmentedControl) instead of separate WorkerAttendance and
+  // WageRateWorkerDetail screens. initialTab lets a caller (e.g. Wage
+  // Rate's worker list) land directly on a specific tab.
+  WorkerProfile: {
+    workerId: number;
+    workerName: string;
+    workerStatus: string;
+    deactivatedAt: string | null;
+    initialTab?: "overview" | "attendance" | "wages" | "documents";
+  };
   WorkerEdit: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
   WageProfile: { workerId: number; workerName: string; fromRegistration?: boolean };
   WageRateWorkers: undefined;
-  WageRateWorkerDetail: { workerId: number; workerName: string };
   WorkerTypes: undefined;
   ShiftSettings: undefined;
   Profile: undefined;
@@ -119,11 +128,10 @@ export default function RootNavigator() {
         <Stack.Screen name="BiometricDevices" component={BiometricDevicesScreen} options={{ title: "Biometric Devices" }} />
         <Stack.Screen name="DeviceUserMapping" component={DeviceUserMappingScreen} options={{ title: "Map Device Users" }} />
         <Stack.Screen name="UnmappedPunches" component={UnmappedPunchesScreen} options={{ title: "Unmapped Punches" }} />
-        <Stack.Screen name="WorkerAttendance" component={WorkerAttendanceScreen} options={{ title: "Worker" }} />
+        <Stack.Screen name="WorkerProfile" component={WorkerProfileScreen} options={{ title: "Worker" }} />
         <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ title: "Edit Worker" }} />
         <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ title: "Wage Rate" }} />
         <Stack.Screen name="WageRateWorkers" component={WageRateWorkersScreen} options={{ title: "Wage Rate" }} />
-        <Stack.Screen name="WageRateWorkerDetail" component={WageRateWorkerDetailScreen} options={{ title: "Wage Rate" }} />
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />

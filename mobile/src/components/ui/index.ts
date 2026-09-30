@@ -12,3 +12,4 @@ export { default as SectionHeader } from "./SectionHeader";
 export { default as ExtendedFab } from "./ExtendedFab";
 export { ToastProvider, useToast } from "./Toast";
 export { default as EmptyState } from "./EmptyState";
+export { default as LogoMark } from "./LogoMark";

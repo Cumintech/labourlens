@@ -1,19 +1,27 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Settings as SettingsIcon } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { CreditCard, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { DashboardSummary, getDashboard, listLeaveForDate } from "../api/client";
+import {
+  Attendance,
+  LeaveEntry,
+  ShiftConfig,
+  Worker,
+  listAttendance,
+  listLeaveForDate,
+  listShiftConfigs,
+  listWorkers,
+} from "../api/client";
 import { isoDate } from "../components/DateField";
-import HomeBackground from "../components/HomeBackground";
-import { IconButton } from "../components/ui";
+import { ExtendedFab, IconButton, LogoMark } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { trialStatusText } from "../planStatus";
-import { colors, radius, spacing } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
 
-// Rendered as the "Home" tab's content inside MainTabs -- navigation
+// Rendered as the "Today" tab's content inside MainTabs -- navigation
 // here is the composite prop React Navigation hands a screen nested
 // inside a tab that itself sits inside the root stack; typing it as a
 // plain root-stack nav prop is enough since every call here is a bare
@@ -21,26 +29,56 @@ import { colors, radius, spacing } from "../theme";
 // walking up to the parent stack automatically.
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
-// Home shows exactly two primary cards -- Labour Attendance (the daily
-// task) and Biometric Mapping -- per explicit request to declutter a
-// Home page that had 6 competing actions. Add Worker moved to the
-// Workers tab's FAB; Worker Types and Shifts & Profile moved into the
-// Settings hub (reached via the gear icon below, no longer a tab); Wage
-// Rate moved into the Wages tab. Logout lives in Settings.
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function formatLongDate(d: Date): string {
+  return `${WEEKDAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
+}
+
+// Rebuilt per the v2 redesign spec. "Needs attention" and the
+// month-end card are intentionally NOT here yet -- both need real
+// backend data (GET /home/alerts, GET /month-end/{y}/{m}) that Phase 9
+// hasn't been built yet at the point this screen was redone; adding
+// them now would mean fake placeholder data. They get wired in once
+// Phase 9 lands, in a small follow-up to this screen specifically.
 export default function HomeScreen({ navigation }: Props) {
   const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [leaveCount, setLeaveCount] = useState<number | null>(null);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [leave, setLeave] = useState<LeaveEntry[]>([]);
+  const [shifts, setShifts] = useState<ShiftConfig[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+
+  const today = useMemo(() => new Date(), []);
+  const todayIso = useMemo(() => isoDate(today), [today]);
 
   const load = useCallback(async () => {
     if (!token) return;
-    const today = isoDate(new Date());
-    const [s, l] = await Promise.all([getDashboard(token, today), listLeaveForDate(token, today)]);
-    setSummary(s);
-    setLeaveCount(l.length);
-  }, [token]);
+    const [w, a, l, s] = await Promise.all([
+      listWorkers(token),
+      listAttendance(token, todayIso),
+      listLeaveForDate(token, todayIso),
+      listShiftConfigs(token),
+    ]);
+    setWorkers(w.filter((x) => x.status === "active"));
+    setAttendance(a);
+    setLeave(l);
+    setShifts(s);
+  }, [token, todayIso]);
+
+  // Switches to a sibling tab from a screen that's itself nested inside
+  // that same tab navigator -- the documented React Navigation pattern
+  // for this is navigating to the *parent stack's* "Home" entry with a
+  // { screen } param the nested Tab.Navigator reads to pick a tab. Cast
+  // to any because RootStackParamList declares "Home: undefined" (no
+  // screen sub-navigation isn't expressible there without a much wider
+  // typing change for one call site); this works correctly at runtime
+  // regardless.
+  function goToTab(tab: "AttendanceTab" | "WagesTab" | "ReportsTab") {
+    (navigation as any).navigate("Home", { screen: tab });
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -54,107 +92,201 @@ export default function HomeScreen({ navigation }: Props) {
     setRefreshing(false);
   }
 
+  const stats = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let onLeave = 0;
+    let notMarked = 0;
+    for (const w of workers) {
+      if (leave.some((l) => l.worker_id === w.id)) {
+        onLeave++;
+        continue;
+      }
+      const rows = attendance.filter((a) => a.worker_id === w.id);
+      if (rows.some((r) => r.status === "present")) present++;
+      else if (rows.some((r) => r.status === "absent")) absent++;
+      else notMarked++;
+    }
+    return { present, absent, onLeave, notMarked, total: workers.length };
+  }, [workers, attendance, leave]);
+
+  const shiftTiles = useMemo(
+    () =>
+      shifts.map((shift) => ({
+        label: shift.label,
+        present: attendance.filter((a) => a.slot === shift.slot_key && a.status === "present").length,
+        total: workers.length,
+      })),
+    [shifts, attendance, workers],
+  );
+
+  const markedCount = stats.present + stats.absent + stats.onLeave;
+
   return (
     <View style={styles.container}>
-      <HomeBackground industry={owner?.industry} />
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+        contentContainerStyle={{ paddingBottom: spacing.xl * 2 + insets.bottom }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       >
-      <View style={styles.hero}>
-        <View style={styles.heroTopRow}>
-          <IconButton
-            icon={SettingsIcon}
-            color={colors.surface}
-            accessibilityLabel="Open settings"
-            onPress={() => navigation.navigate("Settings")}
-          />
-          <View style={styles.heroTopRowRight}>
-            <Text style={styles.heroEmoji}>🏭</Text>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>FACTORY</Text>
+        <View style={styles.header}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.brandRow}>
+              <LogoMark size={28} />
+              <Text style={styles.brandText}>Labour Lens</Text>
             </View>
+            <IconButton icon={SettingsIcon} color={colors.surface} accessibilityLabel="Open settings" onPress={() => navigation.navigate("Settings")} />
+          </View>
+          <Text style={styles.dateText}>{formatLongDate(today)}</Text>
+          <Text style={styles.factoryName}>{owner?.factory_name ?? "Labour Lens"}</Text>
+          {owner?.plan_status === "trial" && (
+            <View style={styles.trialPill}>
+              <Text style={styles.trialPillText}>{trialStatusText(owner)}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.attendanceCard}>
+          <Text style={type.section}>
+            {markedCount} of {stats.total} marked
+          </Text>
+
+          {stats.total > 0 && (
+            <View style={styles.stackedBar}>
+              {stats.present > 0 && <View style={[styles.barSegment, { flex: stats.present, backgroundColor: colors.present }]} />}
+              {stats.absent > 0 && <View style={[styles.barSegment, { flex: stats.absent, backgroundColor: colors.absent }]} />}
+              {stats.onLeave > 0 && <View style={[styles.barSegment, { flex: stats.onLeave, backgroundColor: colors.leave }]} />}
+              {stats.notMarked > 0 && <View style={[styles.barSegment, { flex: stats.notMarked, backgroundColor: colors.unmarked }]} />}
+            </View>
+          )}
+
+          <View style={styles.statRow}>
+            <StatBlock label="Present" value={stats.present} color={colors.present} />
+            <StatBlock label="Absent" value={stats.absent} color={colors.absentTintText} />
+            <StatBlock label="On leave" value={stats.onLeave} color={colors.leave} />
+            <StatBlock label="Not marked" value={stats.notMarked} color={colors.unmarked} />
+          </View>
+
+          {shiftTiles.length > 0 && (
+            <View style={styles.shiftRow}>
+              {shiftTiles.map((s) => (
+                <View key={s.label} style={styles.shiftTile}>
+                  <Text style={styles.shiftTileLabel}>{s.label}</Text>
+                  <Text style={styles.shiftTileValue}>{s.present} / {s.total}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Pressable style={styles.markButton} onPress={() => goToTab("AttendanceTab")}>
+            <Text style={styles.markButtonText}>
+              {stats.notMarked === 0 ? "All marked ✓" : `Mark attendance · ${stats.notMarked} left`}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.quickActionsWrap}>
+          <Text style={[type.caption, styles.quickActionsLabel]}>Quick actions</Text>
+          <View style={styles.quickActionsGrid}>
+            <QuickAction icon={Users} label="Multiple days" onPress={() => navigation.navigate("AttendanceRange")} />
+            <QuickAction icon={CreditCard} label="Record payment" onPress={() => goToTab("WagesTab")} />
+            <QuickAction icon={FileText} label="Wage slips" onPress={() => goToTab("ReportsTab")} />
+            <QuickAction icon={FileText} label="Statutory forms" onPress={() => goToTab("ReportsTab")} />
           </View>
         </View>
-        <Text style={styles.factoryName}>{owner?.factory_name ?? "Labour Lens"}</Text>
-        <Text style={styles.heroSubtitle}>Everything for today's shift floor, in one place.</Text>
-        <View style={styles.heroAccentBar} />
-      </View>
-
-      {owner?.plan_status === "trial" && (
-        <View style={styles.trialBanner}>
-          <Text style={styles.trialBannerText}>{trialStatusText(owner)}</Text>
-        </View>
-      )}
-
-      <TouchableOpacity
-        style={[styles.bigTile, { backgroundColor: colors.tealLight }]}
-        onPress={() => navigation.navigate("Dashboard")}
-      >
-        <Text style={styles.bigTileEmoji}>📋</Text>
-        <View style={styles.tileTextWrap}>
-          <Text style={[styles.bigTileTitle, { color: colors.tealDark }]}>Labour Attendance</Text>
-          <Text style={styles.tileSubtitle}>
-            {summary
-              ? `${summary.present_today}/${summary.total_workers} present today${leaveCount ? ` · ${leaveCount} on leave` : ""}`
-              : "Mark today's shifts, leave, and overtime"}
-          </Text>
-        </View>
-        <Text style={[styles.tileArrow, { color: colors.tealDark }]}>›</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.bigTile, { backgroundColor: colors.tealLight }]}
-        onPress={() => navigation.navigate("BiometricDevices")}
-      >
-        <Text style={styles.bigTileEmoji}>🖐️</Text>
-        <View style={styles.tileTextWrap}>
-          <Text style={[styles.bigTileTitle, { color: colors.tealDark }]}>Biometric Mapping</Text>
-          <Text style={styles.tileSubtitle}>Devices, sync, and worker-to-device mapping</Text>
-        </View>
-        <Text style={[styles.tileArrow, { color: colors.tealDark }]}>›</Text>
-      </TouchableOpacity>
       </ScrollView>
+
+      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.lg} />
     </View>
   );
 }
 
+function StatBlock({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <View style={styles.statBlock}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function QuickAction({ icon: Icon, label, onPress }: { icon: typeof Users; label: string; onPress: () => void }) {
+  return (
+    <Pressable style={styles.quickActionTile} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      <View style={styles.quickActionIconWrap}>
+        <Icon size={20} color={colors.primary} />
+      </View>
+      <Text style={styles.quickActionLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  content: { padding: spacing.md, paddingBottom: spacing.xl },
-  hero: {
+  container: { flex: 1, backgroundColor: colors.ground },
+  header: {
     backgroundColor: colors.navy,
-    borderRadius: radius.md,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     padding: spacing.lg,
-    marginBottom: spacing.lg,
-    overflow: "hidden",
+    paddingBottom: spacing.xl + spacing.md,
   },
-  heroTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  heroTopRowRight: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  heroEmoji: { fontSize: 32 },
-  heroBadge: { backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  heroBadgeText: { color: colors.tealPale, fontSize: 10, fontWeight: "700", letterSpacing: 1 },
-  factoryName: { color: colors.white, fontSize: 24, fontWeight: "700", marginTop: spacing.sm },
-  heroSubtitle: { color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 4 },
-  heroAccentBar: { height: 4, backgroundColor: colors.teal, borderRadius: 2, marginTop: spacing.md, width: 56 },
-  trialBanner: {
-    backgroundColor: colors.amberLight,
-    borderRadius: radius.md,
-    padding: spacing.sm + 4,
-    marginBottom: spacing.md,
+  headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  brandText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.surface },
+  dateText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: spacing.md },
+  factoryName: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 26, color: colors.surface, marginTop: 2 },
+  trialPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: 6,
+    marginTop: spacing.sm,
   },
-  trialBannerText: { color: colors.amberDark, fontSize: 13, fontWeight: "700", textAlign: "center" },
-  bigTile: {
-    flexDirection: "row",
-    alignItems: "center",
+  trialPillText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 11, color: colors.surface },
+  attendanceCard: {
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.md,
-    marginBottom: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: -spacing.xl,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  bigTileEmoji: { fontSize: 34, marginRight: spacing.md },
-  tileTextWrap: { flex: 1 },
-  bigTileTitle: { fontSize: 17, fontWeight: "700" },
-  tileSubtitle: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  tileArrow: { fontSize: 28, fontWeight: "700", marginLeft: spacing.sm },
+  stackedBar: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", marginTop: spacing.sm, backgroundColor: colors.divider },
+  barSegment: { height: 8 },
+  statRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.md },
+  statBlock: { flex: 1, alignItems: "center" },
+  statValue: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 20, fontVariant: ["tabular-nums"] },
+  statLabel: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 10, color: colors.textSecondary, marginTop: 2 },
+  shiftRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.md, flexWrap: "wrap" },
+  shiftTile: { flex: 1, minWidth: 80, backgroundColor: colors.ground, borderRadius: radius.sm, paddingVertical: spacing.sm, alignItems: "center" },
+  shiftTileLabel: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 11, color: colors.textSecondary },
+  shiftTileValue: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 15, color: colors.navy, marginTop: 2, fontVariant: ["tabular-nums"] },
+  markButton: { marginTop: spacing.md, backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
+  markButtonText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.surface },
+  quickActionsWrap: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
+  quickActionsLabel: { color: colors.textSecondary, marginBottom: spacing.sm },
+  quickActionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  quickActionTile: {
+    width: "47%",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  quickActionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryTint,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.xs,
+  },
+  quickActionLabel: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 13, color: colors.navy },
 });

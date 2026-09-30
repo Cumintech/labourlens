@@ -151,10 +151,38 @@ export default function SettingsScreen({ navigation }: Props) {
         </View>
       </View>
 
+      {/* Temporary safety-net section: these 4 screens lost their only
+          entry point when AppDrawer.tsx was deleted (redesign v2 Phase 1)
+          / when the Home redesign (Phase 2) dropped the old Biometric
+          Devices card. Phase 5 moves Wage Rates into the Wages tab and
+          Phase 7 gives Shift Settings / Worker Types / Biometric Devices
+          a proper home in this same Settings screen -- until then, plain
+          rows here keep every feature reachable. */}
+      <Text style={styles.sectionLabel}>Factory</Text>
+      <View style={styles.card}>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("ShiftSettings")}>
+          <Text style={styles.rowIcon}>🕒</Text>
+          <Text style={styles.rowValue}>Shift Settings</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("WorkerTypes")}>
+          <Text style={styles.rowIcon}>🏷️</Text>
+          <Text style={styles.rowValue}>Worker Types</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("WageRateWorkers")}>
+          <Text style={styles.rowIcon}>💰</Text>
+          <Text style={styles.rowValue}>Wage Rates</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("BiometricDevices")}>
+          <Text style={styles.rowIcon}>👆</Text>
+          <Text style={styles.rowValue}>Biometric Devices</Text>
+        </TouchableOpacity>
+      </View>
+
       <Text style={styles.sectionLabel}>General</Text>
       <View style={styles.card}>
-        {/* Biometric Devices moved to its own Home page card (Batch 1) --
-            removed here so it doesn't exist as a duplicate entry point. */}
         <TouchableOpacity style={styles.row} onPress={() => navigation.navigate("PrivacyPolicy")}>
           <Text style={styles.rowIcon}>📄</Text>
           <Text style={styles.rowValue}>Privacy Policy</Text>

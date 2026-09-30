@@ -281,6 +281,29 @@ class DashboardOut(BaseModel):
     slots: list[SlotSummary]
 
 
+class HomeAlertOut(BaseModel):
+    code: str
+    message: str
+    count: int
+
+
+class HomeAlertsOut(BaseModel):
+    alerts: list[HomeAlertOut]
+
+
+class MonthEndStepOut(BaseModel):
+    key: str  # "attendance" | "wages" | "payments" | "forms"
+    label: str
+    complete: bool
+    detail: str
+
+
+class MonthEndOut(BaseModel):
+    year: int
+    month: int
+    steps: list[MonthEndStepOut]
+
+
 class ReportEmailIn(BaseModel):
     start_date: date
     end_date: date

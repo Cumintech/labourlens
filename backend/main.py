@@ -39,8 +39,12 @@ from schemas import (
     FormTemplateOut,
     FormEmailIn,
     HealthOut,
+    HomeAlertOut,
+    HomeAlertsOut,
     LeaveEntryIn,
     LeaveEntryOut,
+    MonthEndOut,
+    MonthEndStepOut,
     OcrFieldsOut,
     OwnerLoginIn,
     OwnerOut,
@@ -1228,6 +1232,214 @@ def get_daily_wage_summary(
             )
         )
     return DailyWageSummaryOut(date=date, total_workers_present=present_count, total_daily_cost=total_cost, workers=results)
+
+
+@app.get("/home/alerts", response_model=HomeAlertsOut)
+def get_home_alerts(
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """"Needs attention" list for the Today screen -- a small, actionable
+    set of things worth surfacing before the owner starts their day, not
+    a general notification feed. Empty list means nothing needs
+    attention right now."""
+    alerts: list[HomeAlertOut] = []
+
+    active_workers = (
+        db.query(models.Worker)
+        .filter(models.Worker.owner_id == owner.id, models.Worker.status == "active")
+        .all()
+    )
+    active_ids = {w.id for w in active_workers}
+
+    compliant_worker_ids = (
+        db.query(models.WorkerCompliance.worker_id)
+        .join(models.Worker, models.Worker.id == models.WorkerCompliance.worker_id)
+        .filter(models.Worker.owner_id == owner.id)
+    )
+    missing_count = (
+        db.query(models.Worker)
+        .filter(models.Worker.owner_id == owner.id, models.Worker.id.not_in(compliant_worker_ids))
+        .count()
+    )
+    if missing_count > 0:
+        alerts.append(
+            HomeAlertOut(
+                code="missing_compliance",
+                message=f"{missing_count} worker{'s' if missing_count != 1 else ''} need Form 12 details",
+                count=missing_count,
+            )
+        )
+
+    device_count = db.query(models.BiometricDevice).filter(models.BiometricDevice.owner_id == owner.id).count()
+    if device_count > 0:
+        mapped_worker_ids = {
+            worker_id
+            for (worker_id,) in db.query(models.DeviceUserMapping.worker_id)
+            .join(models.BiometricDevice, models.BiometricDevice.id == models.DeviceUserMapping.device_id)
+            .filter(models.BiometricDevice.owner_id == owner.id)
+            .all()
+        }
+        unmapped_count = len(active_ids - mapped_worker_ids)
+        if unmapped_count > 0:
+            alerts.append(
+                HomeAlertOut(
+                    code="unmapped_devices",
+                    message=f"{unmapped_count} worker{'s' if unmapped_count != 1 else ''} not mapped to a biometric device",
+                    count=unmapped_count,
+                )
+            )
+
+    today = date_.today()
+    marked_worker_ids = {
+        worker_id
+        for (worker_id,) in db.query(models.Attendance.worker_id)
+        .join(models.Worker, models.Worker.id == models.Attendance.worker_id)
+        .filter(models.Worker.owner_id == owner.id, models.Attendance.date == today)
+        .distinct()
+        .all()
+    }
+    not_marked_count = len(active_ids - marked_worker_ids)
+    if not_marked_count > 0:
+        alerts.append(
+            HomeAlertOut(
+                code="not_marked_today",
+                message=f"{not_marked_count} worker{'s' if not_marked_count != 1 else ''} not marked for today yet",
+                count=not_marked_count,
+            )
+        )
+
+    return HomeAlertsOut(alerts=alerts)
+
+
+@app.get("/month-end/{year}/{month}", response_model=MonthEndOut)
+def get_month_end(
+    year: int,
+    month: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Progress for the 4-step month-end guided flow (Attendance / Wages
+    / Payments / Forms & slips) -- every step's "complete" is derived
+    from real data (never a manually-ticked checkbox), reusing the same
+    wage computation the Wages tab itself uses so the two can't disagree."""
+    month_start, month_end = forms._month_date_range(month, year)
+    today = date_.today()
+    check_end = min(month_end, today) if (year, month) == (today.year, today.month) else month_end
+
+    active_workers = (
+        db.query(models.Worker)
+        .filter(models.Worker.owner_id == owner.id, models.Worker.status == "active")
+        .all()
+    )
+    worker_ids = [w.id for w in active_workers]
+
+    # Attendance step: every active worker (from their joining date, or
+    # month start if none on file) accounted for -- present, absent, or
+    # on leave -- on every day up to today (the current month) or the
+    # full month (a past month).
+    attendance_dates_by_worker: dict[int, set[date_]] = {}
+    for worker_id, a_date in (
+        db.query(models.Attendance.worker_id, models.Attendance.date)
+        .filter(models.Attendance.worker_id.in_(worker_ids), models.Attendance.date >= month_start, models.Attendance.date <= check_end)
+        .distinct()
+        .all()
+    ):
+        attendance_dates_by_worker.setdefault(worker_id, set()).add(a_date)
+
+    leave_by_worker: dict[int, list[tuple[date_, date_]]] = {}
+    for worker_id, date_from, date_to in (
+        db.query(models.LeaveEntry.worker_id, models.LeaveEntry.date_from, models.LeaveEntry.date_to)
+        .filter(models.LeaveEntry.worker_id.in_(worker_ids), models.LeaveEntry.date_from <= check_end, models.LeaveEntry.date_to >= month_start)
+        .all()
+    ):
+        leave_by_worker.setdefault(worker_id, []).append((date_from, date_to))
+
+    expected_days = 0
+    marked_days = 0
+    for worker in active_workers:
+        joined = _get_joining_date(db, worker.id) or month_start
+        day = max(joined, month_start)
+        marked = attendance_dates_by_worker.get(worker.id, set())
+        leaves = leave_by_worker.get(worker.id, [])
+        while day <= check_end:
+            expected_days += 1
+            if day in marked or any(f <= day <= t for f, t in leaves):
+                marked_days += 1
+            day += timedelta(days=1)
+
+    attendance_complete = expected_days > 0 and marked_days == expected_days
+    attendance_detail = f"{marked_days} of {expected_days} worker-days marked" if expected_days > 0 else "No active workers yet"
+
+    # Wages / Payments steps: reuse the same per-worker wage computation
+    # the Wages tab itself uses.
+    rated_count = 0
+    paid_count = 0
+    for worker in active_workers:
+        wage = forms.compute_wage(db, owner.id, worker.id, month, year)
+        wage_out = _worker_wage_out(worker, wage)
+        if wage_out.has_rate:
+            rated_count += 1
+            if wage_out.paid:
+                paid_count += 1
+
+    wages_complete = len(active_workers) > 0 and rated_count == len(active_workers)
+    payments_complete = rated_count > 0 and paid_count == rated_count
+
+    # Forms step: at least one of the period-scoped statutory forms was
+    # generated or emailed FOR this month -- there's no "reviewed and
+    # correct" signal to check server-side, only that it was produced.
+    # `period_label` (the requested range, e.g. "2026-08-01 to
+    # 2026-08-31") is what has to overlap the target month here, not
+    # `generated_at` (when the action happened) -- a form for a past
+    # month is often generated well into the next one.
+    candidate_logs = (
+        db.query(models.FormGenerationLog)
+        .filter(
+            models.FormGenerationLog.owner_id == owner.id,
+            models.FormGenerationLog.form_code.in_(["form25", "form25b", "form12", "form15", "wageslip"]),
+        )
+        .all()
+    )
+    forms_complete = False
+    for log in candidate_logs:
+        if not log.period_label:
+            continue
+        try:
+            start_str, end_str = log.period_label.split(" to ")
+            log_start = date_.fromisoformat(start_str)
+            log_end = date_.fromisoformat(end_str)
+        except ValueError:
+            continue
+        if log_start <= month_end and log_end >= month_start:
+            forms_complete = True
+            break
+
+    return MonthEndOut(
+        year=year,
+        month=month,
+        steps=[
+            MonthEndStepOut(key="attendance", label="Attendance", complete=attendance_complete, detail=attendance_detail),
+            MonthEndStepOut(
+                key="wages",
+                label="Wages",
+                complete=wages_complete,
+                detail=f"{rated_count} of {len(active_workers)} workers have a wage rate" if active_workers else "No active workers yet",
+            ),
+            MonthEndStepOut(
+                key="payments",
+                label="Payments",
+                complete=payments_complete,
+                detail=f"{paid_count} of {rated_count} paid" if rated_count > 0 else "Set wage rates first",
+            ),
+            MonthEndStepOut(
+                key="forms",
+                label="Forms & slips",
+                complete=forms_complete,
+                detail="Generated or emailed this month" if forms_complete else "Not generated yet this month",
+            ),
+        ],
+    )
 
 
 @app.post("/portal-credentials", status_code=204)

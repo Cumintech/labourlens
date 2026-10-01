@@ -68,10 +68,10 @@ const styles = StyleSheet.create({
   fieldWrap: { flex: 1 },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
   input: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
     padding: 12,
   },
-  valueText: { fontSize: 16, color: colors.navy },
+  valueText: { fontSize: 16, color: colors.text },
   placeholderText: { fontSize: 16, color: colors.muted },
 });

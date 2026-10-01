@@ -79,14 +79,14 @@ export default function AppLockScreen() {
 const KEY_SIZE = 84;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.navy, alignItems: "center", justifyContent: "center", padding: spacing.lg },
+  container: { flex: 1, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", padding: spacing.lg },
   emoji: { fontSize: 40, marginBottom: spacing.sm },
   title: { color: colors.white, fontSize: 16, fontWeight: "700", marginBottom: spacing.lg, textAlign: "center" },
   dotsRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.sm },
   dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.5, borderColor: colors.white },
-  dotFilled: { backgroundColor: colors.teal, borderColor: colors.teal },
-  dotError: { borderColor: colors.danger, backgroundColor: colors.danger },
-  errorText: { color: colors.danger, fontSize: 12, marginBottom: spacing.md, fontWeight: "700" },
+  dotFilled: { backgroundColor: colors.primary, borderColor: colors.primary },
+  dotError: { borderColor: colors.absent, backgroundColor: colors.absent },
+  errorText: { color: colors.absent, fontSize: 12, marginBottom: spacing.md, fontWeight: "700" },
   keypad: { flexDirection: "row", flexWrap: "wrap", width: KEY_SIZE * 3, marginTop: spacing.lg, justifyContent: "center" },
   key: { width: KEY_SIZE, height: KEY_SIZE, alignItems: "center", justifyContent: "center" },
   keyText: { color: colors.white, fontSize: 26, fontWeight: "600" },

@@ -14,6 +14,7 @@ import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import SettingsScreen from "../screens/SettingsScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
@@ -22,8 +23,8 @@ import WageRateWorkersScreen from "../screens/WageRateWorkersScreen";
 import WorkerAttendanceScreen from "../screens/WorkerAttendanceScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
 import WorkerTypesScreen from "../screens/WorkerTypesScreen";
-import { colors } from "../theme";
-import AppDrawer from "./AppDrawer";
+import { colors, font } from "../theme";
+import MainTabs from "./MainTabs";
 
 export type RootStackParamList = {
   Home: undefined;
@@ -50,6 +51,7 @@ export type RootStackParamList = {
   StatutoryForms: undefined;
   PrivacyPolicy: undefined;
   HelpSupport: undefined;
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -80,9 +82,9 @@ export default function RootNavigator() {
       <NavigationContainer>
         <AuthStack.Navigator
           screenOptions={{
-            headerStyle: { backgroundColor: colors.white },
-            headerTitleStyle: { color: colors.navy, fontWeight: "700" },
-            headerTintColor: colors.teal,
+            headerStyle: { backgroundColor: colors.card },
+            headerTitleStyle: { color: colors.text, fontFamily: font.semiBold },
+            headerTintColor: colors.primary,
           }}
         >
           <AuthStack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
@@ -97,13 +99,20 @@ export default function RootNavigator() {
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{
-          headerStyle: { backgroundColor: colors.white },
-          headerTitleStyle: { color: colors.navy, fontWeight: "700" },
-          headerTintColor: colors.teal,
+          headerStyle: { backgroundColor: colors.card },
+          headerTitleStyle: { color: colors.text, fontFamily: font.semiBold },
+          headerTintColor: colors.primary,
         }}
       >
-        <Stack.Screen name="Home" component={AppDrawer} options={{ headerShown: false }} />
-        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Labour Attendance" }} />
+        {/* "Home" renders the 5-tab bottom nav directly -- the left
+            hamburger drawer this used to wrap (AppDrawer.tsx) is retired;
+            every destination it used to hold now has a home on one of the
+            5 tabs (Add Worker -> Workers' header action, Wage Rate ->
+            Wages' Rates segment, Shifts & Profile -> Today's Quick
+            Actions) or on the Settings screen below. */}
+        <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
+        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Attendance" }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
         <Stack.Screen name="AttendanceRange" component={AttendanceRangeScreen} options={{ title: "Edit Multiple Days" }} />
         <Stack.Screen name="NewWorkerScan" component={AddWorkerScreen} options={{ title: "Add Worker" }} />
         <Stack.Screen name="BiometricConsent" component={BiometricConsentScreen} options={{ title: "Biometric Consent" }} />

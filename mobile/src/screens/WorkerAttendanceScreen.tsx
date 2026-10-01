@@ -24,6 +24,7 @@ import OtHoursModal from "../components/OtHoursModal";
 import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { formatINR } from "../format";
 import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkerAttendance">;
@@ -281,7 +282,7 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
         data={days}
         keyExtractor={(d) => d.dateStr}
         contentContainerStyle={{ paddingBottom: spacing.xl * 2 + insets.bottom }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
         ListHeaderComponent={
           <View>
             <View style={styles.headerRow}>
@@ -321,20 +322,20 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
             </View>
 
             <View style={styles.summaryRow}>
-              <View style={[styles.statCard, { backgroundColor: colors.tealLight }]}>
-                <Text style={[styles.statValue, { color: colors.tealDark }]}>{summary.present}</Text>
+              <View style={[styles.statCard, { backgroundColor: colors.primarySoft }]}>
+                <Text style={[styles.statValue, { color: colors.primaryDark }]}>{summary.present}</Text>
                 <Text style={styles.statLabel}>Present</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: colors.dangerLight }]}>
-                <Text style={[styles.statValue, { color: colors.danger }]}>{summary.absent}</Text>
+              <View style={[styles.statCard, { backgroundColor: colors.divider }]}>
+                <Text style={[styles.statValue, { color: colors.absent }]}>{summary.absent}</Text>
                 <Text style={styles.statLabel}>Absent</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: colors.amberLight }]}>
-                <Text style={[styles.statValue, { color: colors.amberDark }]}>{summary.leaveDays}</Text>
+              <View style={[styles.statCard, { backgroundColor: colors.warnBg }]}>
+                <Text style={[styles.statValue, { color: colors.leave }]}>{summary.leaveDays}</Text>
                 <Text style={styles.statLabel}>Leave</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: colors.violetLight }]}>
-                <Text style={[styles.statValue, { color: colors.violet }]}>{summary.otHours}h</Text>
+              <View style={[styles.statCard, { backgroundColor: colors.warnBg }]}>
+                <Text style={[styles.statValue, { color: colors.primaryDark }]}>{summary.otHours}h</Text>
                 <Text style={styles.statLabel}>Overtime</Text>
               </View>
             </View>
@@ -350,9 +351,9 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
                       </View>
                     )}
                   </View>
-                  <Text style={styles.wageValue}>₹{wage.net_wage.toFixed(2)}</Text>
+                  <Text style={styles.wageValue}>{formatINR(wage.net_wage)}</Text>
                   <Text style={styles.wageDetail}>
-                    Gross ₹{wage.gross_wage.toFixed(2)} · {wage.days_worked} day{wage.days_worked === 1 ? "" : "s"} worked
+                    Gross {formatINR(wage.gross_wage)} · {wage.days_worked} day{wage.days_worked === 1 ? "" : "s"} worked
                   </Text>
                 </>
               ) : (
@@ -420,39 +421,39 @@ export default function WorkerAttendanceScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   headerRow: { flexDirection: "row", alignItems: "center", padding: spacing.md, gap: spacing.sm },
-  workerName: { fontSize: 20, fontWeight: "700", color: colors.navy },
+  workerName: { fontSize: 20, fontWeight: "700", color: colors.text },
   deactivatedText: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  editButton: { borderWidth: 1.5, borderColor: colors.teal, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
-  editButtonText: { color: colors.teal, fontSize: 13, fontWeight: "700" },
-  deactivateButton: { backgroundColor: colors.dangerLight, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
-  deactivateButtonText: { color: colors.danger, fontSize: 13, fontWeight: "700" },
+  editButton: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
+  editButtonText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  deactivateButton: { backgroundColor: colors.divider, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
+  deactivateButtonText: { color: colors.absent, fontSize: 13, fontWeight: "700" },
   monthRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     marginHorizontal: spacing.md,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm,
     gap: spacing.md,
   },
   monthArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },
-  monthArrowText: { fontSize: 18, fontWeight: "700", color: colors.navy },
-  monthLabel: { fontSize: 15, fontWeight: "700", color: colors.navy },
+  monthArrowText: { fontSize: 18, fontWeight: "700", color: colors.text },
+  monthLabel: { fontSize: 15, fontWeight: "700", color: colors.text },
   summaryRow: { flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.md },
   statCard: { flex: 1, borderRadius: radius.sm, paddingVertical: spacing.sm, alignItems: "center" },
   statValue: { fontSize: 20, fontWeight: "700" },
   statLabel: { fontSize: 10, color: colors.muted, marginTop: 2, fontWeight: "600" },
   wageCard: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     marginHorizontal: spacing.md,
     marginTop: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: radius.control,
     padding: spacing.md,
   },
   wageTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   wageLabel: { color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: "700" },
-  paidBadge: { backgroundColor: colors.teal, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  paidBadge: { backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   paidBadgeText: { color: colors.white, fontSize: 10, fontWeight: "700" },
   wageValue: { color: colors.white, fontSize: 28, fontWeight: "700", marginTop: 4 },
   wageDetail: { color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 2 },
@@ -463,21 +464,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.fieldBg,
+    borderBottomColor: colors.bg,
   },
-  dayRowToday: { backgroundColor: colors.tealLight },
+  dayRowToday: { backgroundColor: colors.primarySoft },
   // Full-width tile row directly under a compact date header, not a
   // side-by-side column split -- squeezing the tiles into a narrow
   // column (flex: 2 of 3) was forcing them to wrap onto a second line,
   // which read as an oversized gap between the date and the shifts.
   dateRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.xs, marginBottom: spacing.xs },
-  dateNumber: { fontSize: 15, fontWeight: "700", color: colors.navy },
+  dateNumber: { fontSize: 15, fontWeight: "700", color: colors.text },
   dateWeekday: { fontSize: 11, color: colors.muted },
   shiftTagsRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.xs },
   shiftTag: { paddingHorizontal: spacing.xs + 2, paddingVertical: 3, borderRadius: 6 },
-  shiftTagOn: { backgroundColor: colors.navy },
-  shiftTagOff: { backgroundColor: colors.fieldBg },
+  shiftTagOn: { backgroundColor: colors.primary },
+  shiftTagOff: { backgroundColor: colors.bg },
   shiftTagText: { fontSize: 9.5, fontWeight: "800" },
   shiftTagTextOn: { color: colors.white },
-  shiftTagTextOff: { color: colors.neutral },
+  shiftTagTextOff: { color: colors.muted },
 });

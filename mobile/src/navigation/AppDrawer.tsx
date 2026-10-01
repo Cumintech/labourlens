@@ -80,9 +80,9 @@ export default function AppDrawer() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white, paddingHorizontal: spacing.lg },
-  appName: { fontSize: 20, fontWeight: "700", color: colors.navy, marginBottom: spacing.lg },
+  appName: { fontSize: 20, fontWeight: "700", color: colors.text, marginBottom: spacing.lg },
   sectionHeader: { fontSize: 11, fontWeight: "700", color: colors.muted, letterSpacing: 1, marginTop: spacing.md, marginBottom: spacing.sm },
   item: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderRadius: radius.sm, gap: spacing.sm },
   itemEmoji: { fontSize: 20, width: 28, textAlign: "center" },
-  itemLabel: { fontSize: 15, fontWeight: "600", color: colors.navy },
+  itemLabel: { fontSize: 15, fontWeight: "600", color: colors.text },
 });

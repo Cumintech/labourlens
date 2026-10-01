@@ -137,7 +137,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={styles.rowValue}>
               {displayPlanStatus(owner?.plan_status)}
               {owner?.plan_status === "trial" && owner.trial_days_remaining != null
-                ? ` -- ${owner.trial_days_remaining} day${owner.trial_days_remaining === 1 ? "" : "s"} left`
+                ? ` · ${owner.trial_days_remaining} day${owner.trial_days_remaining === 1 ? "" : "s"} left`
                 : ""}
             </Text>
           </View>
@@ -149,7 +149,7 @@ export default function SettingsScreen({ navigation }: Props) {
             <Text style={styles.rowLabel}>App Lock</Text>
             <Text style={styles.rowValue}>{isPinSet ? "On" : "Off"}</Text>
           </View>
-          <Switch value={isPinSet} onValueChange={handleToggleAppLock} trackColor={{ true: colors.teal }} />
+          <Switch value={isPinSet} onValueChange={handleToggleAppLock} trackColor={{ true: colors.primary }} />
         </View>
       </View>
 
@@ -169,15 +169,15 @@ export default function SettingsScreen({ navigation }: Props) {
         <View style={styles.divider} />
         <TouchableOpacity style={styles.row} onPress={handleLogout}>
           <Text style={styles.rowIcon}>🚪</Text>
-          <Text style={[styles.rowValue, { color: colors.danger, fontWeight: "700" }]}>Log Out</Text>
+          <Text style={[styles.rowValue, { color: colors.absent, fontWeight: "700" }]}>Log Out</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
         <TouchableOpacity style={styles.row} onPress={handleDeleteAccount} disabled={deletingAccount}>
           <Text style={styles.rowIcon}>🗑️</Text>
           {deletingAccount ? (
-            <ActivityIndicator color={colors.danger} />
+            <ActivityIndicator color={colors.absent} />
           ) : (
-            <Text style={[styles.rowValue, { color: colors.danger, fontWeight: "700" }]}>Delete Account</Text>
+            <Text style={[styles.rowValue, { color: colors.absent, fontWeight: "700" }]}>Delete Account</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -254,34 +254,34 @@ export default function SettingsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy, marginBottom: spacing.md },
+  title: { fontSize: 22, fontWeight: "700", color: colors.text, marginBottom: spacing.md },
   sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.md },
   sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.muted, textTransform: "uppercase", marginBottom: spacing.xs },
-  editProfileLink: { fontSize: 12, fontWeight: "700", color: colors.teal, marginBottom: spacing.xs },
-  card: { backgroundColor: colors.fieldBg, borderRadius: radius.md, overflow: "hidden" },
+  editProfileLink: { fontSize: 12, fontWeight: "700", color: colors.primary, marginBottom: spacing.xs },
+  card: { backgroundColor: colors.bg, borderRadius: radius.control, overflow: "hidden" },
   row: { flexDirection: "row", alignItems: "center", padding: spacing.md },
   rowIcon: { fontSize: 20, marginRight: spacing.sm },
   rowTextWrap: { flex: 1 },
   rowLabel: { fontSize: 11, color: colors.muted },
-  rowValue: { fontSize: 15, color: colors.navy, fontWeight: "600", marginTop: 2 },
+  rowValue: { fontSize: 15, color: colors.text, fontWeight: "600", marginTop: 2 },
   divider: { height: 1, backgroundColor: colors.white, marginLeft: spacing.md + 28 },
   footer: { textAlign: "center", color: colors.muted, fontSize: 12, marginTop: spacing.xl, lineHeight: 18 },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
-  modalCard: { backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.lg, width: "85%" },
-  modalTitle: { fontSize: 16, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
+  modalCard: { backgroundColor: colors.white, borderRadius: radius.control, padding: spacing.lg, width: "85%" },
+  modalTitle: { fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: spacing.sm },
   modalLabel: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },
   modalInput: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
     padding: 12,
     fontSize: 20,
-    color: colors.navy,
+    color: colors.text,
     textAlign: "center",
     letterSpacing: 8,
   },
   modalButtonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
-  modalCancelButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
+  modalCancelButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.bg },
   modalCancelText: { color: colors.muted, fontWeight: "700" },
-  modalConfirmButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.teal },
+  modalConfirmButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.primary },
   modalConfirmText: { color: colors.white, fontWeight: "700" },
 });

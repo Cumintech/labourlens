@@ -308,7 +308,7 @@ export default function AttendanceRangeScreen({}: Props) {
       <ScrollView
         style={styles.container}
         contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl * 2 + insets.bottom }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       >
         <Text style={styles.subtitle}>
           Pick a date range below -- every day in it shows up as its own editable section, so you can review or fix
@@ -367,15 +367,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
   rangeRow: { flexDirection: "row", gap: spacing.sm },
-  warning: { fontSize: 12, color: colors.danger, marginTop: spacing.xs, marginBottom: spacing.sm },
+  warning: { fontSize: 12, color: colors.absent, marginTop: spacing.xs, marginBottom: spacing.sm },
   empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
   dayBlock: {
-    backgroundColor: colors.fieldBg,
-    borderRadius: radius.md,
+    backgroundColor: colors.bg,
+    borderRadius: radius.control,
     padding: spacing.sm + 2,
     marginTop: spacing.md,
   },
-  dayTitle: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
+  dayTitle: { fontSize: 13, fontWeight: "700", color: colors.text, marginBottom: spacing.sm },
   workerRow: { marginBottom: spacing.sm },
-  workerName: { fontSize: 13, fontWeight: "600", color: colors.navy, marginBottom: 4 },
+  workerName: { fontSize: 13, fontWeight: "600", color: colors.text, marginBottom: 4 },
 });

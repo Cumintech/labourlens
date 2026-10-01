@@ -49,7 +49,7 @@ export default function AttendanceRowCard({
   const [tipOpen, setTipOpen] = useState(false);
 
   const anyPresent = shifts.some((s) => getShiftStatus(s.slot_key) === "present");
-  const edgeColor = isOnLeave ? colors.amber : anyPresent ? colors.teal : colors.neutral;
+  const edgeColor = isOnLeave ? colors.leave : anyPresent ? colors.primary : colors.muted;
   const isMapped = !!worker.device_user_id;
 
   return (
@@ -73,7 +73,7 @@ export default function AttendanceRowCard({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={() => setTipOpen((v) => !v)}
           >
-            <View style={[styles.mapDot, { backgroundColor: isMapped ? colors.teal : colors.amber }]} />
+            <View style={[styles.mapDot, { backgroundColor: isMapped ? colors.primary : colors.leave }]} />
           </TouchableOpacity>
           {worker.status !== "active" && (
             <View style={styles.inactiveBadge}>
@@ -167,9 +167,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.white,
-    borderRadius: radius.md,
+    borderRadius: radius.control,
     borderWidth: 1,
-    borderColor: colors.fieldBg,
+    borderColor: colors.bg,
     paddingVertical: spacing.sm + 3,
     paddingRight: spacing.sm + 2,
     marginHorizontal: spacing.md,
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
     marginRight: spacing.sm,
@@ -190,12 +190,12 @@ const styles = StyleSheet.create({
   main: { flex: 1, minWidth: 0 },
   identityRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
   nameTouchable: { flexShrink: 1, maxWidth: "60%" },
-  name: { fontSize: 14.5, fontWeight: "700", color: colors.navy, flexShrink: 1 },
+  name: { fontSize: 14.5, fontWeight: "700", color: colors.text, flexShrink: 1 },
   idBadge: {
     fontSize: 10.5,
     fontWeight: "700",
     color: colors.muted,
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 5,
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   inactiveBadge: { backgroundColor: colors.muted, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   inactiveBadgeText: { color: colors.white, fontSize: 9.5, fontWeight: "700" },
   tooltip: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     padding: spacing.sm,
     marginTop: spacing.xs,
@@ -212,20 +212,20 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   tooltipText: { color: colors.white, fontSize: 11, fontWeight: "600", lineHeight: 15 },
-  toggle: { flexDirection: "row", borderWidth: 1, borderColor: colors.fieldBg, borderRadius: radius.sm, marginTop: spacing.xs, alignSelf: "flex-start", overflow: "hidden" },
-  seg: { paddingVertical: 5, paddingHorizontal: 8, backgroundColor: colors.white, borderRightWidth: 1, borderRightColor: colors.fieldBg },
+  toggle: { flexDirection: "row", borderWidth: 1, borderColor: colors.bg, borderRadius: radius.sm, marginTop: spacing.xs, alignSelf: "flex-start", overflow: "hidden" },
+  seg: { paddingVertical: 5, paddingHorizontal: 8, backgroundColor: colors.white, borderRightWidth: 1, borderRightColor: colors.bg },
   segLast: { borderRightWidth: 0 },
   segText: { fontSize: 10.5, fontWeight: "700" },
-  segPresent: { backgroundColor: colors.tealLight },
-  segTextPresent: { color: colors.tealDark },
-  segLeave: { backgroundColor: colors.amberLight },
-  segTextLeave: { color: colors.amberDark },
+  segPresent: { backgroundColor: colors.primarySoft },
+  segTextPresent: { color: colors.primaryDark },
+  segLeave: { backgroundColor: colors.warnBg },
+  segTextLeave: { color: colors.leave },
   // Morning/Evening segments while Leave is active for the day -- a
   // muted amber tint (not the same solid fill as the Leave segment
   // itself) signals "covered by leave" without looking like a second
   // independently-marked state.
-  segLeaveCovered: { backgroundColor: colors.amberPale },
-  segTextLeaveCovered: { color: colors.amberDark },
+  segLeaveCovered: { backgroundColor: colors.warnBg },
+  segTextLeaveCovered: { color: colors.leave },
   segNeutral: { backgroundColor: colors.white },
   segTextNeutral: { color: colors.muted },
   kebab: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
@@ -238,17 +238,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.fieldBg,
+    borderColor: colors.bg,
     width: 150,
     zIndex: 50,
     elevation: 8,
-    shadowColor: colors.navy,
+    shadowColor: colors.text,
     shadowOpacity: 0.15,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
   },
   menuItem: { paddingVertical: 11, paddingHorizontal: 12 },
-  menuItemText: { fontSize: 12.5, fontWeight: "600", color: colors.navy },
-  menuItemDanger: { color: colors.danger },
-  menuDivider: { height: 1, backgroundColor: colors.fieldBg },
+  menuItemText: { fontSize: 12.5, fontWeight: "600", color: colors.text },
+  menuItemDanger: { color: colors.absent },
+  menuDivider: { height: 1, backgroundColor: colors.bg },
 });

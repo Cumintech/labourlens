@@ -28,6 +28,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
   emoji: { fontSize: 32, marginBottom: spacing.sm },
   message: { fontSize: 14, color: colors.muted, textAlign: "center", marginBottom: spacing.md },
-  button: { backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 10, paddingHorizontal: spacing.lg },
+  button: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 10, paddingHorizontal: spacing.lg },
   buttonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
 });

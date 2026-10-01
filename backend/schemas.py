@@ -4,24 +4,27 @@ from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
-from verhoeff import validate_verhoeff
-
 MIN_OWNER_PASSWORD_LENGTH = 8
 
-_AADHAAR_PATTERN = re.compile(r"^[2-9]\d{11}$")
+# Relaxed to a plain 12-digit check (no UIDAI first-digit/Verhoeff
+# checksum enforcement) -- the stricter rule was blocking real data entry
+# during pilot testing with placeholder numbers. Mirrored in
+# mobile/src/validators.ts's isValidAadhaar.
+_AADHAAR_PATTERN = re.compile(r"^\d{12}$")
 
 
 def _validate_aadhaar_digits(v: str) -> str:
     digits = v.replace(" ", "")
-    if not _AADHAAR_PATTERN.match(digits) or not validate_verhoeff(digits):
+    if not _AADHAAR_PATTERN.match(digits):
         raise ValueError("Enter a valid 12-digit Aadhaar number")
     return digits
 
 
-# Indian mobile numbers: 10 digits, first digit 6-9. A pasted
-# +91XXXXXXXXXX or 0XXXXXXXXXX is reduced to the bare 10 digits rather
-# than rejected outright -- a real, common paste pattern, not user error.
-_MOBILE_PATTERN = re.compile(r"^[6-9]\d{9}$")
+# Relaxed to a plain 10-digit check (no TRAI first-digit 6-9 rule), same
+# reasoning as _AADHAAR_PATTERN above. A pasted +91XXXXXXXXXX or
+# 0XXXXXXXXXX is reduced to the bare 10 digits rather than rejected
+# outright -- a real, common paste pattern, not user error.
+_MOBILE_PATTERN = re.compile(r"^\d{10}$")
 
 
 def _normalize_mobile_digits(v: str) -> str:
@@ -87,6 +90,13 @@ class OwnerSignupIn(BaseModel):
     # screen always sends a real one.
     username: str | None = None
     email: str | None = None
+    # Optional at the API level (same reasoning as username/email above --
+    # existing verify_*.py callers don't send these); the mobile Sign Up
+    # screen makes factory_name/state/industry mandatory client-side.
+    factory_address: str | None = None
+    factory_licence_no: str | None = None
+    state: str | None = None
+    industry: str | None = None
     # Must be explicitly True -- the endpoint itself rejects signup
     # without it (a real gate, not just a UI checkbox that could be
     # bypassed by any other client of this API).

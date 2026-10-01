@@ -309,6 +309,10 @@ def signup(request: Request, body: OwnerSignupIn, db: Session = Depends(get_db))
         email=body.email,
         password_hash=hash_password(body.password),
         factory_name=body.factory_name,
+        factory_address=body.factory_address,
+        factory_licence_no=body.factory_licence_no,
+        state=body.state,
+        industry=body.industry,
         consent_given_at=datetime.now(timezone.utc),
     )
     db.add(owner)
@@ -1414,6 +1418,18 @@ def get_home_alerts(
                 code="not_marked_today",
                 message=f"{not_marked_count} worker{'s' if not_marked_count != 1 else ''} not marked for today yet",
                 count=not_marked_count,
+            )
+        )
+
+    underage_count = sum(
+        1 for w in active_workers if w.dob and _age_years(w.dob, date_.today()) < MINIMUM_WORKING_AGE
+    )
+    if underage_count > 0:
+        alerts.append(
+            HomeAlertOut(
+                code="underage_workers",
+                message=f"{underage_count} worker{'s' if underage_count != 1 else ''} under the legal minimum working age ({MINIMUM_WORKING_AGE})",
+                count=underage_count,
             )
         )
 

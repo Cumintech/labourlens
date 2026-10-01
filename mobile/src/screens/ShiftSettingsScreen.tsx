@@ -148,7 +148,7 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
     <KeyboardScreen
       style={styles.container}
       contentContainerStyle={{ padding: spacing.md }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
     >
       <TouchableOpacity style={styles.helpbox} onPress={() => navigation.navigate("Profile")}>
         <Text style={styles.helpboxText}>
@@ -233,24 +233,24 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-  helpbox: { backgroundColor: colors.skyBlueLight, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
-  helpboxText: { fontSize: 12, color: colors.navy, lineHeight: 17 },
-  helpboxLink: { fontWeight: "700", color: colors.skyBlue },
-  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.xs },
+  helpbox: { backgroundColor: colors.divider, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
+  helpboxText: { fontSize: 12, color: colors.text, lineHeight: 17 },
+  helpboxLink: { fontWeight: "700", color: colors.primaryDark },
+  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.text, marginBottom: spacing.xs },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },
   input: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.sm,
     fontSize: 14,
-    color: colors.navy,
+    color: colors.text,
   },
   timeRow: { flexDirection: "row", gap: spacing.sm },
   timeInput: { flex: 1 },
   button: {
-    backgroundColor: colors.teal,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm + 4,
     alignItems: "center",
@@ -260,17 +260,17 @@ const styles = StyleSheet.create({
   buttonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
   addFormButtonRow: { flexDirection: "row", gap: spacing.sm },
   addFormButton: { flex: 1 },
-  cancelAddButton: { flex: 1, paddingVertical: spacing.sm + 4, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg, marginTop: spacing.md },
+  cancelAddButton: { flex: 1, paddingVertical: spacing.sm + 4, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.bg, marginTop: spacing.md },
   cancelAddButtonText: { color: colors.muted, fontSize: 14, fontWeight: "700" },
   shiftRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
     padding: spacing.sm + 2,
     marginBottom: spacing.xs,
   },
-  shiftLabel: { fontSize: 14, fontWeight: "700", color: colors.navy },
+  shiftLabel: { fontSize: 14, fontWeight: "700", color: colors.text },
   shiftTime: { fontSize: 11, color: colors.muted, marginTop: 1 },
-  removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700" },
+  removeLink: { color: colors.absent, fontSize: 12, fontWeight: "700" },
 });

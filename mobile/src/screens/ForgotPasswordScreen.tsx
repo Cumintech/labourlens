@@ -122,19 +122,19 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: "center", padding: spacing.lg, paddingBottom: spacing.xl * 2, backgroundColor: colors.white },
-  title: { fontSize: 22, fontWeight: "700", textAlign: "center", marginBottom: spacing.sm, color: colors.teal },
+  title: { fontSize: 22, fontWeight: "700", textAlign: "center", marginBottom: spacing.sm, color: colors.primary },
   subtitle: { fontSize: 13, color: colors.muted, textAlign: "center", marginBottom: spacing.lg, lineHeight: 18 },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.md },
   input: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
     padding: 12,
     fontSize: 16,
-    color: colors.navy,
+    color: colors.text,
   },
-  error: { color: colors.danger, marginTop: spacing.md, textAlign: "center" },
+  error: { color: colors.absent, marginTop: spacing.md, textAlign: "center" },
   button: {
-    backgroundColor: colors.teal,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     padding: 16,
     alignItems: "center",
@@ -142,5 +142,5 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
-  backLink: { color: colors.teal, fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: spacing.lg },
+  backLink: { color: colors.primary, fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: spacing.lg },
 });

@@ -1,52 +1,29 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import React from "react";
-import { Text } from "react-native";
+import BottomTabBar from "../components/BottomTabBar";
+import DashboardScreen from "../screens/DashboardScreen";
 import HomeScreen from "../screens/HomeScreen";
-import SettingsScreen from "../screens/SettingsScreen";
 import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
 import WageCalculationScreen from "../screens/WageCalculationScreen";
-import { colors } from "../theme";
+import WorkersScreen from "../screens/WorkersScreen";
 
 const Tab = createBottomTabNavigator();
 
-// Mounted as the root stack's "Home" screen -- Dashboard, WorkerEdit,
-// NewWorkerScan, and every other drill-down screen stay registered on
-// the outer stack (RootNavigator.tsx) untouched, so pushing into any of
-// them from a tab correctly overlays the tab bar (standard nested
-// tabs-inside-a-stack behavior), and every existing `navigation.navigate`
-// call elsewhere in the app keeps working exactly as it did before this
-// was added -- React Navigation resolves an unrecognized route name by
-// walking up to the parent stack automatically.
+// The app's 5 primary destinations, bottom-tabbed -- Today / Workers /
+// Attendance / Wages / Reports. Mounted as the root stack's "Home" screen
+// (RootNavigator.tsx); every other screen (WorkerEdit, AddWorker,
+// BiometricDevices, ...) stays registered as a sibling stack screen, so
+// pushing into any of them from a tab still overlays the tab bar the
+// normal way, and `navigation.navigate("SomeRootRoute")` from inside a
+// tab keeps resolving by walking up to the parent stack automatically.
 export default function MainTabs() {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.teal,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: { borderTopColor: colors.fieldBg },
-      }}
-    >
-      <Tab.Screen
-        name="HomeTab"
-        component={HomeScreen}
-        options={{ title: "Home", tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🏠</Text> }}
-      />
-      <Tab.Screen
-        name="FormsTab"
-        component={StatutoryFormsScreen}
-        options={{ title: "Forms & Reports", tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>🗂️</Text> }}
-      />
-      <Tab.Screen
-        name="WageCalculationTab"
-        component={WageCalculationScreen}
-        options={{ title: "Wage Calc", tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>💰</Text> }}
-      />
-      <Tab.Screen
-        name="SettingsTab"
-        component={SettingsScreen}
-        options={{ title: "Settings", tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>⚙️</Text> }}
-      />
+    <Tab.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <BottomTabBar {...props} />}>
+      <Tab.Screen name="TodayTab" component={HomeScreen} options={{ title: "Today" }} />
+      <Tab.Screen name="WorkersTab" component={WorkersScreen} options={{ title: "Workers" }} />
+      <Tab.Screen name="AttendanceTab" component={DashboardScreen} options={{ title: "Attendance" }} />
+      <Tab.Screen name="WagesTab" component={WageCalculationScreen} options={{ title: "Wages" }} />
+      <Tab.Screen name="ReportsTab" component={StatutoryFormsScreen} options={{ title: "Reports" }} />
     </Tab.Navigator>
   );
 }

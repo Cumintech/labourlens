@@ -19,8 +19,8 @@ function TextilesPattern() {
     <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
       <Defs>
         <Pattern id="weave" width="28" height="28" patternUnits="userSpaceOnUse">
-          <Line x1="0" y1="0" x2="28" y2="28" stroke={colors.teal} strokeWidth="1.2" opacity={0.06} />
-          <Line x1="28" y1="0" x2="0" y2="28" stroke={colors.teal} strokeWidth="1.2" opacity={0.06} />
+          <Line x1="0" y1="0" x2="28" y2="28" stroke={colors.primary} strokeWidth="1.2" opacity={0.06} />
+          <Line x1="28" y1="0" x2="0" y2="28" stroke={colors.primary} strokeWidth="1.2" opacity={0.06} />
         </Pattern>
       </Defs>
       <Rect x="0" y="0" width="100%" height="100%" fill="url(#weave)" />
@@ -33,8 +33,8 @@ function MetalPattern() {
     <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
       <Defs>
         <Pattern id="rivets" width="40" height="40" patternUnits="userSpaceOnUse">
-          <Rect x="0" y="0" width="40" height="40" fill="none" stroke={colors.navy} strokeWidth="0.8" opacity={0.05} />
-          <Circle cx="0" cy="0" r="2" fill={colors.navy} opacity={0.07} />
+          <Rect x="0" y="0" width="40" height="40" fill="none" stroke={colors.text} strokeWidth="0.8" opacity={0.05} />
+          <Circle cx="0" cy="0" r="2" fill={colors.text} opacity={0.07} />
         </Pattern>
       </Defs>
       <Rect x="0" y="0" width="100%" height="100%" fill="url(#rivets)" />
@@ -49,7 +49,7 @@ function FoodPattern() {
         <Pattern id="wheat" width="60" height="60" patternUnits="userSpaceOnUse">
           <Path
             d="M30 5 Q34 15 30 25 Q26 15 30 5 M30 20 Q35 30 30 40 Q25 30 30 20 M30 35 Q34 45 30 55"
-            stroke={colors.amber}
+            stroke={colors.leave}
             strokeWidth="1"
             fill="none"
             opacity={0.08}
@@ -68,7 +68,7 @@ function ChemicalsPattern() {
         <Pattern id="hex" width="50" height="44" patternUnits="userSpaceOnUse">
           <Path
             d="M12.5 2 L25 9 L25 23 L12.5 30 L0 23 L0 9 Z"
-            stroke={colors.teal}
+            stroke={colors.primary}
             strokeWidth="1"
             fill="none"
             opacity={0.07}
@@ -85,8 +85,8 @@ function AutomotivePattern() {
     <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
       <Defs>
         <Pattern id="gear" width="46" height="46" patternUnits="userSpaceOnUse">
-          <Circle cx="23" cy="23" r="14" stroke={colors.navy} strokeWidth="1" fill="none" opacity={0.06} />
-          <Circle cx="23" cy="23" r="4" stroke={colors.navy} strokeWidth="1" fill="none" opacity={0.06} />
+          <Circle cx="23" cy="23" r="14" stroke={colors.text} strokeWidth="1" fill="none" opacity={0.06} />
+          <Circle cx="23" cy="23" r="4" stroke={colors.text} strokeWidth="1" fill="none" opacity={0.06} />
         </Pattern>
       </Defs>
       <Rect x="0" y="0" width="100%" height="100%" fill="url(#gear)" />
@@ -99,8 +99,8 @@ function ElectronicsPattern() {
     <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
       <Defs>
         <Pattern id="circuit" width="36" height="36" patternUnits="userSpaceOnUse">
-          <Path d="M0 18 H14 V6 H36 M18 0 V14 H36" stroke={colors.teal} strokeWidth="1" fill="none" opacity={0.07} />
-          <Circle cx="14" cy="6" r="1.5" fill={colors.teal} opacity={0.1} />
+          <Path d="M0 18 H14 V6 H36 M18 0 V14 H36" stroke={colors.primary} strokeWidth="1" fill="none" opacity={0.07} />
+          <Circle cx="14" cy="6" r="1.5" fill={colors.primary} opacity={0.1} />
         </Pattern>
       </Defs>
       <Rect x="0" y="0" width="100%" height="100%" fill="url(#circuit)" />
@@ -113,8 +113,8 @@ function PlasticsPattern() {
     <Svg width="100%" height="100%" style={StyleSheet.absoluteFill}>
       <Defs>
         <Pattern id="pellets" width="30" height="30" patternUnits="userSpaceOnUse">
-          <Circle cx="8" cy="8" r="3" fill={colors.amber} opacity={0.06} />
-          <Circle cx="23" cy="20" r="3" fill={colors.amber} opacity={0.06} />
+          <Circle cx="8" cy="8" r="3" fill={colors.leave} opacity={0.06} />
+          <Circle cx="23" cy="20" r="3" fill={colors.leave} opacity={0.06} />
         </Pattern>
       </Defs>
       <Rect x="0" y="0" width="100%" height="100%" fill="url(#pellets)" />

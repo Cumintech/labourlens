@@ -143,19 +143,19 @@ export default function ProfileScreen({}: Props) {
 
 const styles = StyleSheet.create({
   container: { padding: spacing.md, backgroundColor: colors.white, flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy },
+  title: { fontSize: 22, fontWeight: "700", color: colors.text },
   subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },
   input: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.sm,
     fontSize: 14,
-    color: colors.navy,
+    color: colors.text,
   },
   button: {
-    backgroundColor: colors.teal,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm + 4,
     alignItems: "center",

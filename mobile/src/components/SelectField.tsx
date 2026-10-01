@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { colors, radius, spacing } from "../theme";
+import Icon from "./Icon";
+import { colors, font, radius, spacing, MIN_TOUCH_TARGET } from "../theme";
 
 export type SelectOption<T extends string> = { label: string; value: T };
 
@@ -11,15 +12,24 @@ type Props<T extends string> = {
   onChange: (value: T) => void;
   placeholder?: string;
   disabled?: boolean;
+  // Bordered/white-background look (Reports' "Report"/"Time period"/
+  // "Worker" selects) instead of the default filled-gray look used
+  // everywhere else (Gender, Worker Type, ...). Purely visual.
+  outlined?: boolean;
 };
 
 // One reusable dropdown pattern for every "pick one of a short list"
-// input in the app (Gender, Worker Type, the Forms picker, the Worker
-// picker, the OT-hours popup) -- tapping the field opens a modal list,
-// tapping a row selects it and closes. Matches DateField's look (same
-// tap-to-open field shell) so all "structured choice" inputs feel like
-// one family instead of a mix of buttons/chips/free text.
-export default function SelectField<T extends string>({ label, value, options, onChange, placeholder = "Select", disabled = false }: Props<T>) {
+// input in the app -- tapping the field opens a modal list, tapping a
+// row selects it and closes.
+export default function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder = "Select",
+  disabled = false,
+  outlined = false,
+}: Props<T>) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
 
@@ -27,12 +37,14 @@ export default function SelectField<T extends string>({ label, value, options, o
     <View style={styles.fieldWrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TouchableOpacity
-        style={[styles.input, disabled && styles.inputDisabled]}
+        style={[styles.input, outlined && styles.inputOutlined, disabled && styles.inputDisabled]}
         onPress={() => !disabled && setOpen(true)}
         disabled={disabled}
       >
-        <Text style={selected ? styles.valueText : styles.placeholderText}>{selected ? selected.label : placeholder}</Text>
-        <Text style={styles.chevron}>▾</Text>
+        <Text style={[selected ? styles.valueText : styles.placeholderText, disabled && styles.textDisabled]} numberOfLines={1}>
+          {selected ? selected.label : placeholder}
+        </Text>
+        <Icon name="chevronDown" size={16} color={disabled ? colors.muted : colors.text} />
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -67,27 +79,29 @@ export default function SelectField<T extends string>({ label, value, options, o
 
 const styles = StyleSheet.create({
   fieldWrap: { marginBottom: spacing.md },
-  label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
+  label: { fontSize: 12, fontFamily: font.semiBold, color: colors.muted, marginBottom: spacing.xs },
   input: {
-    backgroundColor: colors.fieldBg,
-    borderRadius: radius.sm,
-    padding: 12,
+    minHeight: MIN_TOUCH_TARGET,
+    backgroundColor: colors.bg,
+    borderRadius: radius.control,
+    paddingHorizontal: spacing.sm + 4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  inputDisabled: { opacity: 0.6 },
-  valueText: { fontSize: 16, color: colors.navy },
-  placeholderText: { fontSize: 16, color: colors.muted },
-  chevron: { color: colors.muted, fontSize: 14 },
+  inputOutlined: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  inputDisabled: { opacity: 0.55 },
+  valueText: { fontSize: 15, fontFamily: font.regular, color: colors.text, flexShrink: 1 },
+  placeholderText: { fontSize: 15, fontFamily: font.regular, color: colors.muted, flexShrink: 1 },
+  textDisabled: { color: colors.muted },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: colors.white, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, maxHeight: "70%" },
-  sheetTitle: { fontSize: 14, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
+  sheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.hero, borderTopRightRadius: radius.hero, padding: spacing.md, maxHeight: "70%" },
+  sheetTitle: { fontSize: 14, fontFamily: font.semiBold, color: colors.text, marginBottom: spacing.sm },
   list: { flexGrow: 0 },
-  option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
-  optionSelected: { backgroundColor: colors.tealLight },
-  optionText: { fontSize: 15, color: colors.navy },
-  optionTextSelected: { color: colors.tealDark, fontWeight: "700" },
+  option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.control },
+  optionSelected: { backgroundColor: colors.primarySoft },
+  optionText: { fontSize: 15, fontFamily: font.regular, color: colors.text },
+  optionTextSelected: { color: colors.primaryDark, fontFamily: font.semiBold },
   cancelButton: { paddingVertical: 14, alignItems: "center", marginTop: spacing.xs },
-  cancelText: { color: colors.muted, fontWeight: "700" },
+  cancelText: { color: colors.muted, fontFamily: font.semiBold },
 });

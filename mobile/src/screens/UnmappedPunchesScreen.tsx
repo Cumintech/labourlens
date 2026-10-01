@@ -141,13 +141,13 @@ export default function UnmappedPunchesScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { padding: spacing.lg, paddingBottom: spacing.xl },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy },
+  title: { fontSize: 22, fontWeight: "700", color: colors.text },
   subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
   empty: { fontSize: 13, color: colors.muted },
-  punchCard: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
-  punchDevice: { fontSize: 15, fontWeight: "700", color: colors.navy },
+  punchCard: { backgroundColor: colors.bg, borderRadius: radius.control, padding: spacing.md, marginBottom: spacing.sm },
+  punchDevice: { fontSize: 15, fontWeight: "700", color: colors.text },
   punchMeta: { fontSize: 12, color: colors.muted, marginTop: 2, marginBottom: spacing.sm },
-  resolveButton: { backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 10, alignItems: "center", marginTop: spacing.xs },
+  resolveButton: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 10, alignItems: "center", marginTop: spacing.xs },
   resolveButtonDisabled: { opacity: 0.6 },
   resolveButtonText: { color: colors.white, fontWeight: "700", fontSize: 13 },
 });

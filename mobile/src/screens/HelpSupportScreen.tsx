@@ -50,11 +50,11 @@ export default function HelpSupportScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { padding: spacing.lg, paddingBottom: spacing.xl },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy, marginBottom: spacing.md },
-  card: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.sm },
-  question: { fontSize: 13, fontWeight: "700", color: colors.navy },
+  title: { fontSize: 22, fontWeight: "700", color: colors.text, marginBottom: spacing.md },
+  card: { backgroundColor: colors.bg, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.sm },
+  question: { fontSize: 13, fontWeight: "700", color: colors.text },
   answer: { fontSize: 12, color: colors.muted, marginTop: 4, lineHeight: 18 },
-  contactHeading: { fontSize: 14, fontWeight: "700", color: colors.navy, marginTop: spacing.lg, marginBottom: spacing.xs },
-  contactCard: { backgroundColor: colors.tealLight, borderRadius: radius.sm, padding: spacing.sm + 4 },
-  contactText: { fontSize: 13, color: colors.tealDark, fontWeight: "600" },
+  contactHeading: { fontSize: 14, fontWeight: "700", color: colors.text, marginTop: spacing.lg, marginBottom: spacing.xs },
+  contactCard: { backgroundColor: colors.primarySoft, borderRadius: radius.sm, padding: spacing.sm + 4 },
+  contactText: { fontSize: 13, color: colors.primaryDark, fontWeight: "600" },
 });

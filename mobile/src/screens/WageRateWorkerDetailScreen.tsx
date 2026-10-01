@@ -23,6 +23,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { formatDateShort, formatINR } from "../format";
 import { sharePdfBytes } from "../pdfShare";
 import { colors, radius, spacing } from "../theme";
 
@@ -181,7 +182,7 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingBottom: spacing.xl * 2 + insets.bottom }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
     >
       <Text style={styles.title}>{workerName}</Text>
 
@@ -228,7 +229,7 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
             </Text>
             <TouchableOpacity onPress={handleGenerateCard} disabled={generatingCard}>
               {generatingCard ? (
-                <ActivityIndicator color={colors.teal} size="small" />
+                <ActivityIndicator color={colors.primary} size="small" />
               ) : (
                 <Text style={styles.idCardLink}>{worker.photo_key ? "View / Reprint" : "Generate now"}</Text>
               )}
@@ -259,9 +260,9 @@ export default function WageRateWorkerDetailScreen({ route, navigation }: Props)
         {currentRate ? (
           <View style={styles.rateCard}>
             <Text style={styles.rateValue}>
-              ₹{currentRate.basic} / {currentRate.rate_type === "daily" ? "day" : "month"}
+              {formatINR(currentRate.basic)} / {currentRate.rate_type === "daily" ? "day" : "month"}
             </Text>
-            <Text style={styles.rateDetail}>Effective from {currentRate.effective_from}</Text>
+            <Text style={styles.rateDetail}>Effective from {formatDateShort(currentRate.effective_from)}</Text>
           </View>
         ) : (
           <TouchableOpacity style={styles.rateCardEmpty} onPress={() => navigation.navigate("WageProfile", { workerId, workerName })}>
@@ -285,30 +286,30 @@ function ProfileRow({ label, value, warn }: { label: string; value: string; warn
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { padding: spacing.lg, paddingBottom: spacing.xl * 2 },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy, marginBottom: spacing.md },
-  profileCard: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.sm + 4, marginBottom: spacing.md },
+  title: { fontSize: 22, fontWeight: "700", color: colors.text, marginBottom: spacing.md },
+  profileCard: { backgroundColor: colors.bg, borderRadius: radius.control, padding: spacing.sm + 4, marginBottom: spacing.md },
   profileRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
   profileLabel: { fontSize: 13, color: colors.muted },
-  profileValue: { fontSize: 13, fontWeight: "700", color: colors.navy },
-  profileValueWarn: { fontSize: 11.5, fontWeight: "700", color: colors.amberDark },
-  profileValueOk: { fontSize: 11.5, fontWeight: "700", color: colors.tealDark },
-  idCardLink: { fontSize: 12, fontWeight: "700", color: colors.teal },
+  profileValue: { fontSize: 13, fontWeight: "700", color: colors.text },
+  profileValueWarn: { fontSize: 11.5, fontWeight: "700", color: colors.leave },
+  profileValueOk: { fontSize: 11.5, fontWeight: "700", color: colors.primaryDark },
+  idCardLink: { fontSize: 12, fontWeight: "700", color: colors.primary },
   designationValueRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   editIcon: { fontSize: 13, color: colors.muted },
   designationRow: { paddingVertical: 6 },
   designationEditRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: 4 },
-  designationInput: { flex: 1, backgroundColor: colors.white, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: colors.navy },
-  designationSaveButton: { backgroundColor: colors.teal, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 8 },
+  designationInput: { flex: 1, backgroundColor: colors.white, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, color: colors.text },
+  designationSaveButton: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 8 },
   designationSaveText: { color: colors.white, fontSize: 12, fontWeight: "700" },
   buttonDisabled: { opacity: 0.6 },
-  wageCard: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md },
+  wageCard: { backgroundColor: colors.bg, borderRadius: radius.control, padding: spacing.md },
   wageCardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
-  wageCardTitle: { fontSize: 13, fontWeight: "800", color: colors.navy, textTransform: "uppercase" },
-  wageCardEdit: { fontSize: 12.5, fontWeight: "700", color: colors.teal },
+  wageCardTitle: { fontSize: 13, fontWeight: "800", color: colors.text, textTransform: "uppercase" },
+  wageCardEdit: { fontSize: 12.5, fontWeight: "700", color: colors.primary },
   helper: { fontSize: 11, color: colors.muted, marginTop: -spacing.sm, marginBottom: spacing.sm },
-  rateCard: { backgroundColor: colors.tealLight, borderRadius: radius.md, padding: spacing.sm + 4 },
-  rateValue: { fontSize: 20, fontWeight: "700", color: colors.tealDark },
-  rateDetail: { fontSize: 12, color: colors.tealDark, marginTop: 2 },
-  rateCardEmpty: { backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.sm + 4, alignItems: "center" },
+  rateCard: { backgroundColor: colors.primarySoft, borderRadius: radius.control, padding: spacing.sm + 4 },
+  rateValue: { fontSize: 20, fontWeight: "700", color: colors.primaryDark },
+  rateDetail: { fontSize: 12, color: colors.primaryDark, marginTop: 2 },
+  rateCardEmpty: { backgroundColor: colors.white, borderRadius: radius.control, padding: spacing.sm + 4, alignItems: "center" },
   empty: { fontSize: 13, color: colors.muted },
 });

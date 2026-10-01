@@ -107,7 +107,7 @@ export default function WageRateWorkersScreen({ navigation }: Props) {
       contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
       data={workers}
       keyExtractor={(w) => String(w.id)}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       ListHeaderComponent={
         <>
           <View style={styles.headerRow}>
@@ -152,24 +152,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { padding: spacing.md, paddingBottom: spacing.xl },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy },
+  title: { fontSize: 22, fontWeight: "700", color: colors.text },
   typesLink: { paddingVertical: spacing.xs },
-  typesLinkText: { color: colors.teal, fontSize: 13, fontWeight: "700" },
-  infoNote: { backgroundColor: colors.tealLight, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
-  infoNoteText: { color: colors.tealDark, fontSize: 12, lineHeight: 17 },
+  typesLinkText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  infoNote: { backgroundColor: colors.primarySoft, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
+  infoNoteText: { color: colors.primaryDark, fontSize: 12, lineHeight: 17 },
   empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.bg,
     borderRadius: radius.sm,
     padding: spacing.sm + 4,
     marginBottom: spacing.xs,
   },
-  name: { fontSize: 15, fontWeight: "700", color: colors.navy },
+  name: { fontSize: 15, fontWeight: "700", color: colors.text },
   meta: { fontSize: 11.5, color: colors.muted, marginTop: 2 },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: spacing.sm },
-  dotGreen: { backgroundColor: colors.teal },
-  dotAmber: { backgroundColor: colors.amber },
+  dotGreen: { backgroundColor: colors.primary },
+  dotAmber: { backgroundColor: colors.leave },
   arrow: { fontSize: 22, color: colors.muted },
 });

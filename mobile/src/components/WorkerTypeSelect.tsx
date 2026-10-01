@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { ActivityIndicator, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { WorkerType, createWorkerType } from "../api/client";
-import { formatINR } from "../format";
 import { colors, radius, spacing } from "../theme";
 
 type Props = {
@@ -32,7 +31,7 @@ export default function WorkerTypeSelect({ label, token, workerTypes, value, onC
   const [saving, setSaving] = useState(false);
 
   const selected = workerTypes.find((t) => t.id === value);
-  const selectedLabel = selected ? `${selected.name} (${formatINR(selected.default_rate)}/${selected.default_rate_type === "daily" ? "day" : "month"})` : noneLabel;
+  const selectedLabel = selected ? `${selected.name} (₹${selected.default_rate}/${selected.default_rate_type === "daily" ? "day" : "month"})` : noneLabel;
 
   const filtered = workerTypes.filter((t) => t.name.toLowerCase().includes(query.trim().toLowerCase()));
   const exactMatch = workerTypes.some((t) => t.name.toLowerCase() === query.trim().toLowerCase());
@@ -107,7 +106,7 @@ export default function WorkerTypeSelect({ label, token, workerTypes, value, onC
                       }}
                     >
                       <Text style={[styles.optionText, item.id === value && styles.optionTextSelected]}>
-                        {item.name} ({formatINR(item.default_rate)}/{item.default_rate_type === "daily" ? "day" : "month"})
+                        {item.name} (₹{item.default_rate}/{item.default_rate_type === "daily" ? "day" : "month"})
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -176,32 +175,32 @@ export default function WorkerTypeSelect({ label, token, workerTypes, value, onC
 const styles = StyleSheet.create({
   fieldWrap: { marginBottom: spacing.md },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
-  input: { backgroundColor: colors.bg, borderRadius: radius.sm, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  input: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   inputDisabled: { opacity: 0.6 },
-  valueText: { fontSize: 16, color: colors.text },
+  valueText: { fontSize: 16, color: colors.navy },
   placeholderText: { fontSize: 16, color: colors.muted },
   chevron: { color: colors.muted, fontSize: 14 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: colors.white, borderTopLeftRadius: radius.hero, borderTopRightRadius: radius.hero, padding: spacing.md, maxHeight: "75%" },
-  sheetTitle: { fontSize: 14, fontWeight: "700", color: colors.text, marginBottom: spacing.sm },
-  searchInput: { backgroundColor: colors.bg, borderRadius: radius.sm, padding: 12, fontSize: 15, color: colors.text, marginBottom: spacing.sm },
+  sheet: { backgroundColor: colors.white, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, maxHeight: "75%" },
+  sheetTitle: { fontSize: 14, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
+  searchInput: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 15, color: colors.navy, marginBottom: spacing.sm },
   list: { flexGrow: 0 },
   option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
-  optionSelected: { backgroundColor: colors.primarySoft },
-  optionText: { fontSize: 15, color: colors.text },
-  optionTextSelected: { color: colors.primaryDark, fontWeight: "700" },
-  createRow: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.primarySoft, marginTop: 4 },
-  createRowText: { color: colors.primaryDark, fontWeight: "700", fontSize: 15 },
+  optionSelected: { backgroundColor: colors.tealLight },
+  optionText: { fontSize: 15, color: colors.navy },
+  optionTextSelected: { color: colors.tealDark, fontWeight: "700" },
+  createRow: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.tealLight, marginTop: 4 },
+  createRowText: { color: colors.tealDark, fontWeight: "700", fontSize: 15 },
   cancelButton: { paddingVertical: 14, alignItems: "center", marginTop: spacing.xs },
   cancelText: { color: colors.muted, fontWeight: "700" },
-  cancelButtonSmall: { flex: 1, paddingVertical: 14, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.bg },
+  cancelButtonSmall: { flex: 1, paddingVertical: 14, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
   toggleRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm },
-  toggleOption: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: 12, alignItems: "center" },
-  toggleOptionSelected: { backgroundColor: colors.primary },
-  toggleText: { fontSize: 13, fontWeight: "600", color: colors.text },
+  toggleOption: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: 12, alignItems: "center" },
+  toggleOptionSelected: { backgroundColor: colors.teal },
+  toggleText: { fontSize: 13, fontWeight: "600", color: colors.navy },
   toggleTextSelected: { color: colors.white },
   createButtonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
-  saveButton: { flex: 2, backgroundColor: colors.primary, borderRadius: radius.sm, padding: 14, alignItems: "center" },
+  saveButton: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, padding: 14, alignItems: "center" },
   saveText: { color: colors.white, fontWeight: "700" },
   buttonDisabled: { opacity: 0.6 },
 });

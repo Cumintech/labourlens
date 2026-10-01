@@ -86,17 +86,17 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: spacing.xs, flexWrap: "wrap" },
   tile: { flexGrow: 1, flexBasis: "22%", borderRadius: radius.sm, paddingVertical: spacing.sm + 2, alignItems: "center" },
   tileText: { fontSize: 12, fontWeight: "700" },
-  tilePresent: { backgroundColor: colors.primarySoft },
-  textPresent: { color: colors.primaryDark },
-  tileAbsent: { backgroundColor: colors.divider },
-  textAbsent: { color: colors.absent },
-  tileLeave: { backgroundColor: colors.warnBg },
-  textLeave: { color: colors.leave },
-  tileOt: { backgroundColor: colors.warnBg },
-  textOt: { color: colors.primaryDark },
+  tilePresent: { backgroundColor: colors.tealLight },
+  textPresent: { color: colors.tealDark },
+  tileAbsent: { backgroundColor: colors.dangerLight },
+  textAbsent: { color: colors.danger },
+  tileLeave: { backgroundColor: colors.amberLight },
+  textLeave: { color: colors.amberDark },
+  tileOt: { backgroundColor: colors.violetLight },
+  textOt: { color: colors.violet },
   // Not yet marked / no data -- a real status (see the 3-state switch
   // above), not a generic field background, so it gets its own token
   // rather than reusing fieldBg/muted.
-  tileNeutral: { backgroundColor: colors.divider },
-  textNeutral: { color: colors.muted },
+  tileNeutral: { backgroundColor: colors.neutralLight },
+  textNeutral: { color: colors.neutral },
 });

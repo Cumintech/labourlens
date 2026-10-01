@@ -9,7 +9,6 @@ import SelectField from "../components/SelectField";
 import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { formatINR } from "../format";
 import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkerTypes">;
@@ -20,7 +19,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "WorkerTypes">;
 // way in), so any custom value typed there just doesn't match a preset
 // and the picker shows its placeholder instead of a wrong selection.
 const RATE_PRESETS = Array.from({ length: (3000 - 500) / 50 + 1 }, (_, i) => String(500 + i * 50));
-const RATE_PRESET_OPTIONS = RATE_PRESETS.map((r) => ({ label: formatINR(Number(r)), value: r }));
+const RATE_PRESET_OPTIONS = RATE_PRESETS.map((r) => ({ label: `₹${r}`, value: r }));
 
 // Categories like Skilled/Unskilled/Helper, each with a default rate --
 // assigning one to a worker (from the Wage Rate worker detail screen)
@@ -153,7 +152,7 @@ export default function WorkerTypesScreen({}: Props) {
   return (
     <KeyboardScreen
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
     >
       <Text style={styles.title}>Worker Types</Text>
       <Text style={styles.subtitle}>Categories like Skilled, Unskilled, or Helper, each with a default wage rate.</Text>
@@ -166,7 +165,7 @@ export default function WorkerTypesScreen({}: Props) {
             <View style={{ flex: 1 }}>
               <Text style={styles.typeName}>{type.name}</Text>
               <Text style={styles.typeRate}>
-                {formatINR(type.default_rate)} / {type.default_rate_type === "daily" ? "day" : "month"}
+                ₹{type.default_rate} / {type.default_rate_type === "daily" ? "day" : "month"}
               </Text>
             </View>
             <Text style={styles.chev}>›</Text>
@@ -256,33 +255,33 @@ export default function WorkerTypesScreen({}: Props) {
 
 const styles = StyleSheet.create({
   container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: "700", color: colors.text },
+  title: { fontSize: 22, fontWeight: "700", color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
   empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
-  typeRow: { flexDirection: "row", alignItems: "center", backgroundColor: colors.bg, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.xs, gap: spacing.sm },
-  typeName: { fontSize: 14, fontWeight: "700", color: colors.text },
+  typeRow: { flexDirection: "row", alignItems: "center", backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.xs, gap: spacing.sm },
+  typeName: { fontSize: 14, fontWeight: "700", color: colors.navy },
   typeRate: { fontSize: 12, color: colors.muted, marginTop: 2 },
   chev: { color: colors.muted, fontSize: 18 },
-  removeLink: { color: colors.absent, fontSize: 12, fontWeight: "700" },
-  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.text, marginBottom: spacing.sm },
+  removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700" },
+  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: radius.hero,
-    borderTopRightRadius: radius.hero,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     padding: spacing.md,
     maxHeight: "85%",
   },
   fieldWrap: { marginBottom: spacing.md },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
-  input: { backgroundColor: colors.bg, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.text },
+  input: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.navy },
   buttonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
-  cancelButton: { flex: 1, paddingVertical: 16, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.bg },
+  cancelButton: { flex: 1, paddingVertical: 16, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
   cancelText: { color: colors.muted, fontWeight: "700" },
-  saveButton: { flex: 2, backgroundColor: colors.primary, borderRadius: radius.sm, padding: 16, alignItems: "center" },
+  saveButton: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, padding: 16, alignItems: "center" },
   buttonDisabled: { opacity: 0.6 },
   saveText: { color: colors.white, fontSize: 16, fontWeight: "700" },
-  button: { backgroundColor: colors.primary, borderRadius: radius.sm, padding: 16, alignItems: "center", marginTop: spacing.sm },
+  button: { backgroundColor: colors.teal, borderRadius: radius.sm, padding: 16, alignItems: "center", marginTop: spacing.sm },
   buttonText: { color: colors.white, fontSize: 15, fontWeight: "700" },
   removeTypeLink: { alignItems: "center", marginTop: spacing.md },
 });

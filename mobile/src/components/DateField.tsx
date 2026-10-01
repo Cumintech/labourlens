@@ -1,3 +1,4 @@
+import { Calendar } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";
@@ -138,7 +139,7 @@ export default function DateField({
           value={parts.day}
           onChangeText={handleDayChange}
           placeholder="DD"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.textSecondary}
           keyboardType="number-pad"
           maxLength={2}
           editable={!disabled}
@@ -150,7 +151,7 @@ export default function DateField({
           value={parts.month}
           onChangeText={handleMonthChange}
           placeholder="MM"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.textSecondary}
           keyboardType="number-pad"
           maxLength={2}
           editable={!disabled}
@@ -162,7 +163,7 @@ export default function DateField({
           value={parts.year}
           onChangeText={handleYearChange}
           placeholder="YYYY"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.textSecondary}
           keyboardType="number-pad"
           maxLength={4}
           editable={!disabled}
@@ -171,8 +172,10 @@ export default function DateField({
           style={styles.calendarButton}
           onPress={() => !disabled && setShowPicker(true)}
           disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel="Open date picker"
         >
-          <Text style={styles.calendarButtonText}>📅</Text>
+          <Calendar size={18} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
       {!value && !parts.day && !parts.month && !parts.year && (
@@ -196,32 +199,34 @@ export default function DateField({
 
 const styles = StyleSheet.create({
   fieldWrap: { marginBottom: spacing.md },
-  label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
+  label: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.bg,
+    backgroundColor: colors.ground,
     borderRadius: radius.sm,
     paddingHorizontal: 8,
+    minHeight: 44,
   },
   inputDisabled: { opacity: 0.6 },
   partInputDay: {
     width: 32,
     paddingVertical: 12,
+    fontFamily: "PlusJakartaSans_500Medium",
     fontSize: 16,
-    color: colors.text,
+    color: colors.navy,
     textAlign: "center",
   },
   partInputYear: {
     width: 52,
     paddingVertical: 12,
+    fontFamily: "PlusJakartaSans_500Medium",
     fontSize: 16,
-    color: colors.text,
+    color: colors.navy,
     textAlign: "center",
   },
-  separator: { color: colors.muted, fontSize: 16 },
+  separator: { color: colors.textSecondary, fontSize: 16 },
   calendarButton: { marginLeft: "auto", padding: 8 },
-  calendarButtonText: { fontSize: 18 },
-  placeholderHint: { fontSize: 11, color: colors.muted, marginTop: 4 },
-  errorText: { fontSize: 11, color: colors.absent, marginTop: 4 },
+  placeholderHint: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.textSecondary, marginTop: 4 },
+  errorText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.danger, marginTop: 4 },
 });

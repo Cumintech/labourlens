@@ -31,7 +31,6 @@ import { ListSkeleton } from "../components/Skeleton";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { formatDateShort, formatINR } from "../format";
 import { colors, radius, spacing } from "../theme";
 import { autofillFromWorkerType } from "../workerTypeAutofill";
 
@@ -106,8 +105,8 @@ export default function WageProfileScreen({ route, navigation }: Props) {
   }, [token, workerId]);
 
   // Selecting a type here both assigns it to the worker (so it behaves
-  // identically to picking one on WageRateWorkerDetailScreen -- one
-  // worker type master list, used consistently everywhere it appears)
+  // identically to picking one on the Worker Profile hub's Wages tab --
+  // one worker type master list, used consistently everywhere it appears)
   // and auto-fills the rate/PF fields below from its defaults, still
   // fully editable afterward. Only pre-fills fields that are currently
   // blank/zero, so picking a type after already typing a custom basic
@@ -239,7 +238,7 @@ export default function WageProfileScreen({ route, navigation }: Props) {
   return (
     <KeyboardScreen
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
     >
       <View style={styles.titleRow}>
         <View style={{ flex: 1 }}>
@@ -260,12 +259,12 @@ export default function WageProfileScreen({ route, navigation }: Props) {
       ) : (
         history.map((h) => (
           <View key={h.id} style={styles.historyRow}>
-            <Text style={styles.historyEffective}>From {formatDateShort(h.effective_from)}</Text>
+            <Text style={styles.historyEffective}>From {h.effective_from}</Text>
             <Text style={styles.historyDetail}>
-              Basic {formatINR(h.basic)}/{h.rate_type === "daily" ? "day" : "month"} · DA {formatINR(h.da)} · HRA {formatINR(h.hra)}
+              Basic ₹{h.basic}/{h.rate_type === "daily" ? "day" : "month"} · DA ₹{h.da} · HRA ₹{h.hra}
             </Text>
             <Text style={styles.historyDetail}>
-              PF {h.pf_rate}% · ESI {h.esi_rate}% · LWF {formatINR(h.lwf_amount)}
+              PF {h.pf_rate}% · ESI {h.esi_rate}% · LWF ₹{h.lwf_amount}
             </Text>
           </View>
         ))
@@ -350,32 +349,32 @@ function Field({
 const styles = StyleSheet.create({
   container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
   titleRow: { flexDirection: "row", alignItems: "flex-start" },
-  skipLink: { color: colors.primary, fontSize: 13, fontWeight: "700", marginTop: spacing.xs },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.text },
+  skipLink: { color: colors.teal, fontSize: 13, fontWeight: "700", marginTop: spacing.xs },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
   empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
-  historyRow: { backgroundColor: colors.bg, borderRadius: radius.sm, padding: spacing.sm + 2, marginBottom: spacing.xs },
-  historyEffective: { fontSize: 13, fontWeight: "700", color: colors.text },
+  historyRow: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: spacing.sm + 2, marginBottom: spacing.xs },
+  historyEffective: { fontSize: 13, fontWeight: "700", color: colors.navy },
   historyDetail: { fontSize: 11, color: colors.muted, marginTop: 2 },
-  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.text, marginTop: spacing.lg, marginBottom: spacing.xs },
+  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginTop: spacing.lg, marginBottom: spacing.xs },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
   toggleRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
-  toggleOption: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: 12, alignItems: "center" },
-  toggleOptionSelected: { backgroundColor: colors.primary },
-  toggleText: { fontSize: 13, fontWeight: "600", color: colors.text },
+  toggleOption: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: 12, alignItems: "center" },
+  toggleOptionSelected: { backgroundColor: colors.teal },
+  toggleText: { fontSize: 13, fontWeight: "600", color: colors.navy },
   toggleTextSelected: { color: colors.white },
   fieldWrap: { marginBottom: spacing.md },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
   input: {
     borderWidth: 0,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.fieldBg,
     borderRadius: radius.sm,
     padding: 12,
     fontSize: 16,
-    color: colors.text,
+    color: colors.navy,
   },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.teal,
     borderRadius: radius.sm,
     padding: 16,
     alignItems: "center",

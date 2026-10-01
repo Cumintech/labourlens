@@ -1,6 +1,8 @@
+import { TriangleAlert } from "lucide-react-native";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { colors, radius, spacing } from "../theme";
+import { StyleSheet, Text, View } from "react-native";
+import Button from "./ui/Button";
+import { colors, spacing } from "../theme";
 
 type Props = {
   message?: string;
@@ -15,19 +17,15 @@ type Props = {
 export default function ErrorState({ message = "Couldn't load this. Check your connection and try again.", onRetry }: Props) {
   return (
     <View style={styles.container}>
-      <Text style={styles.emoji}>⚠️</Text>
+      <TriangleAlert size={32} color={colors.warning} style={{ marginBottom: spacing.sm }} />
       <Text style={styles.message}>{message}</Text>
-      <TouchableOpacity style={styles.button} onPress={onRetry}>
-        <Text style={styles.buttonText}>Retry</Text>
-      </TouchableOpacity>
+      <Button title="Retry" onPress={onRetry} style={styles.button} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
-  emoji: { fontSize: 32, marginBottom: spacing.sm },
-  message: { fontSize: 14, color: colors.muted, textAlign: "center", marginBottom: spacing.md },
-  button: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 10, paddingHorizontal: spacing.lg },
-  buttonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+  message: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 14, color: colors.textSecondary, textAlign: "center", marginBottom: spacing.md },
+  button: { paddingHorizontal: spacing.lg, minHeight: 40 },
 });

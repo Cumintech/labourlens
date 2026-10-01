@@ -246,7 +246,7 @@ export default function DeviceUserMappingScreen({ route, navigation }: Props) {
             placeholderTextColor={colors.muted}
           />
           <TouchableOpacity style={[styles.buttonGhost, verifying && styles.buttonDisabled]} onPress={handleVerify} disabled={verifying}>
-            {verifying ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.buttonGhostText}>Check latest punch</Text>}
+            {verifying ? <ActivityIndicator color={colors.teal} /> : <Text style={styles.buttonGhostText}>Check latest punch</Text>}
           </TouchableOpacity>
           {verifyMessage && <Text style={styles.verifyMessage}>{verifyMessage}</Text>}
         </View>
@@ -257,22 +257,22 @@ export default function DeviceUserMappingScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: "700", color: colors.text },
+  title: { fontSize: 22, fontWeight: "700", color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
-  sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.text, marginTop: spacing.lg, marginBottom: spacing.sm, textTransform: "uppercase" },
+  sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.lg, marginBottom: spacing.sm, textTransform: "uppercase" },
   empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.sm },
   mappingRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.bg,
+    backgroundColor: colors.fieldBg,
     borderRadius: radius.sm,
     padding: spacing.sm + 4,
     marginBottom: spacing.xs,
   },
-  mappingLine: { fontSize: 14, fontWeight: "700", color: colors.text, flexShrink: 1 },
-  mappingArrow: { color: colors.primary, fontWeight: "700" },
-  removeLink: { color: colors.absent, fontSize: 12, fontWeight: "700", marginLeft: spacing.sm },
+  mappingLine: { fontSize: 14, fontWeight: "700", color: colors.navy, flexShrink: 1 },
+  mappingArrow: { color: colors.teal, fontWeight: "700" },
+  removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700", marginLeft: spacing.sm },
   collapsibleHead: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -280,19 +280,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 4,
     marginTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.bg,
+    borderTopColor: colors.fieldBg,
   },
-  collapsibleHeadText: { fontSize: 13, fontWeight: "700", color: colors.text },
+  collapsibleHeadText: { fontSize: 13, fontWeight: "700", color: colors.navy },
   collapsibleChevron: { fontSize: 16, color: colors.muted },
   collapsibleBody: { paddingTop: spacing.xs },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
-  input: { backgroundColor: colors.bg, borderRadius: radius.sm, padding: 12, fontSize: 15, color: colors.text, marginBottom: spacing.md },
+  input: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 15, color: colors.navy, marginBottom: spacing.md },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
-  button: { backgroundColor: colors.primary, borderRadius: radius.sm, padding: 14, alignItems: "center" },
+  button: { backgroundColor: colors.teal, borderRadius: radius.sm, padding: 14, alignItems: "center" },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: colors.white, fontWeight: "700", fontSize: 15 },
-  buttonGhost: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, padding: 14, alignItems: "center" },
-  buttonGhostText: { color: colors.primary, fontWeight: "700", fontSize: 15 },
-  altLink: { color: colors.primary, fontSize: 13, fontWeight: "600", marginTop: spacing.sm, textAlign: "center" },
-  verifyMessage: { fontSize: 13, color: colors.text, marginTop: spacing.sm, fontWeight: "600" },
+  buttonGhost: { borderWidth: 1.5, borderColor: colors.teal, borderRadius: radius.sm, padding: 14, alignItems: "center" },
+  buttonGhostText: { color: colors.teal, fontWeight: "700", fontSize: 15 },
+  altLink: { color: colors.teal, fontSize: 13, fontWeight: "600", marginTop: spacing.sm, textAlign: "center" },
+  verifyMessage: { fontSize: 13, color: colors.navy, marginTop: spacing.sm, fontWeight: "600" },
 });

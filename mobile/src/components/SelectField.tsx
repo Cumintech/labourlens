@@ -1,9 +1,12 @@
+import { ChevronDown } from "lucide-react-native";
 import React, { useState } from "react";
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import Icon from "./Icon";
-import { colors, font, radius, spacing, MIN_TOUCH_TARGET } from "../theme";
+import { colors, radius, spacing } from "../theme";
 
-export type SelectOption<T extends string> = { label: string; value: T };
+// `header: true` marks a non-selectable section heading row (value is
+// never matched against the field's current value) -- used to group
+// long option lists, e.g. the Reports form-type picker, under headings.
+export type SelectOption<T extends string> = { label: string; value: T; header?: boolean };
 
 type Props<T extends string> = {
   label: string;
@@ -12,24 +15,15 @@ type Props<T extends string> = {
   onChange: (value: T) => void;
   placeholder?: string;
   disabled?: boolean;
-  // Bordered/white-background look (Reports' "Report"/"Time period"/
-  // "Worker" selects) instead of the default filled-gray look used
-  // everywhere else (Gender, Worker Type, ...). Purely visual.
-  outlined?: boolean;
 };
 
 // One reusable dropdown pattern for every "pick one of a short list"
-// input in the app -- tapping the field opens a modal list, tapping a
-// row selects it and closes.
-export default function SelectField<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  placeholder = "Select",
-  disabled = false,
-  outlined = false,
-}: Props<T>) {
+// input in the app (Gender, Worker Type, the Forms picker, the Worker
+// picker, the OT-hours popup) -- tapping the field opens a modal list,
+// tapping a row selects it and closes. Matches DateField's look (same
+// tap-to-open field shell) so all "structured choice" inputs feel like
+// one family instead of a mix of buttons/chips/free text.
+export default function SelectField<T extends string>({ label, value, options, onChange, placeholder = "Select", disabled = false }: Props<T>) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
 
@@ -37,14 +31,12 @@ export default function SelectField<T extends string>({
     <View style={styles.fieldWrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TouchableOpacity
-        style={[styles.input, outlined && styles.inputOutlined, disabled && styles.inputDisabled]}
+        style={[styles.input, disabled && styles.inputDisabled]}
         onPress={() => !disabled && setOpen(true)}
         disabled={disabled}
       >
-        <Text style={[selected ? styles.valueText : styles.placeholderText, disabled && styles.textDisabled]} numberOfLines={1}>
-          {selected ? selected.label : placeholder}
-        </Text>
-        <Icon name="chevronDown" size={16} color={disabled ? colors.muted : colors.text} />
+        <Text style={selected ? styles.valueText : styles.placeholderText}>{selected ? selected.label : placeholder}</Text>
+        <ChevronDown size={16} color={colors.textSecondary} />
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -55,17 +47,21 @@ export default function SelectField<T extends string>({
               data={options}
               keyExtractor={(o) => o.value}
               style={styles.list}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.option, item.value === value && styles.optionSelected]}
-                  onPress={() => {
-                    onChange(item.value);
-                    setOpen(false);
-                  }}
-                >
-                  <Text style={[styles.optionText, item.value === value && styles.optionTextSelected]}>{item.label}</Text>
-                </TouchableOpacity>
-              )}
+              renderItem={({ item }) =>
+                item.header ? (
+                  <Text style={styles.optionHeader}>{item.label}</Text>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.option, item.value === value && styles.optionSelected]}
+                    onPress={() => {
+                      onChange(item.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.optionText, item.value === value && styles.optionTextSelected]}>{item.label}</Text>
+                  </TouchableOpacity>
+                )
+              }
             />
             <TouchableOpacity style={styles.cancelButton} onPress={() => setOpen(false)}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -79,29 +75,36 @@ export default function SelectField<T extends string>({
 
 const styles = StyleSheet.create({
   fieldWrap: { marginBottom: spacing.md },
-  label: { fontSize: 12, fontFamily: font.semiBold, color: colors.muted, marginBottom: spacing.xs },
+  label: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   input: {
-    minHeight: MIN_TOUCH_TARGET,
-    backgroundColor: colors.bg,
-    borderRadius: radius.control,
-    paddingHorizontal: spacing.sm + 4,
+    backgroundColor: colors.ground,
+    borderRadius: radius.sm,
+    padding: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    minHeight: 44,
   },
-  inputOutlined: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  inputDisabled: { opacity: 0.55 },
-  valueText: { fontSize: 15, fontFamily: font.regular, color: colors.text, flexShrink: 1 },
-  placeholderText: { fontSize: 15, fontFamily: font.regular, color: colors.muted, flexShrink: 1 },
-  textDisabled: { color: colors.muted },
+  inputDisabled: { opacity: 0.6 },
+  valueText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.navy },
+  placeholderText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.textSecondary },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.hero, borderTopRightRadius: radius.hero, padding: spacing.md, maxHeight: "70%" },
-  sheetTitle: { fontSize: 14, fontFamily: font.semiBold, color: colors.text, marginBottom: spacing.sm },
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, maxHeight: "70%" },
+  sheetTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.navy, marginBottom: spacing.sm },
   list: { flexGrow: 0 },
-  option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.control },
-  optionSelected: { backgroundColor: colors.primarySoft },
-  optionText: { fontSize: 15, fontFamily: font.regular, color: colors.text },
-  optionTextSelected: { color: colors.primaryDark, fontFamily: font.semiBold },
+  optionHeader: {
+    fontFamily: "PlusJakartaSans_700Bold",
+    fontSize: 11,
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
+  optionSelected: { backgroundColor: colors.primaryTint },
+  optionText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 15, color: colors.navy },
+  optionTextSelected: { color: colors.primary, fontFamily: "PlusJakartaSans_700Bold" },
   cancelButton: { paddingVertical: 14, alignItems: "center", marginTop: spacing.xs },
-  cancelText: { color: colors.muted, fontFamily: font.semiBold },
+  cancelText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.textSecondary },
 });

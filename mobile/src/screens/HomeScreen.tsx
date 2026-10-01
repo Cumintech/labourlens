@@ -1,89 +1,98 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { ChevronRight, Clock, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
-  ApiError,
   Attendance,
-  DashboardSummary,
+  HomeAlert,
   LeaveEntry,
   ShiftConfig,
   Worker,
-  getDashboard,
-  getWageProfile,
+  getHomeAlerts,
   listAttendance,
   listLeaveForDate,
   listShiftConfigs,
   listWorkers,
-  listWorkersMissingCompliance,
 } from "../api/client";
 import { isoDate } from "../components/DateField";
-import HeroCard, { HeroCTA, HeroDivider } from "../components/HeroCard";
-import Icon from "../components/Icon";
-import { ListCardRow } from "../components/ListCard";
-import ProgressRing from "../components/ProgressRing";
+import { ExtendedFab, IconButton, LogoMark } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { formatDateLongNoYear } from "../format";
 import { trialStatusText } from "../planStatus";
-import { colors, font, radius, spacing } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
 
+// Rendered as the "Today" tab's content inside MainTabs -- navigation
+// here is the composite prop React Navigation hands a screen nested
+// inside a tab that itself sits inside the root stack; typing it as a
+// plain root-stack nav prop is enough since every call here is a bare
+// `.navigate("SomeRootRoute")`, which React Navigation resolves by
+// walking up to the parent stack automatically.
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
-function todayString() {
-  return isoDate(new Date());
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function formatLongDate(d: Date): string {
+  return `${WEEKDAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
 }
 
-type QuickAction = { label: string; icon: React.ComponentProps<typeof Icon>["name"]; onPress: () => void };
-
-// The Today tab -- a single-glance "where do things stand right now" plus
-// the fastest path into the day's one must-do task (marking attendance).
+// "Needs attention" surfaces GET /home/alerts as a single summary card
+// (tap -> NeedsAttentionScreen for the full list) -- the month-end
+// checklist card that used to live here was removed to declutter Home;
+// MonthEndScreen itself is unchanged, just no longer linked from here.
 export default function HomeScreen({ navigation }: Props) {
   const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
-  const today = useMemo(todayString, []);
-
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [leave, setLeave] = useState<LeaveEntry[]>([]);
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [missingDetailsCount, setMissingDetailsCount] = useState(0);
-  const [noWageRateCount, setNoWageRateCount] = useState(0);
+  const [alerts, setAlerts] = useState<HomeAlert[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+
+  const today = useMemo(() => new Date(), []);
+  const todayIso = useMemo(() => isoDate(today), [today]);
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [w, a, l, s, d, missing] = await Promise.all([
+    // Core data (required) and the newer home-alerts/month-end endpoints
+    // (optional -- may 404 against a backend deploy that predates them)
+    // are fetched separately: one failing Promise.all used to reject the
+    // whole batch and leave workers/attendance stuck at their initial
+    // empty state forever, which read as "0 of 0 marked" no matter how
+    // many workers actually existed.
+    const [w, a, l, s] = await Promise.all([
       listWorkers(token),
-      listAttendance(token, today),
-      listLeaveForDate(token, today),
+      listAttendance(token, todayIso),
+      listLeaveForDate(token, todayIso),
       listShiftConfigs(token),
-      getDashboard(token, today),
-      listWorkersMissingCompliance(token),
     ]);
-    setWorkers(w);
+    setWorkers(w.filter((x) => x.status === "active"));
     setAttendance(a);
     setLeave(l);
     setShifts(s);
-    setSummary(d);
-    setMissingDetailsCount(missing.length);
 
-    const activeWorkers = w.filter((worker) => worker.status === "active");
-    const rateChecks = await Promise.all(
-      activeWorkers.map(async (worker): Promise<boolean> => {
-        try {
-          await getWageProfile(token, worker.id);
-          return false;
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 404) return true;
-          throw e;
-        }
-      }),
-    );
-    setNoWageRateCount(rateChecks.filter(Boolean).length);
-  }, [token, today]);
+    try {
+      const homeAlerts = await getHomeAlerts(token);
+      setAlerts(homeAlerts.alerts);
+    } catch {
+      // older backend deploy without this endpoint -- leave alerts empty
+    }
+  }, [token, todayIso]);
+
+  // Switches to a sibling tab from a screen that's itself nested inside
+  // that same tab navigator -- the documented React Navigation pattern
+  // for this is navigating to the *parent stack's* "Home" entry with a
+  // { screen } param the nested Tab.Navigator reads to pick a tab. Cast
+  // to any because RootStackParamList declares "Home: undefined" (no
+  // screen sub-navigation isn't expressible there without a much wider
+  // typing change for one call site); this works correctly at runtime
+  // regardless.
+  function goToTab(tab: "WorkersTab" | "AttendanceTab" | "WagesTab" | "ReportsTab", params?: Record<string, unknown>) {
+    (navigation as any).navigate("Home", { screen: tab, params });
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -97,250 +106,225 @@ export default function HomeScreen({ navigation }: Props) {
     setRefreshing(false);
   }
 
-  const activeWorkers = workers.filter((w) => w.status === "active");
-  const total = activeWorkers.length;
-
-  const attendanceByWorker = useMemo(() => {
-    const map = new Map<number, Attendance[]>();
-    for (const a of attendance) {
-      const list = map.get(a.worker_id) ?? [];
-      list.push(a);
-      map.set(a.worker_id, list);
+  const stats = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let onLeave = 0;
+    let notMarked = 0;
+    for (const w of workers) {
+      if (leave.some((l) => l.worker_id === w.id)) {
+        onLeave++;
+        continue;
+      }
+      const rows = attendance.filter((a) => a.worker_id === w.id);
+      if (rows.some((r) => r.status === "present")) present++;
+      else if (rows.some((r) => r.status === "absent")) absent++;
+      else notMarked++;
     }
-    return map;
-  }, [attendance]);
-  const leaveWorkerIds = useMemo(() => new Set(leave.map((l) => l.worker_id)), [leave]);
+    return { present, absent, onLeave, notMarked, total: workers.length };
+  }, [workers, attendance, leave]);
 
-  // Every active worker lands in exactly one bucket for today -- on
-  // leave, present (marked present in at least one shift), absent
-  // (marked, but never present), or pending (no record at all yet).
-  // "Marked" for the ring is present+absent+leave combined, i.e. anyone
-  // with SOME outcome recorded for the day.
-  let presentCount = 0;
-  let absentCount = 0;
-  let onLeaveCount = 0;
-  for (const worker of activeWorkers) {
-    if (leaveWorkerIds.has(worker.id)) {
-      onLeaveCount += 1;
-      continue;
-    }
-    const rows = attendanceByWorker.get(worker.id) ?? [];
-    if (rows.some((r) => r.status === "present")) presentCount += 1;
-    else if (rows.some((r) => r.status === "absent")) absentCount += 1;
-  }
-  const markedCount = presentCount + absentCount + onLeaveCount;
-  const pendingCount = Math.max(total - markedCount, 0);
+  const shiftTiles = useMemo(
+    () =>
+      shifts.map((shift) => ({
+        label: shift.label,
+        present: attendance.filter((a) => a.slot === shift.slot_key && a.status === "present").length,
+        total: workers.length,
+      })),
+    [shifts, attendance, workers],
+  );
 
-  const shiftLabelByKey = useMemo(() => new Map(shifts.map((s) => [s.slot_key, s.label])), [shifts]);
-  const itemsNeedingAttention = missingDetailsCount + noWageRateCount;
-
-  const trialEnded = owner?.plan_status === "trial" && (owner.trial_days_remaining ?? 0) <= 0;
-  const onTrial = owner?.plan_status === "trial";
-
-  const quickActions: QuickAction[] = [
-    { label: "Record payment", icon: "document", onPress: () => navigation.navigate("WagesTab" as never) },
-    { label: "Wage slips", icon: "document", onPress: () => navigation.navigate("ReportsTab" as never) },
-    { label: "Biometric devices", icon: "people", onPress: () => navigation.navigate("BiometricDevices") },
-    { label: "Shift settings", icon: "gear", onPress: () => navigation.navigate("ShiftSettings") },
-  ];
+  const markedCount = stats.present + stats.absent + stats.onLeave;
 
   return (
     <View style={styles.container}>
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
+        contentContainerStyle={{ paddingBottom: spacing.xl * 2 + insets.bottom }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       >
-        <View style={styles.topRow}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandMark}>
-              <Icon name="search" size={16} color={colors.white} />
+        <View style={styles.header}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.brandRow}>
+              <LogoMark size={28} />
+              <Text style={styles.brandText}>Labour Lens</Text>
             </View>
-            <Text style={styles.brandName}>Labour Lens</Text>
+            <IconButton icon={SettingsIcon} color={colors.surface} accessibilityLabel="Open settings" onPress={() => navigation.navigate("Settings")} />
           </View>
-          <TouchableOpacity style={styles.gearButton} onPress={() => navigation.navigate("Settings")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Icon name="gear" size={18} color={colors.primary} />
-          </TouchableOpacity>
+          <Text style={styles.dateText}>{formatLongDate(today)}</Text>
+          <Text style={styles.factoryName}>{owner?.factory_name ?? "Labour Lens"}</Text>
+          {owner?.plan_status === "trial" && (
+            <View style={styles.trialPill}>
+              <Text style={styles.trialPillText}>{trialStatusText(owner)}</Text>
+            </View>
+          )}
         </View>
 
-        <HeroCard style={{ marginTop: spacing.md }}>
-          <View style={styles.heroTopRow}>
+        <View style={styles.attendanceCard}>
+          <Text style={type.section}>
+            Today · {markedCount} of {stats.total} marked
+          </Text>
+
+          {stats.total > 0 && (
+            <View style={styles.stackedBar}>
+              {stats.present > 0 && <View style={[styles.barSegment, { flex: stats.present, backgroundColor: colors.present }]} />}
+              {stats.absent > 0 && <View style={[styles.barSegment, { flex: stats.absent, backgroundColor: colors.absent }]} />}
+              {stats.onLeave > 0 && <View style={[styles.barSegment, { flex: stats.onLeave, backgroundColor: colors.leave }]} />}
+              {stats.notMarked > 0 && <View style={[styles.barSegment, { flex: stats.notMarked, backgroundColor: colors.unmarked }]} />}
+            </View>
+          )}
+
+          <View style={styles.statRow}>
+            <StatBlock label="Present" value={stats.present} color={colors.present} />
+            <StatBlock label="Absent" value={stats.absent} color={colors.absentTintText} />
+            <StatBlock label="On leave" value={stats.onLeave} color={colors.leave} />
+            <StatBlock label="Not marked" value={stats.notMarked} color={colors.unmarked} />
+          </View>
+
+          {shiftTiles.length > 0 && (
+            <View style={styles.shiftRow}>
+              {shiftTiles.map((s) => (
+                <View key={s.label} style={styles.shiftTile}>
+                  <Text style={styles.shiftTileLabel}>{s.label}</Text>
+                  <Text style={styles.shiftTileValue}>{s.present} / {s.total}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Pressable style={styles.markButton} onPress={() => goToTab("AttendanceTab")}>
+            <Text style={styles.markButtonText}>
+              {stats.notMarked === 0 ? "All marked ✓" : `Mark attendance · ${stats.notMarked} left`}
+            </Text>
+          </Pressable>
+        </View>
+
+        {alerts.length > 0 && (
+          <Pressable style={styles.attentionCard} onPress={() => navigation.navigate("NeedsAttention")}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.heroDate}>{formatDateLongNoYear(today)}</Text>
-              <Text style={styles.heroFactory} numberOfLines={1}>
-                {owner?.factory_name ?? "Labour Lens"}
+              <Text style={styles.attentionCardTitle}>Needs attention</Text>
+              <Text style={styles.attentionCardSubtitle}>
+                {alerts.length} {alerts.length === 1 ? "item needs" : "items need"} attention
               </Text>
-              <Text style={styles.heroSubtitle}>{total} active worker{total === 1 ? "" : "s"}</Text>
             </View>
-            <ProgressRing progress={total > 0 ? markedCount / total : 0} label={`${markedCount}/${total}`} sublabel="marked" />
-          </View>
-
-          <HeroDivider />
-
-          <View style={styles.shiftRow}>
-            {shifts.length === 0 ? (
-              <Text style={styles.shiftText}>No shifts configured yet</Text>
-            ) : (
-              (summary?.slots ?? []).map((slot, i) => (
-                <React.Fragment key={slot.slot}>
-                  {i > 0 && <View style={styles.shiftDivider} />}
-                  <Text style={styles.shiftText}>
-                    {shiftLabelByKey.get(slot.slot) ?? slot.slot} shift{"  "}
-                    <Text style={styles.shiftTextStrong}>
-                      {slot.present} / {slot.total}
-                    </Text>
-                  </Text>
-                </React.Fragment>
-              ))
-            )}
-          </View>
-
-          <View style={{ marginTop: spacing.md }}>
-            <HeroCTA
-              label={`Mark attendance · ${pendingCount} left`}
-              onPress={() => navigation.navigate("AttendanceTab" as never)}
-            />
-          </View>
-        </HeroCard>
-
-        <View style={styles.statsCard}>
-          <StatColumn value={presentCount} label="Present" />
-          <View style={styles.statDivider} />
-          <StatColumn value={absentCount} label="Absent" />
-          <View style={styles.statDivider} />
-          <StatColumn value={onLeaveCount} label="On leave" />
-          <View style={styles.statDivider} />
-          <StatColumn value={pendingCount} label="Pending" />
-        </View>
-
-        {(itemsNeedingAttention > 0 || onTrial) && (
-          <View style={styles.listCard}>
-            {itemsNeedingAttention > 0 && (
-              <View>
-                <ListCardRow onPress={() => navigation.navigate("WorkersTab" as never)}>
-                  <View style={[styles.dot, { backgroundColor: colors.leave }]} />
-                  <Text style={styles.attentionText}>
-                    {itemsNeedingAttention} item{itemsNeedingAttention === 1 ? "" : "s"} need{itemsNeedingAttention === 1 ? "s" : ""} attention
-                  </Text>
-                  <Icon name="chevronRight" size={16} color={colors.muted} />
-                </ListCardRow>
-                {onTrial && <View style={styles.rowDivider} />}
-              </View>
-            )}
-            {onTrial && (
-              <ListCardRow onPress={() => navigation.navigate("Settings")}>
-                <View style={[styles.dot, { backgroundColor: trialEnded ? colors.absent : colors.primary }]} />
-                <Text style={styles.attentionText}>{trialStatusText(owner)}</Text>
-                <Icon name="chevronRight" size={16} color={colors.muted} />
-              </ListCardRow>
-            )}
-          </View>
+            <ChevronRight size={20} color={colors.textSecondary} />
+          </Pressable>
         )}
 
-        <View style={styles.quickActionsHeader}>
-          <Text style={styles.sectionLabel}>Quick actions</Text>
-          <TouchableOpacity style={styles.addWorkerButton} onPress={() => navigation.navigate("NewWorkerScan")}>
-            <Icon name="plus" size={14} color={colors.primary} />
-            <Text style={styles.addWorkerButtonText}>Add worker</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.tileGrid}>
-          {quickActions.map((action) => (
-            <TouchableOpacity key={action.label} style={styles.tile} onPress={action.onPress}>
-              <View style={styles.tileIconWrap}>
-                <Icon name={action.icon} size={18} color={colors.primary} />
-              </View>
-              <Text style={styles.tileLabel}>{action.label}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.quickActionsWrap}>
+          <Text style={[type.caption, styles.quickActionsLabel]}>Quick actions</Text>
+          <View style={styles.quickActionsGrid}>
+            <QuickAction icon={CreditCard} label="Record payment" onPress={() => goToTab("WagesTab")} />
+            <QuickAction icon={FileText} label="Wage slips" onPress={() => goToTab("ReportsTab", { formCode: "wageslip", lockForm: true })} />
+            <QuickAction icon={Fingerprint} label="Biometric Devices" onPress={() => navigation.navigate("BiometricDevices")} />
+            <QuickAction icon={Clock} label="Shift Settings" onPress={() => navigation.navigate("ShiftSettings")} />
+          </View>
         </View>
       </ScrollView>
+
+      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.xs} />
     </View>
   );
 }
 
-function StatColumn({ value, label }: { value: number; label: string }) {
+function StatBlock({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <View style={styles.statColumn}>
-      <Text style={styles.statValue}>{value}</Text>
+    <View style={styles.statBlock}>
+      <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
+function QuickAction({ icon: Icon, label, onPress }: { icon: typeof Users; label: string; onPress: () => void }) {
+  return (
+    <Pressable style={styles.quickActionTile} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      <View style={styles.quickActionIconWrap}>
+        <Icon size={20} color={colors.primary} />
+      </View>
+      <Text style={styles.quickActionLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md },
-  topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  brandMark: { width: 36, height: 36, borderRadius: radius.control, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
-  brandName: { fontSize: 18, fontFamily: font.semiBold, color: colors.text },
-  gearButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
-
-  heroTopRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  heroDate: { color: colors.onPrimaryMuted, fontSize: 13, fontFamily: font.medium },
-  heroFactory: { color: colors.white, fontSize: 22, fontFamily: font.bold, marginTop: 2 },
-  heroSubtitle: { color: colors.onPrimaryMuted, fontSize: 13, fontFamily: font.regular, marginTop: 2 },
-
-  shiftRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
-  shiftDivider: { width: 1, height: 16, backgroundColor: colors.heroDivider, marginHorizontal: spacing.sm },
-  shiftText: { color: colors.onPrimaryMuted, fontSize: 13, fontFamily: font.regular },
-  shiftTextStrong: { color: colors.white, fontFamily: font.bold },
-
-  statsCard: {
-    flexDirection: "row",
-    backgroundColor: colors.card,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
-    marginTop: spacing.md,
+  container: { flex: 1, backgroundColor: colors.ground },
+  header: {
+    backgroundColor: colors.navy,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    padding: spacing.lg,
+    paddingBottom: spacing.xl + spacing.md,
   },
-  statColumn: { flex: 1, alignItems: "center" },
-  statDivider: { width: 1, backgroundColor: colors.divider },
-  statValue: { fontSize: 22, fontFamily: font.bold, color: colors.text },
-  statLabel: { fontSize: 11.5, color: colors.muted, marginTop: 2, fontFamily: font.regular, textAlign: "center" },
-
-  listCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginTop: spacing.md,
-    overflow: "hidden",
-  },
-  rowDivider: { height: 1, backgroundColor: colors.divider, marginLeft: 14 },
-  dot: { width: 9, height: 9, borderRadius: 4.5, marginRight: spacing.sm },
-  attentionText: { flex: 1, fontSize: 14, fontFamily: font.semiBold, color: colors.text },
-
-  quickActionsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.lg, marginBottom: spacing.sm },
-  sectionLabel: { fontSize: 12, fontFamily: font.semiBold, color: colors.muted, textTransform: "uppercase", letterSpacing: 0.5 },
-  addWorkerButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm + 2,
+  headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  brandText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.surface },
+  dateText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: spacing.md },
+  factoryName: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 26, color: colors.surface, marginTop: 2 },
+  trialPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 999,
+    paddingHorizontal: spacing.sm + 4,
     paddingVertical: 6,
+    marginTop: spacing.sm,
   },
-  addWorkerButtonText: { color: colors.primary, fontSize: 12.5, fontFamily: font.semiBold },
-
-  tileGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  tile: {
-    flexBasis: "47%",
-    flexGrow: 1,
+  trialPillText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 11, color: colors.surface },
+  attendanceCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: -spacing.xl,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  stackedBar: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", marginTop: spacing.sm, backgroundColor: colors.divider },
+  barSegment: { height: 8 },
+  statRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.md },
+  statBlock: { flex: 1, alignItems: "center" },
+  statValue: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 20, fontVariant: ["tabular-nums"] },
+  statLabel: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 10, color: colors.textSecondary, marginTop: 2 },
+  shiftRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.md, flexWrap: "wrap" },
+  shiftTile: { flex: 1, minWidth: 80, backgroundColor: colors.ground, borderRadius: radius.sm, paddingVertical: spacing.sm, alignItems: "center" },
+  shiftTileLabel: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 11, color: colors.textSecondary },
+  shiftTileValue: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 15, color: colors.navy, marginTop: 2, fontVariant: ["tabular-nums"] },
+  markButton: { marginTop: spacing.md, backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
+  markButtonText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.surface },
+  attentionCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.card,
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  attentionCardTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.surface },
+  attentionCardSubtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 2 },
+  quickActionsWrap: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
+  quickActionsLabel: { color: colors.textSecondary, marginBottom: spacing.sm },
+  quickActionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  quickActionTile: {
+    width: "47%",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.sm + 4,
+    padding: spacing.md,
   },
-  tileIconWrap: { width: 36, height: 36, borderRadius: radius.control, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
-  tileLabel: { flex: 1, fontSize: 13.5, fontFamily: font.semiBold, color: colors.text },
+  quickActionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryTint,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.xs,
+  },
+  quickActionLabel: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 13, color: colors.navy },
 });

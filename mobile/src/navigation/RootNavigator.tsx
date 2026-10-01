@@ -4,33 +4,28 @@ import React from "react";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import AddWorkerScreen from "../screens/AddWorkerScreen";
-import AttendanceRangeScreen from "../screens/AttendanceRangeScreen";
 import BiometricConsentScreen from "../screens/BiometricConsentScreen";
 import BiometricDevicesScreen from "../screens/BiometricDevicesScreen";
 import DeviceUserMappingScreen from "../screens/DeviceUserMappingScreen";
 import UnmappedPunchesScreen from "../screens/UnmappedPunchesScreen";
-import DashboardScreen from "../screens/DashboardScreen";
 import ForgotPasswordScreen from "../screens/ForgotPasswordScreen";
 import HelpSupportScreen from "../screens/HelpSupportScreen";
 import LoginScreen from "../screens/LoginScreen";
+import MonthEndScreen from "../screens/MonthEndScreen";
+import NeedsAttentionScreen from "../screens/NeedsAttentionScreen";
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
-import StatutoryFormsScreen from "../screens/StatutoryFormsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
-import WageRateWorkerDetailScreen from "../screens/WageRateWorkerDetailScreen";
-import WageRateWorkersScreen from "../screens/WageRateWorkersScreen";
-import WorkerAttendanceScreen from "../screens/WorkerAttendanceScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
+import WorkerProfileScreen from "../screens/WorkerProfileScreen";
 import WorkerTypesScreen from "../screens/WorkerTypesScreen";
-import { colors, font } from "../theme";
+import { colors } from "../theme";
 import MainTabs from "./MainTabs";
 
 export type RootStackParamList = {
   Home: undefined;
-  Dashboard: undefined;
-  AttendanceRange: undefined;
   // Route name kept as "NewWorkerScan" (not renamed to "AddWorker")
   // so HomeScreen's existing navigation.navigate("NewWorkerScan") call
   // needs no change -- the component behind it is the new merged
@@ -45,17 +40,31 @@ export type RootStackParamList = {
   BiometricDevices: undefined;
   DeviceUserMapping: { deviceId: number; deviceName: string };
   UnmappedPunches: undefined;
-  WorkerAttendance: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
+  // Replaces the old standalone WorkerAttendance destination -- one hub
+  // (header + Form 12 completeness card + Overview/Attendance/Wages/
+  // Documents SegmentedControl) instead of separate WorkerAttendance and
+  // WageRateWorkerDetail screens. initialTab lets a caller (e.g. Wage
+  // Rate's worker list) land directly on a specific tab.
+  WorkerProfile: {
+    workerId: number;
+    workerName: string;
+    workerStatus: string;
+    deactivatedAt: string | null;
+    initialTab?: "overview" | "attendance" | "wages" | "documents";
+  };
   WorkerEdit: { workerId: number; workerName: string; workerStatus: string; deactivatedAt: string | null };
   WageProfile: { workerId: number; workerName: string; fromRegistration?: boolean };
-  WageRateWorkers: undefined;
-  WageRateWorkerDetail: { workerId: number; workerName: string };
+  // Always the current calendar month -- see MonthEndScreen.tsx.
+  MonthEnd: undefined;
+  NeedsAttention: undefined;
   WorkerTypes: undefined;
   ShiftSettings: undefined;
   Profile: undefined;
-  StatutoryForms: undefined;
   PrivacyPolicy: undefined;
   HelpSupport: undefined;
+  // No longer a tab -- reached via the gear IconButton in Today's
+  // header (see HomeScreen.tsx). Its own layout is still the pre-v2
+  // one until Phase 7; only *where it's reached from* changed here.
   Settings: undefined;
 };
 
@@ -88,8 +97,8 @@ export default function RootNavigator() {
       <NavigationContainer>
         <AuthStack.Navigator
           screenOptions={{
-            headerStyle: { backgroundColor: colors.card },
-            headerTitleStyle: { color: colors.text, fontFamily: font.semiBold },
+            headerStyle: { backgroundColor: colors.surface },
+            headerTitleStyle: { color: colors.navy, fontFamily: "PlusJakartaSans_700Bold", fontSize: 17 },
             headerTintColor: colors.primary,
           }}
         >
@@ -106,35 +115,26 @@ export default function RootNavigator() {
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{
-          headerStyle: { backgroundColor: colors.card },
-          headerTitleStyle: { color: colors.text, fontFamily: font.semiBold },
+          headerStyle: { backgroundColor: colors.surface },
+          headerTitleStyle: { color: colors.navy, fontFamily: "PlusJakartaSans_700Bold", fontSize: 17 },
           headerTintColor: colors.primary,
         }}
       >
-        {/* "Home" renders the 5-tab bottom nav directly -- the left
-            hamburger drawer this used to wrap (AppDrawer.tsx) is retired;
-            every destination it used to hold now has a home on one of the
-            5 tabs (Add Worker -> Workers' header action, Wage Rate ->
-            Wages' Rates segment, Shifts & Profile -> Today's Quick
-            Actions) or on the Settings screen below. */}
         <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />
-        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Attendance" }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
-        <Stack.Screen name="AttendanceRange" component={AttendanceRangeScreen} options={{ title: "Edit Multiple Days" }} />
         <Stack.Screen name="NewWorkerScan" component={AddWorkerScreen} options={{ title: "Add Worker" }} />
         <Stack.Screen name="BiometricConsent" component={BiometricConsentScreen} options={{ title: "Biometric Consent" }} />
         <Stack.Screen name="BiometricDevices" component={BiometricDevicesScreen} options={{ title: "Biometric Devices" }} />
         <Stack.Screen name="DeviceUserMapping" component={DeviceUserMappingScreen} options={{ title: "Map Device Users" }} />
         <Stack.Screen name="UnmappedPunches" component={UnmappedPunchesScreen} options={{ title: "Unmapped Punches" }} />
-        <Stack.Screen name="WorkerAttendance" component={WorkerAttendanceScreen} options={{ title: "Worker" }} />
+        <Stack.Screen name="WorkerProfile" component={WorkerProfileScreen} options={{ title: "Worker" }} />
         <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ title: "Edit Worker" }} />
         <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ title: "Wage Rate" }} />
-        <Stack.Screen name="WageRateWorkers" component={WageRateWorkersScreen} options={{ title: "Wage Rate" }} />
-        <Stack.Screen name="WageRateWorkerDetail" component={WageRateWorkerDetailScreen} options={{ title: "Wage Rate" }} />
+        <Stack.Screen name="MonthEnd" component={MonthEndScreen} options={{ title: "Month-End Checklist" }} />
+        <Stack.Screen name="NeedsAttention" component={NeedsAttentionScreen} options={{ title: "Needs Attention" }} />
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
-        <Stack.Screen name="StatutoryForms" component={StatutoryFormsScreen} options={{ title: "Forms & Reports" }} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: "Privacy Policy" }} />
         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} options={{ title: "Help & Support" }} />
       </Stack.Navigator>

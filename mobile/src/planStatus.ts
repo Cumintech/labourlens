@@ -26,12 +26,12 @@ function formatIsoShort(iso: string): string {
 // unlike trial_days_remaining, it doesn't move as days elapse.
 export function trialStatusText(owner: Pick<Owner, "trial_days_remaining" | "trial_ends_at"> | null | undefined): string {
   if (!owner?.trial_ends_at) {
-    return "Your free trial has ended. Contact us to move to a paid plan.";
+    return "Your free trial has ended -- contact us to move to a paid plan";
   }
   const ends = formatIsoShort(owner.trial_ends_at);
   const remaining = owner.trial_days_remaining ?? 0;
   if (remaining > 0) {
     return `Free trial ends on ${ends} (${remaining} day${remaining === 1 ? "" : "s"} left)`;
   }
-  return `Your free trial ended on ${ends}. Contact us to move to a paid plan.`;
+  return `Your free trial ended on ${ends} -- contact us to move to a paid plan`;
 }

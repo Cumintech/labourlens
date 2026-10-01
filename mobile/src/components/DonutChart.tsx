@@ -15,7 +15,7 @@ export default function DonutChart({ slices, size = 160, strokeWidth = 26 }: { s
 
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <Circle cx={size / 2} cy={size / 2} r={radius} stroke={colors.bg} strokeWidth={strokeWidth} fill="transparent" />
+      <Circle cx={size / 2} cy={size / 2} r={radius} stroke={colors.fieldBg} strokeWidth={strokeWidth} fill="transparent" />
       {total > 0 &&
         slices.map((slice, i) => {
           if (slice.value <= 0) return null;

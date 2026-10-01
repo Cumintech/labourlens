@@ -66,12 +66,14 @@ export default function TimeField({
 
 const styles = StyleSheet.create({
   fieldWrap: { flex: 1 },
-  label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
+  label: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   input: {
-    backgroundColor: colors.bg,
+    backgroundColor: colors.ground,
     borderRadius: radius.sm,
     padding: 12,
+    minHeight: 44,
+    justifyContent: "center",
   },
-  valueText: { fontSize: 16, color: colors.text },
-  placeholderText: { fontSize: 16, color: colors.muted },
+  valueText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.navy },
+  placeholderText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.textSecondary },
 });

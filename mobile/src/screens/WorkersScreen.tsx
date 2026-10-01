@@ -1,92 +1,58 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Search, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import {
-  ApiError,
-  Attendance,
-  LeaveEntry,
-  Worker,
-  getWageProfile,
-  listAttendance,
-  listLeaveForDate,
-  listWorkers,
-  listWorkersMissingCompliance,
-} from "../api/client";
-import Avatar from "../components/Avatar";
-import Button from "../components/Button";
-import ErrorState from "../components/ErrorState";
-import FilterChip from "../components/FilterChip";
-import Icon from "../components/Icon";
-import { ListCardRow } from "../components/ListCard";
-import ScreenHeader from "../components/ScreenHeader";
-import { ListSkeleton } from "../components/Skeleton";
-import StatusPill, { PillStatus } from "../components/StatusPill";
-import { useAuth } from "../context/AuthContext";
+import { Attendance, LeaveEntry, Worker, listAttendance, listLeaveForDate, listWorkers, listWorkersMissingCompliance } from "../api/client";
 import { isoDate } from "../components/DateField";
+import { ListSkeleton } from "../components/Skeleton";
+import ErrorState from "../components/ErrorState";
+import { Chip, EmptyState, ExtendedFab, ListRow, StatusChip } from "../components/ui";
+import type { WorkerStatus } from "../components/ui";
+import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { colors, font, radius, spacing } from "../theme";
+import { colors, spacing, type } from "../theme";
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
-type FilterKey = "all" | "missing_details" | "no_wage_rate" | "inactive";
+type Filter = "all" | "missing" | "no_wage" | "inactive";
 
-function todayString() {
-  return isoDate(new Date());
-}
-
-// Browse/search/manage every worker ever registered -- splits out of
-// what used to be one combined Workers+Attendance screen (DashboardScreen)
-// so "who do I have and what's missing on their record" and "mark today's
-// shifts" are two separate, purpose-built screens instead of one
-// overloaded list.
+// The list view Phase 1's tab bar needs to exist at all -- there was no
+// "every worker in one place" screen before this (Dashboard only ever
+// showed today's attendance rows). Pulled forward from the redesign's
+// Phase 3 spec since the bottom tab bar can't be built without it.
 export default function WorkersScreen({ navigation }: Props) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
-  const today = useMemo(todayString, []);
-
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [todayAttendance, setTodayAttendance] = useState<Attendance[]>([]);
+  const [todayLeave, setTodayLeave] = useState<LeaveEntry[]>([]);
   const [missingComplianceIds, setMissingComplianceIds] = useState<Set<number>>(new Set());
-  const [noWageRateIds, setNoWageRateIds] = useState<Set<number>>(new Set());
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [leave, setLeave] = useState<LeaveEntry[]>([]);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [filter, setFilter] = useState<Filter>("all");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
-    const [w, missing, a, l] = await Promise.all([
+    const today = isoDate(new Date());
+    const [w, a, l, missing] = await Promise.all([
       listWorkers(token),
-      listWorkersMissingCompliance(token),
       listAttendance(token, today),
       listLeaveForDate(token, today),
+      listWorkersMissingCompliance(token),
     ]);
     setWorkers(w);
+    setTodayAttendance(a);
+    setTodayLeave(l);
     setMissingComplianceIds(new Set(missing.map((m) => m.id)));
-    setAttendance(a);
-    setLeave(l);
-
-    const activeWorkers = w.filter((worker) => worker.status === "active");
-    const rateChecks = await Promise.all(
-      activeWorkers.map(async (worker): Promise<[number, boolean]> => {
-        try {
-          await getWageProfile(token, worker.id);
-          return [worker.id, false];
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 404) return [worker.id, true];
-          throw e;
-        }
-      }),
-    );
-    setNoWageRateIds(new Set(rateChecks.filter(([, missingRate]) => missingRate).map(([id]) => id)));
-  }, [token, today]);
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
+      setLoading(true);
       load()
         .then(() => setLoadError(false))
         .catch(() => setLoadError(true))
@@ -96,57 +62,43 @@ export default function WorkersScreen({ navigation }: Props) {
 
   async function handleRefresh() {
     setRefreshing(true);
-    try {
-      await load();
-      setLoadError(false);
-    } catch {
-      // Keep whatever's already on screen, same as every other pull-to-refresh in this app.
-    } finally {
-      setRefreshing(false);
-    }
+    await load().catch(() => {});
+    setRefreshing(false);
   }
 
-  const attendanceByWorker = useMemo(() => {
-    const map = new Map<number, Attendance[]>();
-    for (const a of attendance) {
-      const list = map.get(a.worker_id) ?? [];
-      list.push(a);
-      map.set(a.worker_id, list);
-    }
-    return map;
-  }, [attendance]);
-
-  const leaveWorkerIds = useMemo(() => new Set(leave.map((l) => l.worker_id)), [leave]);
-
-  function statusFor(worker: Worker): { status: PillStatus; label?: string } {
-    if (worker.status !== "active") return { status: "deactivated" };
-    if (leaveWorkerIds.has(worker.id)) return { status: "leave" };
-    const rows = attendanceByWorker.get(worker.id) ?? [];
-    if (rows.some((r) => r.status === "present")) return { status: "present" };
-    if (rows.some((r) => r.status === "absent")) return { status: "absent" };
-    return { status: "notMarked" };
+  function statusFor(worker: Worker): WorkerStatus {
+    if (worker.status !== "active") return "inactive";
+    if (todayLeave.some((l) => l.worker_id === worker.id)) return "leave";
+    const rows = todayAttendance.filter((a) => a.worker_id === worker.id);
+    if (rows.some((r) => r.status === "present")) return "present";
+    if (rows.some((r) => r.status === "absent")) return "absent";
+    return "unmarked";
   }
 
   const activeCount = workers.filter((w) => w.status === "active").length;
   const inactiveCount = workers.length - activeCount;
-  const missingDetailsCount = missingComplianceIds.size;
-  const noWageRateCount = noWageRateIds.size;
+  const noWageCount = workers.filter((w) => w.status === "active" && !w.worker_type_id).length;
+  const missingCount = workers.filter((w) => missingComplianceIds.has(w.id)).length;
 
-  const filtered = workers.filter((w) => {
-    if (filter === "missing_details" && !missingComplianceIds.has(w.id)) return false;
-    if (filter === "no_wage_rate" && !noWageRateIds.has(w.id)) return false;
-    if (filter === "inactive" && w.status === "active") return false;
+  const filtered = useMemo(() => {
+    let list = workers;
+    if (filter === "missing") list = list.filter((w) => missingComplianceIds.has(w.id));
+    else if (filter === "no_wage") list = list.filter((w) => w.status === "active" && !w.worker_type_id);
+    else if (filter === "inactive") list = list.filter((w) => w.status !== "active");
     const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      w.name.toLowerCase().includes(q) ||
-      (w.numeric_employee_code ?? "").toLowerCase().includes(q) ||
-      (w.mobile ?? "").toLowerCase().includes(q)
-    );
-  });
+    if (q) {
+      list = list.filter(
+        (w) =>
+          w.name.toLowerCase().includes(q) ||
+          (w.numeric_employee_code ?? "").toLowerCase().includes(q) ||
+          (w.mobile ?? "").includes(q),
+      );
+    }
+    return list;
+  }, [workers, filter, search, missingComplianceIds]);
 
   function openWorker(worker: Worker) {
-    navigation.navigate("WorkerEdit", {
+    navigation.navigate("WorkerProfile", {
       workerId: worker.id,
       workerName: worker.name,
       workerStatus: worker.status,
@@ -157,14 +109,12 @@ export default function WorkersScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={{ padding: spacing.md }}>
-          <ListSkeleton rows={6} variant="simple" />
-        </View>
+        <ListSkeleton rows={5} variant="simple" />
       </View>
     );
   }
 
-  if (loadError && workers.length === 0) {
+  if (loadError) {
     return (
       <View style={styles.container}>
         <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />
@@ -173,95 +123,72 @@ export default function WorkersScreen({ navigation }: Props) {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
-      keyboardShouldPersistTaps="handled"
-    >
-      <ScreenHeader
-        title="Workers"
-        subtitle={`${activeCount} active · ${inactiveCount} inactive`}
-        right={<Button label="Add worker" variant="primary" icon={<Icon name="plus" size={16} color={colors.white} />} onPress={() => navigation.navigate("NewWorkerScan")} small />}
-      />
-
-      <View style={styles.searchRow}>
-        <Icon name="search" size={16} color={colors.muted} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search name, code or mobile"
-          placeholderTextColor={colors.muted}
-          value={search}
-          onChangeText={setSearch}
-          autoCapitalize="none"
-        />
-      </View>
-
-      <View style={styles.chipsRow}>
-        <FilterChip label="All" count={workers.length} active={filter === "all"} onPress={() => setFilter("all")} />
-        <FilterChip label="Details missing" count={missingDetailsCount} active={filter === "missing_details"} onPress={() => setFilter("missing_details")} />
-        <FilterChip label="No wage rate" count={noWageRateCount} active={filter === "no_wage_rate"} onPress={() => setFilter("no_wage_rate")} />
-        <FilterChip label="Inactive" count={inactiveCount} active={filter === "inactive"} onPress={() => setFilter("inactive")} />
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={type.display}>Workers</Text>
+        <Text style={styles.subtitle}>{activeCount} active · {inactiveCount} inactive</Text>
+        <View style={styles.searchRow}>
+          <Search size={16} color={colors.textSecondary} />
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search name, code, or mobile"
+            placeholderTextColor={colors.textSecondary}
+          />
+        </View>
+        <View style={styles.chipsRow}>
+          <Chip label="All" selected={filter === "all"} onPress={() => setFilter("all")} count={workers.length} />
+          <Chip label="Details missing" selected={filter === "missing"} onPress={() => setFilter("missing")} count={missingCount} />
+          <Chip label="No wage rate" selected={filter === "no_wage"} onPress={() => setFilter("no_wage")} count={noWageCount} />
+          <Chip label="Inactive" selected={filter === "inactive"} onPress={() => setFilter("inactive")} count={inactiveCount} />
+        </View>
       </View>
 
       {filtered.length === 0 ? (
-        <Text style={styles.empty}>{search ? "No workers match your search." : "No workers in this filter."}</Text>
+        <EmptyState
+          icon={Users}
+          title={workers.length === 0 ? "No workers yet" : "No workers match this filter"}
+          subtitle={workers.length === 0 ? "Add your first worker to get started." : undefined}
+          ctaLabel={workers.length === 0 ? "Add worker" : undefined}
+          onPressCta={workers.length === 0 ? () => navigation.navigate("NewWorkerScan") : undefined}
+        />
       ) : (
-        <View style={styles.card}>
-          {filtered.map((worker, i) => {
-            const missing = missingComplianceIds.has(worker.id);
-            const { status, label } = statusFor(worker);
-            return (
-              <View key={worker.id}>
-                <ListCardRow onPress={() => openWorker(worker)}>
-                  <Avatar name={worker.name} workerId={worker.id} />
-                  <View style={styles.rowText}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {worker.name}
-                    </Text>
-                    <Text style={styles.meta} numberOfLines={1}>
-                      {worker.numeric_employee_code ? `#${worker.numeric_employee_code}` : "no code yet"}
-                      {missing ? <Text style={styles.metaWarn}> · Details missing</Text> : null}
-                    </Text>
-                  </View>
-                  <StatusPill status={status} label={label} />
-                </ListCardRow>
-                {i < filtered.length - 1 && <View style={styles.divider} />}
-              </View>
-            );
-          })}
-        </View>
+        <FlatList
+          data={filtered}
+          keyExtractor={(w) => String(w.id)}
+          contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 + insets.bottom }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+          renderItem={({ item }) => (
+            <ListRow
+              title={item.name}
+              subtitle={`#${item.numeric_employee_code ?? "no code yet"}${missingComplianceIds.has(item.id) ? " · Details missing" : ""}${item.status === "active" && !item.worker_type_id ? " · No wage rate" : ""}`}
+              onPress={() => openWorker(item)}
+              right={<StatusChip status={statusFor(item)} />}
+              showChevron={false}
+            />
+          )}
+        />
       )}
-    </ScrollView>
+
+      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.xs} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md, gap: spacing.md },
+  container: { flex: 1, backgroundColor: colors.ground },
+  header: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  subtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs + 2,
-    backgroundColor: colors.card,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: spacing.xs,
+    backgroundColor: colors.ground,
+    borderRadius: 10,
     paddingHorizontal: spacing.sm + 4,
+    marginBottom: spacing.sm,
   },
-  searchInput: { flex: 1, paddingVertical: 12, fontSize: 14, color: colors.text },
-  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs + 2 },
-  empty: { textAlign: "center", color: colors.muted, marginTop: spacing.xl, fontFamily: font.regular },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  rowText: { flex: 1, marginLeft: spacing.sm, marginRight: spacing.sm },
-  name: { fontSize: 15, fontFamily: font.semiBold, color: colors.text },
-  meta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  metaWarn: { color: colors.leave, fontFamily: font.semiBold },
-  divider: { height: 1, backgroundColor: colors.divider, marginLeft: 14 + 36 + spacing.sm },
+  searchInput: { flex: 1, fontFamily: "PlusJakartaSans_500Medium", fontSize: 14, color: colors.navy, paddingVertical: 10 },
+  chipsRow: { flexDirection: "row", gap: spacing.xs, flexWrap: "wrap" },
 });

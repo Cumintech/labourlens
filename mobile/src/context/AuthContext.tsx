@@ -34,6 +34,10 @@ type AuthContextValue = {
     password: string,
     factoryName: string,
     consentGiven: boolean,
+    factoryAddress: string,
+    factoryLicenceNo: string,
+    state: string,
+    industry: string,
   ) => Promise<Owner>;
   logout: () => Promise<void>;
   updateOwner: (updated: Owner) => Promise<void>;
@@ -81,8 +85,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string,
     factoryName: string,
     consentGiven: boolean,
+    factoryAddress: string,
+    factoryLicenceNo: string,
+    state: string,
+    industry: string,
   ) {
-    const res = await apiSignup(name, username, email, mobile, password, factoryName, consentGiven);
+    const res = await apiSignup(name, username, email, mobile, password, factoryName, consentGiven, factoryAddress, factoryLicenceNo, state, industry);
     await Store.setItemAsync(TOKEN_KEY, res.access_token);
     await Store.setItemAsync(OWNER_KEY, JSON.stringify(res.owner));
     setToken(res.access_token);

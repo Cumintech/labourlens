@@ -43,12 +43,13 @@ export function stripToDigits(value: string, maxLength: number): string {
   return value.replace(/\D/g, "").slice(0, maxLength);
 }
 
-// UIDAI never issues an Aadhaar number starting 0 or 1, and the 12th
-// digit is a Verhoeff check digit over the first 11 -- both are real
-// structural properties of a genuine number, not an arbitrary rule.
+// Relaxed to a plain 12-digit check (no UIDAI first-digit/Verhoeff
+// checksum enforcement) -- the stricter rule was blocking real data
+// entry during pilot testing with placeholder numbers. Mirrored exactly
+// in backend/schemas.py.
 export function isValidAadhaar(value: string): boolean {
   const digits = value.replace(/\D/g, "");
-  return /^[2-9]\d{11}$/.test(digits) && verhoeffValid(digits);
+  return /^\d{12}$/.test(digits);
 }
 
 // Reduces a pasted +91XXXXXXXXXX or 0XXXXXXXXXX down to the bare 10
@@ -62,8 +63,10 @@ export function normalizeIndianMobile(value: string): string {
   return digits.slice(0, 10);
 }
 
+// Relaxed to a plain 10-digit check (no TRAI first-digit 6-9 rule) for
+// the same reason as isValidAadhaar above. Mirrored in backend/schemas.py.
 export function isValidIndianMobile(value: string): boolean {
-  return /^[6-9]\d{9}$/.test(value);
+  return /^\d{10}$/.test(value);
 }
 
 // Mirrors backend/schemas.py's _USERNAME_PATTERN exactly.

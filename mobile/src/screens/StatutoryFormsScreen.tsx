@@ -1,25 +1,36 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { FileText } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { FormTemplate, Worker, emailForm, generateAppointmentLetter, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
-import Button from "../components/Button";
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FormTemplate, Worker, generateAppointmentLetter, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
-import Icon from "../components/Icon";
 import KeyboardScreen from "../components/KeyboardScreen";
-import ScreenHeader from "../components/ScreenHeader";
 import SelectField from "../components/SelectField";
+import { Card } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { INDIAN_STATE_OPTIONS } from "../indianStates";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { formatDateShort } from "../format";
 import { sharePdfBytes } from "../pdfShare";
-import { colors, font, radius, spacing } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
 import { workerLabel } from "../workerLabel";
 
-type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
+// Mounted as the Forms & Reports tab's content inside MainTabs. `route`
+// is only ever populated when reached via HomeScreen's "Wage slips"
+// quick action, which passes { formCode, lockForm: true } through the
+// nested-tab params pattern (see HomeScreen's goToTab) to pre-pick and
+// lock the Report field to a single form.
+type Props = {
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+  route?: { params?: { formCode?: string; lockForm?: boolean } };
+};
 
+// UI behavior per form_code -- genuinely static (which forms have a
+// period, which accept/require a worker), unlike the label/availability
+// list itself, which now comes from the backend's form_templates table
+// per selected state (see loadTemplates below). A form_code with no
+// entry here (a brand-new state's forms before this map is updated)
+// falls back to the safest default: period-scoped, not worker-specific.
 const FORM_METADATA: Record<string, { hasPeriod: boolean; workerFilterable: boolean; workerRequired: boolean }> = {
   attendance: { hasPeriod: true, workerFilterable: false, workerRequired: false },
   form25: { hasPeriod: true, workerFilterable: false, workerRequired: false },
@@ -27,11 +38,37 @@ const FORM_METADATA: Record<string, { hasPeriod: boolean; workerFilterable: bool
   form12: { hasPeriod: false, workerFilterable: true, workerRequired: false },
   form15: { hasPeriod: true, workerFilterable: false, workerRequired: false },
   wageslip: { hasPeriod: true, workerFilterable: true, workerRequired: true },
+  // Always exactly one worker, never a period -- an ID card is a
+  // snapshot of current identity/photo, not scoped to any date range.
   id_card: { hasPeriod: false, workerFilterable: true, workerRequired: true },
+  // Same reasoning as id_card -- a letter reflects the worker's current
+  // designation/wage/joining date, not a date-scoped register.
   appointment_letter: { hasPeriod: false, workerFilterable: true, workerRequired: true },
 };
 const DEFAULT_FORM_METADATA = { hasPeriod: true, workerFilterable: false, workerRequired: false };
 
+// Purely presentational grouping for the Report dropdown -- lets a long,
+// state-dependent form list read as sections instead of one flat list.
+// A code with no entry (a brand-new state's form before this is updated)
+// falls under "Other" rather than being dropped.
+const FORM_CATEGORY: Record<string, string> = {
+  attendance: "Attendance",
+  form25: "Statutory Registers",
+  form25b: "Statutory Registers",
+  form12: "Statutory Registers",
+  form15: "Statutory Registers",
+  wageslip: "Payroll",
+  id_card: "ID & Letters",
+  appointment_letter: "ID & Letters",
+};
+const FORM_CATEGORY_ORDER = ["Attendance", "Payroll", "Statutory Registers", "ID & Letters", "Other"];
+
+// Forms generated through their own dedicated POST endpoint (see
+// backend/main.py) rather than the generic GET /forms/{code} dispatcher
+// every date-scoped form uses -- each operates on a single worker's
+// current data, not a period. Sharing this map (instead of repeating an
+// `if (formCode === ...)` per form) is what keeps a third such form from
+// duplicating the same branching a third time.
 const DIRECT_PDF_GENERATORS: Record<string, (token: string, workerId: number) => Promise<Uint8Array>> = {
   id_card: generateIdCard,
   appointment_letter: generateAppointmentLetter,
@@ -44,26 +81,25 @@ const DIRECT_PDF_HELPER_TEXT: Record<string, string> = {
 type PeriodPreset = "current_month" | "last_month" | "last_3_months" | "last_6_months" | "current_year" | "last_year" | "custom";
 
 const PRESETS: { key: PeriodPreset; label: string }[] = [
-  { key: "current_month", label: "Current month" },
-  { key: "last_month", label: "Last month" },
-  { key: "last_3_months", label: "Last 3 months" },
-  { key: "last_6_months", label: "Last 6 months" },
-  { key: "current_year", label: "Current year" },
-  { key: "last_year", label: "Last year" },
+  { key: "current_month", label: "Current Month" },
+  { key: "last_month", label: "Last Month" },
+  { key: "last_3_months", label: "Last 3 Months" },
+  { key: "last_6_months", label: "Last 6 Months" },
+  { key: "current_year", label: "Current Year" },
+  { key: "last_year", label: "Last Year" },
   { key: "custom", label: "Custom" },
 ];
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
+
 function dateStr(y: number, m: number, d: number): string {
   return `${y}-${pad(m)}-${pad(d)}`;
 }
 
-// "Current month" is genuinely the 1st of the month through today -- it
-// only LOOKS like a same-day range on the 1st of the month itself,
-// because start and end are both legitimately that same date then. Not a
-// bug; see the start/end math below.
+// Same range math as the report picker this replaces -- kept here
+// rather than shared, since this is now the only screen that needs it.
 function rangeForPreset(preset: PeriodPreset, today: Date): { start: string; end: string } | null {
   const y = today.getFullYear();
   const m = today.getMonth() + 1;
@@ -72,6 +108,10 @@ function rangeForPreset(preset: PeriodPreset, today: Date): { start: string; end
     case "current_month":
       return { start: dateStr(y, m, 1), end: dateStr(y, m, d) };
     case "last_month": {
+      // Full previous calendar month (1st to last day), not a rolling
+      // 30-day window -- month 0 in JS Date's day-0 trick returns the
+      // last day of the PREVIOUS month, which for m=1 (January) rolls
+      // back to December of the prior year automatically.
       const lastDayOfPrevMonth = new Date(y, m - 1, 0).getDate();
       const prevMonthDate = new Date(y, m - 2, 1);
       return {
@@ -98,47 +138,54 @@ function rangeForPreset(preset: PeriodPreset, today: Date): { start: string; end
   }
 }
 
-// Reports: pick a state, a report/form, a period, a worker if relevant,
-// then download (or email) it -- one generic flow for every statutory
-// form and the plain attendance report, rather than a separate screen
-// per document type.
-export default function StatutoryFormsScreen({}: Props) {
+// Generic by design, per the owner's own request: pick a period, pick a
+// form (dropdown, not a button list, and the Attendance Report is one
+// of its options rather than a separate screen), pick a worker if
+// relevant, download or email it. PDF only -- Excel export was removed
+// from every form per explicit request.
+export default function StatutoryFormsScreen({ route }: Props) {
   const { token, owner } = useAuth();
-  const insets = useSafeAreaInsets();
   const today = useMemo(() => new Date(), []);
+  const lockForm = route?.params?.lockForm ?? false;
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [state, setState] = useState(owner?.state ?? INDIAN_STATE_OPTIONS[0].value);
-  const [statePickerOpen, setStatePickerOpen] = useState(false);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
-  const [formCode, setFormCode] = useState<string>("attendance");
+  const [formCode, setFormCode] = useState<string>(route?.params?.formCode ?? "attendance");
   const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
   const [preset, setPreset] = useState<PeriodPreset>("current_month");
   const [customStart, setCustomStart] = useState(dateStr(today.getFullYear(), today.getMonth() + 1, 1));
   const [customEnd, setCustomEnd] = useState(isoDate(today));
-  const [recipientEmail, setRecipientEmail] = useState("");
   const [downloading, setDownloading] = useState(false);
-  const [downloaded, setDownloaded] = useState(false);
-  const [emailing, setEmailing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
-      listWorkers(token).then(setWorkers).catch(() => {});
+      listWorkers(token)
+        .then(setWorkers)
+        .catch(() => {});
     }, [token]),
   );
 
+  // Which Form Types show up is state-dependent (see form_templates on
+  // the backend) -- re-fetched whenever the state selector changes, and
+  // the selected form_code is reset if it's no longer in the new list
+  // (e.g. switching from Tamil Nadu to Karnataka).
   useEffect(() => {
     if (!token) return;
     listFormTemplates(token, state)
       .then((fetched) => {
         setTemplates(fetched);
+        // Stubbed (e.g. Karnataka) templates stay in the list -- their
+        // "(coming soon)" label already says what to expect, and
+        // attempting one surfaces the backend's real 501 message rather
+        // than hiding that the state's forms exist at all.
         if (!fetched.some((t) => t.form_code === formCode)) {
           setFormCode(fetched[0]?.form_code ?? "");
           setSelectedWorkerId(null);
         }
       })
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-fetch when state changes, not on every formCode change
   }, [token, state]);
 
   const availableForms = templates.map((t) => ({
@@ -150,6 +197,18 @@ export default function StatutoryFormsScreen({}: Props) {
   const formOption =
     availableForms.find((f) => f.code === formCode) ?? availableForms[0] ?? { code: "", label: "", isAvailable: true, ...DEFAULT_FORM_METADATA };
   const computed = preset === "custom" ? { start: customStart, end: customEnd } : rangeForPreset(preset, today)!;
+
+  // Grouped, headed dropdown options for the Report field -- see
+  // FORM_CATEGORY/FORM_CATEGORY_ORDER above.
+  const formSelectOptions: { label: string; value: string; header?: boolean }[] = [];
+  for (const category of FORM_CATEGORY_ORDER) {
+    const inCategory = availableForms.filter((f) => (FORM_CATEGORY[f.code] ?? "Other") === category);
+    if (inCategory.length === 0) continue;
+    formSelectOptions.push({ label: category, value: `__header_${category}`, header: true });
+    for (const f of inCategory) {
+      formSelectOptions.push({ label: f.isAvailable ? f.label : `${f.label} (coming soon)`, value: f.code });
+    }
+  }
 
   function validateSelection(): boolean {
     if (!formOption.isAvailable) {
@@ -170,13 +229,11 @@ export default function StatutoryFormsScreen({}: Props) {
   async function handleDownload() {
     if (!token || !validateSelection()) return;
     setDownloading(true);
-    setDownloaded(false);
     try {
       const directGenerator = DIRECT_PDF_GENERATORS[formCode];
       if (directGenerator) {
         const bytes = await directGenerator(token, selectedWorkerId!);
         await sharePdfBytes(bytes, formCode);
-        setDownloaded(true);
         return;
       }
       const url = getFormDownloadUrl(formCode, {
@@ -184,6 +241,14 @@ export default function StatutoryFormsScreen({}: Props) {
         startDate: formOption.hasPeriod ? computed.start : undefined,
         endDate: formOption.hasPeriod ? computed.end : undefined,
       });
+      // Fetching first (rather than handing the URL straight to
+      // File.downloadFileAsync) is deliberate: per expo-file-system's own
+      // docs, a non-2xx response makes downloadFileAsync reject outright
+      // with an opaque native "UnableToDownload" error and never write a
+      // file at all -- there's no body left afterward to inspect for a
+      // JSON error detail the way this code used to try to. fetch() gives
+      // a real response.status/response.ok to check before ever touching
+      // the filesystem, and a clean error message either way.
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) {
         let detail = `Download failed (${response.status}).`;
@@ -191,239 +256,157 @@ export default function StatutoryFormsScreen({}: Props) {
           const body = await response.json();
           detail = body.detail ?? detail;
         } catch {
-          // not a JSON error body
+          // not a JSON error body -- keep the generic message
         }
         Alert.alert("Download failed", detail);
         return;
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
       await sharePdfBytes(bytes, formCode);
-      setDownloaded(true);
     } catch (e: any) {
       Alert.alert("Download failed", e?.message ?? "Couldn't reach the server.");
     } finally {
       setDownloading(false);
-      setTimeout(() => setDownloaded(false), 2500);
-    }
-  }
-
-  async function handleEmail() {
-    if (!token || !validateSelection()) return;
-    if (!recipientEmail.includes("@")) {
-      Alert.alert("Check the email", "Enter a valid email address to send the form to.");
-      return;
-    }
-    setEmailing(true);
-    try {
-      await emailForm(token, formCode, {
-        worker_id: formOption.workerFilterable ? selectedWorkerId ?? undefined : undefined,
-        startDate: formOption.hasPeriod ? computed.start : undefined,
-        endDate: formOption.hasPeriod ? computed.end : undefined,
-        recipient_email: recipientEmail.trim(),
-      });
-      Alert.alert("Sent", `${formOption.label} sent to ${recipientEmail.trim()}.`);
-    } catch (e: any) {
-      Alert.alert("Could not send", e?.message ?? "Please try again.");
-    } finally {
-      setEmailing(false);
     }
   }
 
   const workerOptions = [
     { label: "All workers", value: "all" },
-    ...workers.map((w) => ({ label: workerLabel(w), value: String(w.id) })),
+    ...workers.map((w) => ({
+      label: workerLabel(w),
+      value: String(w.id),
+    })),
   ];
 
   return (
-    <KeyboardScreen contentContainerStyle={[styles.container, { paddingBottom: spacing.xl + insets.bottom }]}>
-      <ScreenHeader title="Reports" subtitle="Statutory forms and reports, any period or worker" />
+    <KeyboardScreen contentContainerStyle={styles.container}>
+      <Text style={type.display}>Reports</Text>
+      <Text style={styles.subtitle}>Download any statutory form or report, for any period, for any worker.</Text>
 
-      <TouchableOpacity style={styles.stateCard} onPress={() => setStatePickerOpen(true)}>
-        <View style={styles.stateIconWrap}>
-          <Icon name="mapPin" size={16} color={colors.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.stateLabel}>State</Text>
-          <Text style={styles.stateValue}>{INDIAN_STATE_OPTIONS.find((o) => o.value === state)?.label ?? state}</Text>
-        </View>
-        <Text style={styles.changeLink}>Change</Text>
-      </TouchableOpacity>
+      <Text style={styles.sectionLabel}>State</Text>
+      <SelectField label="" value={state} options={INDIAN_STATE_OPTIONS} onChange={setState} />
 
-      <View style={styles.formCard}>
-        <Text style={styles.sectionLabel}>Report</Text>
-        {availableForms.length === 0 ? (
-          <Text style={styles.empty}>No forms available for this state yet.</Text>
-        ) : (
-          <SelectField
-            label=""
-            value={formCode}
-            options={availableForms.map((o) => ({ label: o.label, value: o.code }))}
-            onChange={(v) => {
-              setFormCode(v);
-              setSelectedWorkerId(null);
-            }}
-            outlined
-          />
-        )}
-
-        <Text style={styles.sectionLabel}>Time period</Text>
-        <SelectField
-          label=""
-          value={preset}
-          options={PRESETS.map((p) => ({ label: p.label, value: p.key }))}
-          onChange={(v) => setPreset(v as PeriodPreset)}
-          disabled={!formOption.hasPeriod}
-          outlined
-        />
-        {!formOption.hasPeriod ? (
-          <Text style={styles.helper}>{formOption.label} isn't scoped to a period.</Text>
-        ) : preset === "custom" ? (
-          <View style={styles.customRow}>
-            <View style={{ flex: 1 }}>
-              <DateField label="From" value={customStart} onChange={setCustomStart} />
+      {availableForms.length === 0 ? (
+        <Text style={styles.empty}>No forms available for this state yet.</Text>
+      ) : (
+        <Card style={styles.formCard}>
+          <Text style={styles.sectionLabel}>Report</Text>
+          {lockForm ? (
+            <View style={styles.lockedField}>
+              <FileText size={18} color={colors.primary} />
+              <Text style={styles.lockedFieldText}>{formOption.label}</Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <DateField label="To" value={customEnd} onChange={setCustomEnd} />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.rangeStrip}>
-            <Icon name="calendar" size={14} color={colors.primary} />
-            <Text style={styles.rangeStripText}>
-              {formatDateShort(computed.start)} – {formatDateShort(computed.end)}
-            </Text>
-          </View>
-        )}
-
-        <Text style={styles.sectionLabel}>Worker</Text>
-        {!formOption.workerFilterable ? (
-          <SelectField label="" value="all" options={[{ label: "All workers", value: "all" }]} onChange={() => {}} disabled outlined />
-        ) : workers.length === 0 ? (
-          <Text style={styles.empty}>No workers yet.</Text>
-        ) : (
-          <SelectField
-            label=""
-            value={selectedWorkerId !== null ? String(selectedWorkerId) : "all"}
-            options={workerOptions}
-            onChange={(v) => setSelectedWorkerId(v === "all" ? null : parseInt(v, 10))}
-            outlined
-          />
-        )}
-
-        <Button
-          label={downloaded ? "Downloaded" : "Download PDF"}
-          onPress={handleDownload}
-          loading={downloading}
-          icon={!downloading && <Icon name={downloaded ? "check" : "download"} size={16} color={colors.white} />}
-          style={{ marginTop: spacing.sm }}
-        />
-        {DIRECT_PDF_HELPER_TEXT[formCode] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[formCode]}</Text>}
-
-        {!DIRECT_PDF_GENERATORS[formCode] && (
-          <>
-            <Text style={styles.orEmailLabel}>Or send by email</Text>
-            <View style={styles.emailRow}>
-              <TextInput
-                style={styles.emailInput}
-                value={recipientEmail}
-                onChangeText={setRecipientEmail}
-                placeholder="owner@example.com"
-                placeholderTextColor={colors.muted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-              />
-              <Button label="Send" variant="outline" onPress={handleEmail} loading={emailing} small />
-            </View>
-          </>
-        )}
-      </View>
-
-      <Modal visible={statePickerOpen} transparent animationType="fade" onRequestClose={() => setStatePickerOpen(false)}>
-        <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setStatePickerOpen(false)}>
-          <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-            <Text style={styles.sheetTitle}>Select state</Text>
-            <FlatList
-              data={INDIAN_STATE_OPTIONS}
-              keyExtractor={(o) => o.value}
-              style={{ flexGrow: 0 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.sheetOption, item.value === state && styles.sheetOptionSelected]}
-                  onPress={() => {
-                    setState(item.value);
-                    setStatePickerOpen(false);
-                  }}
-                >
-                  <Text style={[styles.sheetOptionText, item.value === state && styles.sheetOptionTextSelected]}>{item.label}</Text>
-                </TouchableOpacity>
-              )}
+          ) : (
+            <SelectField
+              label=""
+              value={formCode}
+              options={formSelectOptions}
+              onChange={(v) => {
+                setFormCode(v);
+                setSelectedWorkerId(null);
+              }}
             />
-          </View>
-        </TouchableOpacity>
-      </Modal>
+          )}
+          {!formOption.isAvailable && <Text style={styles.formCardComingSoon}>Coming soon</Text>}
+
+          <Text style={styles.sectionLabel}>Time Period</Text>
+          <SelectField
+            label=""
+            value={preset}
+            options={PRESETS.map((p) => ({ label: p.label, value: p.key }))}
+            onChange={(v) => setPreset(v as PeriodPreset)}
+            disabled={!formOption.hasPeriod}
+          />
+          {!formOption.hasPeriod ? (
+            <Text style={styles.helper}>{formOption.label} isn't scoped to a period.</Text>
+          ) : preset === "custom" ? (
+            <View style={styles.customRow}>
+              <View style={{ flex: 1 }}>
+                <DateField label="From" value={customStart} onChange={setCustomStart} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <DateField label="To" value={customEnd} onChange={setCustomEnd} />
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.rangePreview}>
+              {computed.start} to {computed.end}
+            </Text>
+          )}
+
+          <Text style={styles.sectionLabel}>Worker</Text>
+          {!formOption.workerFilterable ? (
+            <SelectField label="" value="all" options={[{ label: "All workers", value: "all" }]} onChange={() => {}} disabled />
+          ) : workers.length === 0 ? (
+            <Text style={styles.empty}>No workers yet.</Text>
+          ) : (
+            <SelectField
+              label=""
+              value={selectedWorkerId !== null ? String(selectedWorkerId) : "all"}
+              options={workerOptions}
+              onChange={(v) => setSelectedWorkerId(v === "all" ? null : parseInt(v, 10))}
+            />
+          )}
+
+          <TouchableOpacity style={[styles.button, downloading && styles.buttonDisabled]} onPress={handleDownload} disabled={downloading}>
+            {downloading ? (
+              <ActivityIndicator color={colors.surface} />
+            ) : (
+              <Text style={styles.buttonText}>{DIRECT_PDF_GENERATORS[formCode] ? "Download / Share PDF" : "Download PDF"}</Text>
+            )}
+          </TouchableOpacity>
+          {DIRECT_PDF_HELPER_TEXT[formCode] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[formCode]}</Text>}
+        </Card>
+      )}
     </KeyboardScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.md, backgroundColor: colors.bg, flexGrow: 1 },
-  stateCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.sm + 4,
-    marginTop: spacing.md,
-  },
-  stateIconWrap: { width: 32, height: 32, borderRadius: radius.control, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
-  stateLabel: { fontSize: 11, color: colors.muted, fontFamily: font.regular },
-  stateValue: { fontSize: 14.5, fontFamily: font.semiBold, color: colors.text, marginTop: 1 },
-  changeLink: { color: colors.primary, fontSize: 13.5, fontFamily: font.semiBold },
-
-  formCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginTop: spacing.md,
-  },
-  sectionLabel: { fontSize: 11.5, fontFamily: font.semiBold, color: colors.muted, textTransform: "uppercase", marginBottom: spacing.xs, letterSpacing: 0.5 },
-  empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
-  helper: { fontSize: 12, color: colors.muted, marginTop: spacing.xs },
-  customRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
-  rangeStrip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs + 2,
-    backgroundColor: colors.primarySoft,
-    borderRadius: radius.control,
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.sm + 2,
-    marginBottom: spacing.md,
-  },
-  rangeStripText: { color: colors.primary, fontSize: 13.5, fontFamily: font.semiBold },
-  orEmailLabel: { fontSize: 12, fontFamily: font.semiBold, color: colors.muted, marginTop: spacing.md, marginBottom: spacing.xs },
-  emailRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
-  emailInput: {
-    flex: 1,
-    backgroundColor: colors.bg,
-    borderRadius: radius.control,
+  container: { padding: spacing.lg, backgroundColor: colors.ground, flexGrow: 1, paddingBottom: spacing.xl * 2 },
+  subtitle: { ...type.small, color: colors.textSecondary, marginBottom: spacing.md },
+  sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs, textTransform: "uppercase" },
+  empty: { fontSize: 13, color: colors.textSecondary },
+  helper: { fontSize: 12, color: colors.textSecondary },
+  customRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  rangePreview: { fontSize: 13, color: colors.textSecondary, marginTop: spacing.sm },
+  input: {
+    backgroundColor: colors.ground,
+    borderRadius: radius.sm,
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.sm + 2,
     fontSize: 14,
-    color: colors.text,
+    color: colors.navy,
   },
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm + 4,
+    alignItems: "center",
+    marginTop: spacing.md,
+  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: colors.surface, fontSize: 14, fontWeight: "700" },
+  buttonGhost: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm + 4,
+    alignItems: "center",
+    marginTop: spacing.sm,
+  },
+  buttonGhostText: { color: colors.primary, fontSize: 14, fontWeight: "700" },
 
-  sheetBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.hero, borderTopRightRadius: radius.hero, padding: spacing.md, maxHeight: "70%" },
-  sheetTitle: { fontSize: 14, fontFamily: font.semiBold, color: colors.text, marginBottom: spacing.sm },
-  sheetOption: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.control },
-  sheetOptionSelected: { backgroundColor: colors.primarySoft },
-  sheetOptionText: { fontSize: 15, color: colors.text },
-  sheetOptionTextSelected: { color: colors.primaryDark, fontFamily: font.semiBold },
+  formCard: { marginTop: spacing.sm, padding: spacing.md },
+  formCardComingSoon: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.warningTintText, marginTop: 2 },
+  lockedField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.ground,
+    borderRadius: radius.sm,
+    padding: 12,
+    minHeight: 44,
+  },
+  lockedFieldText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.navy },
 });

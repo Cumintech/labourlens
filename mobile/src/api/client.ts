@@ -167,10 +167,26 @@ export function signup(
   password: string,
   factoryName: string,
   consentGiven: boolean,
+  factoryAddress: string,
+  factoryLicenceNo: string,
+  state: string,
+  industry: string,
 ): Promise<AuthResponse> {
   return request<AuthResponse>("/owners/signup", {
     method: "POST",
-    body: JSON.stringify({ name, username, email, mobile, password, factory_name: factoryName, consent_given: consentGiven }),
+    body: JSON.stringify({
+      name,
+      username,
+      email,
+      mobile,
+      password,
+      factory_name: factoryName,
+      consent_given: consentGiven,
+      factory_address: factoryAddress,
+      factory_licence_no: factoryLicenceNo,
+      state,
+      industry,
+    }),
   });
 }
 
@@ -235,7 +251,7 @@ export type Worker = {
   // From the worker's compliance record, not a Worker column -- null
   // means no joining date on file yet (in which case attendance/leave
   // for them is unrestricted). See DayAttendanceRow's "Joined <date>"
-  // disabled state in AttendanceRangeScreen/WorkerAttendanceScreen.
+  // disabled state in AttendanceScreen's Range view / WorkerProfileScreen's Attendance tab.
   date_of_joining: string | null;
 };
 
@@ -514,6 +530,23 @@ export type DashboardSummary = {
 
 export function getDashboard(token: string, date: string): Promise<DashboardSummary> {
   return request<DashboardSummary>(`/dashboard?date=${date}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type HomeAlert = { code: string; message: string; count: number };
+
+export function getHomeAlerts(token: string): Promise<{ alerts: HomeAlert[] }> {
+  return request<{ alerts: HomeAlert[] }>("/home/alerts", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type MonthEndStep = { key: string; label: string; complete: boolean; detail: string };
+export type MonthEnd = { year: number; month: number; steps: MonthEndStep[] };
+
+export function getMonthEnd(token: string, year: number, month: number): Promise<MonthEnd> {
+  return request<MonthEnd>(`/month-end/${year}/${month}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

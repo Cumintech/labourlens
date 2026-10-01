@@ -37,7 +37,7 @@ export default function PrivacyPolicyScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={colors.teal} />
       </View>
     );
   }
@@ -65,8 +65,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.white },
   content: { padding: spacing.lg, paddingBottom: spacing.xl },
-  title: { fontSize: 22, fontWeight: "700", color: colors.text },
+  title: { fontSize: 22, fontWeight: "700", color: colors.navy },
   updated: { fontSize: 12, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
-  heading: { fontSize: 14, fontWeight: "700", color: colors.text, marginTop: spacing.md, marginBottom: spacing.xs },
+  heading: { fontSize: 14, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs },
   body: { fontSize: 13, color: colors.muted, lineHeight: 20 },
 });

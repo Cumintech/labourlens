@@ -49,8 +49,8 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.lg, backgroundColor: colors.white },
-  title: { fontSize: 18, fontWeight: "700", color: colors.text, marginBottom: spacing.sm, textAlign: "center" },
+  title: { fontSize: 18, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm, textAlign: "center" },
   body: { fontSize: 14, color: colors.muted, textAlign: "center", lineHeight: 20, marginBottom: spacing.lg },
-  button: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 12, paddingHorizontal: spacing.lg },
+  button: { backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 12, paddingHorizontal: spacing.lg },
   buttonText: { color: colors.white, fontSize: 15, fontWeight: "700" },
 });

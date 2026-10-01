@@ -30,9 +30,10 @@ type Props = NativeStackScreenProps<RootStackParamList, "ShiftSettings">;
 
 // Factory profile fields (name, address, licence, state, industry) used
 // to live on this screen too, despite it being named for shift
-// management -- moved to a real Profile screen (Section 4) so that data
-// exists in exactly one editable place. The helper link below is for
-// anyone who lands here out of habit looking for those fields.
+// management -- moved to a real Profile screen so that data exists in
+// exactly one editable place. The cross-link that used to sit here
+// pointing at Profile was removed once Settings gained its own
+// "Factory profile" row (Phase 7) -- Profile now lives in Settings.
 export default function ShiftSettingsScreen({ navigation }: Props) {
   const { token } = useAuth();
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
@@ -46,6 +47,13 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
   const [newEnd, setNewEnd] = useState("");
   const [newRestInterval, setNewRestInterval] = useState("");
   const [adding, setAdding] = useState(false);
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editRestInterval, setEditRestInterval] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -106,6 +114,42 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
     }
   }
 
+  function startEditShift(shift: ShiftConfig) {
+    setEditingId(shift.id);
+    setEditLabel(shift.label);
+    setEditStart(shift.start_time ?? "");
+    setEditEnd(shift.end_time ?? "");
+    setEditRestInterval(shift.rest_interval ?? "");
+  }
+
+  async function handleSaveEdit() {
+    if (!token || editingId === null) return;
+    if (!editLabel.trim()) {
+      Alert.alert("Name required", "Give the shift a name, e.g. \"Night\".");
+      return;
+    }
+    const shift = shifts.find((s) => s.id === editingId);
+    if (!shift) return;
+    setSavingEdit(true);
+    try {
+      await updateShiftConfig(
+        token,
+        editingId,
+        shift.slot_key,
+        editLabel.trim(),
+        editStart.trim() || undefined,
+        editEnd.trim() || undefined,
+        editRestInterval.trim() || undefined,
+      );
+      setEditingId(null);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Could not update shift", e?.message ?? "Please try again.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   function handleDeleteShift(shift: ShiftConfig) {
     Alert.alert("Remove shift", `Remove "${shift.label}"?`, [
       { text: "Cancel", style: "cancel" },
@@ -148,36 +192,60 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
     <KeyboardScreen
       style={styles.container}
       contentContainerStyle={{ padding: spacing.md }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
     >
-      <TouchableOpacity style={styles.helpbox} onPress={() => navigation.navigate("Profile")}>
-        <Text style={styles.helpboxText}>
-          Looking for factory name, address, licence, state, or industry? Edit those from{" "}
-          <Text style={styles.helpboxLink}>Profile ›</Text>
-        </Text>
-      </TouchableOpacity>
-
       <Text style={styles.sectionLabel}>Shifts</Text>
       <Text style={styles.helper}>
         Up to 3 shifts is typical, but there's no hard limit. Workers can be marked present in more than one
         shift on the same day.
       </Text>
-      {shifts.map((shift) => (
-        <View key={shift.id} style={styles.shiftRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.shiftLabel}>{shift.label}</Text>
-            {(shift.start_time || shift.end_time) && (
-              <Text style={styles.shiftTime}>
-                {shift.start_time ?? "?"} – {shift.end_time ?? "?"}
-              </Text>
-            )}
-            {shift.rest_interval && <Text style={styles.shiftTime}>Rest: {shift.rest_interval}</Text>}
+      {shifts.map((shift) =>
+        editingId === shift.id ? (
+          <View key={shift.id} style={styles.editCard}>
+            <Text style={styles.label}>Shift name</Text>
+            <TextInput style={styles.input} value={editLabel} onChangeText={setEditLabel} placeholderTextColor={colors.muted} />
+            <View style={styles.timeRow}>
+              <TimeField label="Start time" value={editStart} onChange={setEditStart} />
+              <TimeField label="End time" value={editEnd} onChange={setEditEnd} />
+            </View>
+            <Text style={styles.label}>Rest interval</Text>
+            <TextInput
+              style={styles.input}
+              value={editRestInterval}
+              onChangeText={setEditRestInterval}
+              placeholder="e.g. 1:00 PM - 1:30 PM"
+              placeholderTextColor={colors.muted}
+            />
+            <View style={styles.addFormButtonRow}>
+              <TouchableOpacity style={styles.cancelAddButton} onPress={() => setEditingId(null)}>
+                <Text style={styles.cancelAddButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.addFormButton, savingEdit && styles.buttonDisabled]}
+                onPress={handleSaveEdit}
+                disabled={savingEdit}
+              >
+                {savingEdit ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
-          <TouchableOpacity onPress={() => handleDeleteShift(shift)}>
-            <Text style={styles.removeLink}>Remove</Text>
+        ) : (
+          <TouchableOpacity key={shift.id} style={styles.shiftRow} onPress={() => startEditShift(shift)}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.shiftLabel}>{shift.label}</Text>
+              {(shift.start_time || shift.end_time) && (
+                <Text style={styles.shiftTime}>
+                  {shift.start_time ?? "?"} – {shift.end_time ?? "?"}
+                </Text>
+              )}
+              {shift.rest_interval && <Text style={styles.shiftTime}>Rest: {shift.rest_interval}</Text>}
+            </View>
+            <TouchableOpacity onPress={() => handleDeleteShift(shift)}>
+              <Text style={styles.removeLink}>Remove</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </View>
-      ))}
+        ),
+      )}
 
       {showAddForm ? (
         <>
@@ -233,24 +301,21 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-  helpbox: { backgroundColor: colors.divider, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
-  helpboxText: { fontSize: 12, color: colors.text, lineHeight: 17 },
-  helpboxLink: { fontWeight: "700", color: colors.primaryDark },
-  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.text, marginBottom: spacing.xs },
+  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.xs },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },
   input: {
-    backgroundColor: colors.bg,
+    backgroundColor: colors.fieldBg,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: spacing.sm,
     fontSize: 14,
-    color: colors.text,
+    color: colors.navy,
   },
   timeRow: { flexDirection: "row", gap: spacing.sm },
   timeInput: { flex: 1 },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.teal,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm + 4,
     alignItems: "center",
@@ -260,17 +325,23 @@ const styles = StyleSheet.create({
   buttonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
   addFormButtonRow: { flexDirection: "row", gap: spacing.sm },
   addFormButton: { flex: 1 },
-  cancelAddButton: { flex: 1, paddingVertical: spacing.sm + 4, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.bg, marginTop: spacing.md },
+  cancelAddButton: { flex: 1, paddingVertical: spacing.sm + 4, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg, marginTop: spacing.md },
   cancelAddButtonText: { color: colors.muted, fontSize: 14, fontWeight: "700" },
   shiftRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.bg,
+    backgroundColor: colors.fieldBg,
     borderRadius: radius.sm,
     padding: spacing.sm + 2,
     marginBottom: spacing.xs,
   },
-  shiftLabel: { fontSize: 14, fontWeight: "700", color: colors.text },
+  editCard: {
+    backgroundColor: colors.fieldBg,
+    borderRadius: radius.sm,
+    padding: spacing.sm + 4,
+    marginBottom: spacing.xs,
+  },
+  shiftLabel: { fontSize: 14, fontWeight: "700", color: colors.navy },
   shiftTime: { fontSize: 11, color: colors.muted, marginTop: 1 },
-  removeLink: { color: colors.absent, fontSize: 12, fontWeight: "700" },
+  removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700" },
 });

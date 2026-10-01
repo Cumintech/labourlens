@@ -58,16 +58,16 @@ export default function OtHoursModal({ visible, initialHours, onConfirm, onCance
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
-  card: { backgroundColor: colors.white, borderRadius: radius.control, padding: spacing.lg, width: "80%", maxHeight: "70%" },
-  title: { fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: spacing.sm },
+  card: { backgroundColor: colors.white, borderRadius: radius.md, padding: spacing.lg, width: "80%", maxHeight: "70%" },
+  title: { fontSize: 16, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
   list: { flexGrow: 0, marginBottom: spacing.sm },
   option: { paddingVertical: 12, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
-  optionSelected: { backgroundColor: colors.warnBg },
-  optionText: { fontSize: 15, color: colors.text },
-  optionTextSelected: { color: colors.primaryDark, fontWeight: "700" },
+  optionSelected: { backgroundColor: colors.violetLight },
+  optionText: { fontSize: 15, color: colors.navy },
+  optionTextSelected: { color: colors.violet, fontWeight: "700" },
   buttonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
-  cancelButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.bg },
+  cancelButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
   cancelText: { color: colors.muted, fontWeight: "700" },
-  confirmButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.primary },
+  confirmButton: { flex: 1, paddingVertical: 12, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.teal },
   confirmText: { color: colors.white, fontWeight: "700" },
 });

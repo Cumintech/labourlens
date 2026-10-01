@@ -48,6 +48,13 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
   const [newRestInterval, setNewRestInterval] = useState("");
   const [adding, setAdding] = useState(false);
 
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editRestInterval, setEditRestInterval] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const load = useCallback(async () => {
     if (!token) return;
     setShifts(await listShiftConfigs(token));
@@ -107,6 +114,42 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
     }
   }
 
+  function startEditShift(shift: ShiftConfig) {
+    setEditingId(shift.id);
+    setEditLabel(shift.label);
+    setEditStart(shift.start_time ?? "");
+    setEditEnd(shift.end_time ?? "");
+    setEditRestInterval(shift.rest_interval ?? "");
+  }
+
+  async function handleSaveEdit() {
+    if (!token || editingId === null) return;
+    if (!editLabel.trim()) {
+      Alert.alert("Name required", "Give the shift a name, e.g. \"Night\".");
+      return;
+    }
+    const shift = shifts.find((s) => s.id === editingId);
+    if (!shift) return;
+    setSavingEdit(true);
+    try {
+      await updateShiftConfig(
+        token,
+        editingId,
+        shift.slot_key,
+        editLabel.trim(),
+        editStart.trim() || undefined,
+        editEnd.trim() || undefined,
+        editRestInterval.trim() || undefined,
+      );
+      setEditingId(null);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Could not update shift", e?.message ?? "Please try again.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   function handleDeleteShift(shift: ShiftConfig) {
     Alert.alert("Remove shift", `Remove "${shift.label}"?`, [
       { text: "Cancel", style: "cancel" },
@@ -156,22 +199,53 @@ export default function ShiftSettingsScreen({ navigation }: Props) {
         Up to 3 shifts is typical, but there's no hard limit. Workers can be marked present in more than one
         shift on the same day.
       </Text>
-      {shifts.map((shift) => (
-        <View key={shift.id} style={styles.shiftRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.shiftLabel}>{shift.label}</Text>
-            {(shift.start_time || shift.end_time) && (
-              <Text style={styles.shiftTime}>
-                {shift.start_time ?? "?"} – {shift.end_time ?? "?"}
-              </Text>
-            )}
-            {shift.rest_interval && <Text style={styles.shiftTime}>Rest: {shift.rest_interval}</Text>}
+      {shifts.map((shift) =>
+        editingId === shift.id ? (
+          <View key={shift.id} style={styles.editCard}>
+            <Text style={styles.label}>Shift name</Text>
+            <TextInput style={styles.input} value={editLabel} onChangeText={setEditLabel} placeholderTextColor={colors.muted} />
+            <View style={styles.timeRow}>
+              <TimeField label="Start time" value={editStart} onChange={setEditStart} />
+              <TimeField label="End time" value={editEnd} onChange={setEditEnd} />
+            </View>
+            <Text style={styles.label}>Rest interval</Text>
+            <TextInput
+              style={styles.input}
+              value={editRestInterval}
+              onChangeText={setEditRestInterval}
+              placeholder="e.g. 1:00 PM - 1:30 PM"
+              placeholderTextColor={colors.muted}
+            />
+            <View style={styles.addFormButtonRow}>
+              <TouchableOpacity style={styles.cancelAddButton} onPress={() => setEditingId(null)}>
+                <Text style={styles.cancelAddButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.addFormButton, savingEdit && styles.buttonDisabled]}
+                onPress={handleSaveEdit}
+                disabled={savingEdit}
+              >
+                {savingEdit ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
-          <TouchableOpacity onPress={() => handleDeleteShift(shift)}>
-            <Text style={styles.removeLink}>Remove</Text>
+        ) : (
+          <TouchableOpacity key={shift.id} style={styles.shiftRow} onPress={() => startEditShift(shift)}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.shiftLabel}>{shift.label}</Text>
+              {(shift.start_time || shift.end_time) && (
+                <Text style={styles.shiftTime}>
+                  {shift.start_time ?? "?"} – {shift.end_time ?? "?"}
+                </Text>
+              )}
+              {shift.rest_interval && <Text style={styles.shiftTime}>Rest: {shift.rest_interval}</Text>}
+            </View>
+            <TouchableOpacity onPress={() => handleDeleteShift(shift)}>
+              <Text style={styles.removeLink}>Remove</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </View>
-      ))}
+        ),
+      )}
 
       {showAddForm ? (
         <>
@@ -259,6 +333,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fieldBg,
     borderRadius: radius.sm,
     padding: spacing.sm + 2,
+    marginBottom: spacing.xs,
+  },
+  editCard: {
+    backgroundColor: colors.fieldBg,
+    borderRadius: radius.sm,
+    padding: spacing.sm + 4,
     marginBottom: spacing.xs,
   },
   shiftLabel: { fontSize: 14, fontWeight: "700", color: colors.navy },

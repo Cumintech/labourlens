@@ -34,8 +34,8 @@ token_a = signup.json()["access_token"]
 headers_a = {"Authorization": f"Bearer {token_a}"}
 
 shifts = client.get("/shift-configs", headers=headers_a).json()
-assert [s["slot_key"] for s in shifts] == ["AM", "PM", "Evening"], shifts
-print("new signup gets 3 default shifts automatically: PASSED")
+assert [s["slot_key"] for s in shifts] == ["Morning", "Evening"], shifts
+print("new signup gets 2 default shifts automatically: PASSED")
 
 # --- Migration script backfills a pre-existing owner with zero shifts ---
 db = SessionLocal()
@@ -60,13 +60,13 @@ result = subprocess.run(
     text=True,
 )
 assert result.returncode == 0, f"migration script failed:\n{result.stdout}\n{result.stderr}"
-assert "confirmed: every owner has at least 3 shift configs" in result.stdout, result.stdout
+assert "confirmed: every owner has at least one shift config" in result.stdout, result.stdout
 db2 = SessionLocal()
 legacy_shifts = db2.query(models.ShiftConfig).filter(models.ShiftConfig.owner_id == legacy_owner_id).all()
-assert len(legacy_shifts) == 3, legacy_shifts
-assert {s.slot_key for s in legacy_shifts} == {"AM", "PM", "Evening"}
+assert len(legacy_shifts) == 2, legacy_shifts
+assert {s.slot_key for s in legacy_shifts} == {"Morning", "Evening"}
 db2.close()
-print("migration script backfills a pre-existing owner with exactly 3 shifts: PASSED")
+print("migration script backfills a pre-existing owner with exactly 2 shifts: PASSED")
 
 # Running it again must not duplicate rows for either owner.
 result2 = subprocess.run(
@@ -79,7 +79,7 @@ result2 = subprocess.run(
 assert result2.returncode == 0, result2.stdout
 db3 = SessionLocal()
 assert (
-    db3.query(models.ShiftConfig).filter(models.ShiftConfig.owner_id == legacy_owner_id).count() == 3
+    db3.query(models.ShiftConfig).filter(models.ShiftConfig.owner_id == legacy_owner_id).count() == 2
 ), "migration duplicated rows on a second run"
 db3.close()
 print("migration script is idempotent on a second run: PASSED")
@@ -92,7 +92,7 @@ worker = client.post(
 mark_default = client.post(
     "/attendance",
     headers=headers_a,
-    json={"worker_id": worker["id"], "date": "2026-09-01", "slot": "AM", "status": "present"},
+    json={"worker_id": worker["id"], "date": "2026-09-01", "slot": "Morning", "status": "present"},
 )
 assert mark_default.status_code == 200, mark_default.text
 print("marking attendance against a default shift slot: PASSED")
@@ -119,7 +119,7 @@ for bad_time_field, bad_value in (("start_time", "6.00am"), ("end_time", "2pm"))
 print("malformed shift times (e.g. '6.00am', '2pm') rejected with 422, not stored: PASSED")
 
 update_to_bad_time = client.put(
-    f"/shift-configs/{shifts[0]['id']}", headers=headers_a, json={"slot_key": "AM", "label": "AM", "start_time": "6.00am"}
+    f"/shift-configs/{shifts[0]['id']}", headers=headers_a, json={"slot_key": "Morning", "label": "Morning", "start_time": "6.00am"}
 )
 assert update_to_bad_time.status_code == 422, update_to_bad_time.text
 print("PUT with a malformed time is also rejected, not just POST: PASSED")
@@ -148,10 +148,10 @@ assert mark_night.json()["overtime_hours"] == 1.5, mark_night.json()
 
 dashboard = client.get("/dashboard", headers=headers_a, params={"date": "2026-09-01"}).json()
 slot_keys = {s["slot"] for s in dashboard["slots"]}
-assert slot_keys == {"AM", "PM", "Evening", "Night"}, dashboard
+assert slot_keys == {"Morning", "Evening", "Night"}, dashboard
 night_summary = next(s for s in dashboard["slots"] if s["slot"] == "Night")
 assert night_summary["present"] == 1, night_summary
-print("dashboard summary reflects a customized (4-shift) scheme, not a fixed 3: PASSED")
+print("dashboard summary reflects a customized (3-shift) scheme, not a fixed default: PASSED")
 
 # --- Deleting a shift with attendance history is blocked ---
 delete_in_use = client.delete(f"/shift-configs/{new_shift.json()['id']}", headers=headers_a)
@@ -175,7 +175,7 @@ token_b = signup_b.json()["access_token"]
 headers_b = {"Authorization": f"Bearer {token_b}"}
 
 shifts_b = client.get("/shift-configs", headers=headers_b).json()
-assert len(shifts_b) == 3 and all(s["slot_key"] in ("AM", "PM", "Evening") for s in shifts_b), shifts_b
+assert len(shifts_b) == 2 and all(s["slot_key"] in ("Morning", "Evening") for s in shifts_b), shifts_b
 
 edit_a_from_b = client.put(
     f"/shift-configs/{new_shift.json()['id']}", headers=headers_b, json={"slot_key": "Night", "label": "Hijacked"}

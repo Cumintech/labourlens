@@ -49,7 +49,7 @@ headers = {"Authorization": f"Bearer {token}"}
 # --- Worker 1: full August attendance, wage rate set, payment recorded ---
 w1 = client.post("/workers", headers=headers, json={"name": "Full Worker", "aadhaar_number": _valid_aadhaar("60000000001"), "dob": "1990-01-01"}).json()
 for day in range(1, 32):
-    r = client.post("/attendance", headers=headers, json={"worker_id": w1["id"], "date": f"2026-08-{day:02d}", "slot": "AM", "status": "present", "overtime_hours": 0})
+    r = client.post("/attendance", headers=headers, json={"worker_id": w1["id"], "date": f"2026-08-{day:02d}", "slot": "Morning", "status": "present", "overtime_hours": 0})
     assert r.status_code == 200, r.text
 rate1 = client.post(f"/workers/{w1['id']}/wage-profile", headers=headers, json={"rate_type": "daily", "basic": 500, "hra": 0, "da": 0, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": "2026-08-01"})
 assert rate1.status_code == 201, rate1.text
@@ -57,7 +57,7 @@ assert rate1.status_code == 201, rate1.text
 # --- Worker 2: only 10 of 31 August days marked, no wage rate ---
 w2 = client.post("/workers", headers=headers, json={"name": "Partial Worker", "aadhaar_number": _valid_aadhaar("60000000002"), "dob": "1990-01-01"}).json()
 for day in range(1, 11):
-    r = client.post("/attendance", headers=headers, json={"worker_id": w2["id"], "date": f"2026-08-{day:02d}", "slot": "AM", "status": "present", "overtime_hours": 0})
+    r = client.post("/attendance", headers=headers, json={"worker_id": w2["id"], "date": f"2026-08-{day:02d}", "slot": "Morning", "status": "present", "overtime_hours": 0})
     assert r.status_code == 200, r.text
 
 # ============================================================
@@ -109,7 +109,7 @@ print("Month-end forms step after generating Form 25: PASSED")
 # Mark every worker fully present -> attendance step completes
 # ============================================================
 for day in range(11, 32):
-    r = client.post("/attendance", headers=headers, json={"worker_id": w2["id"], "date": f"2026-08-{day:02d}", "slot": "AM", "status": "absent", "overtime_hours": 0})
+    r = client.post("/attendance", headers=headers, json={"worker_id": w2["id"], "date": f"2026-08-{day:02d}", "slot": "Morning", "status": "absent", "overtime_hours": 0})
     assert r.status_code == 200, r.text
 me4 = client.get("/month-end/2026/8", headers=headers).json()
 steps4 = {s["key"]: s for s in me4["steps"]}
@@ -152,7 +152,7 @@ print("Home alerts (one worker mapped -> unmapped count drops to 1): PASSED")
 
 today = date.today().isoformat()
 for worker_id in (w1["id"], w2["id"]):
-    r = client.post("/attendance", headers=headers, json={"worker_id": worker_id, "date": today, "slot": "AM", "status": "present", "overtime_hours": 0})
+    r = client.post("/attendance", headers=headers, json={"worker_id": worker_id, "date": today, "slot": "Morning", "status": "present", "overtime_hours": 0})
     assert r.status_code == 200, r.text
 
 alerts4 = client.get("/home/alerts", headers=headers).json()

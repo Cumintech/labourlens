@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { AlertTriangle, ChevronRight, Fingerprint, ListChecks } from "lucide-react-native";
+import { AlertTriangle, ChevronRight, Fingerprint, ListChecks, ShieldAlert } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +17,7 @@ const ALERT_ICON: Record<string, typeof AlertTriangle> = {
   missing_compliance: ListChecks,
   unmapped_devices: Fingerprint,
   not_marked_today: AlertTriangle,
+  underage_workers: ShieldAlert,
 };
 
 // Reached only from HomeScreen's "Needs attention" summary card -- lists
@@ -51,7 +52,7 @@ export default function NeedsAttentionScreen({ navigation }: Props) {
 
   function handlePress(alert: HomeAlert) {
     if (alert.code === "unmapped_devices") navigation.navigate("BiometricDevices");
-    else if (alert.code === "missing_compliance") goToTab("WorkersTab");
+    else if (alert.code === "missing_compliance" || alert.code === "underage_workers") goToTab("WorkersTab");
     else goToTab("AttendanceTab");
   }
 

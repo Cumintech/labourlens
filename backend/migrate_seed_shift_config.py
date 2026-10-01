@@ -1,8 +1,8 @@
-"""One-off migration: seed a default 3-shift ShiftConfig (AM/PM/Evening)
-for every existing Owner, so attendance marking keeps working the moment
-Phase 3 Day 1 ships -- owners who don't care to customize their shifts
-never notice a change; owners who do can rename/retime/replace these via
-the Shift Settings screen afterward.
+"""One-off migration: seed a default Morning/Evening ShiftConfig for every
+existing Owner with zero shifts, so attendance marking keeps working --
+owners who don't care to customize their shifts never notice a change;
+owners who do can rename/retime/replace these via the Shift Settings
+screen afterward (now fully editable there, not just add/remove).
 
 Not a permanent code path -- run once against the real DB, then done.
 
@@ -18,9 +18,8 @@ from database import Base, SessionLocal, engine
 import models
 
 DEFAULT_SHIFTS = [
-    ("AM", "AM", None, None, 0),
-    ("PM", "PM", None, None, 1),
-    ("Evening", "Evening", None, None, 2),
+    ("Morning", "Morning", "06:00", "14:00", 0),
+    ("Evening", "Evening", "14:00", "22:00", 1),
 ]
 
 Base.metadata.create_all(bind=engine)
@@ -51,11 +50,11 @@ try:
     db.commit()
     print(f"seeded default shifts for {seeded} owner(s) (of {len(owners)} total)")
 
-    # Confirm every owner now has exactly 3 rows (or more, if they already
-    # had a customized set that was skipped above).
+    # Confirm every owner now has at least one shift (2 by default, or
+    # more/fewer if they already had a customized set that was skipped above).
     for owner in owners:
         count = db.query(models.ShiftConfig).filter(models.ShiftConfig.owner_id == owner.id).count()
-        assert count >= 3, f"owner {owner.id} has only {count} shift configs after migration"
-    print("confirmed: every owner has at least 3 shift configs")
+        assert count > 0, f"owner {owner.id} has no shift configs after migration"
+    print("confirmed: every owner has at least one shift config")
 finally:
     db.close()

@@ -171,7 +171,7 @@ export default function WorkersScreen({ navigation }: Props) {
         />
       )}
 
-      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.lg} />
+      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.xs} />
     </View>
   );
 }

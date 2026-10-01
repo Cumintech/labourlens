@@ -553,7 +553,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   onChangeText={(v) => { setAadhaarNumber(stripToDigits(v, 12)); setAutoFilled((a) => ({ ...a, aadhaar_number: false })); }}
                   autoFilled={autoFilled.aadhaar_number}
                   keyboardType="number-pad"
-                  error={aadhaarNumber.length > 0 && !aadhaarValid ? "Enter a valid 12-digit Aadhaar number" : undefined}
+                  error={aadhaarNumber.length === 12 && !aadhaarValid ? "Enter a valid 12-digit Aadhaar number" : undefined}
                   maxLength={12}
                 />
                 <Field label="Current address" value={currentAddress} onChangeText={(v) => { setCurrentAddress(v); setAutoFilled((a) => ({ ...a, current_address: false })); }} autoFilled={autoFilled.current_address} />
@@ -563,7 +563,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   onChangeText={(v) => setMobile(normalizeIndianMobile(v))}
                   keyboardType="number-pad"
                   maxLength={10}
-                  error={mobile.length > 0 && !mobileValid ? "Enter a valid 10-digit mobile number" : undefined}
+                  error={mobile.length === 10 && !mobileValid ? "Enter a valid 10-digit mobile number" : undefined}
                 />
               </Animated.View>
             )}

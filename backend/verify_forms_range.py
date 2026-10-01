@@ -39,7 +39,7 @@ worker_a = client.post("/workers", headers=headers, json={"name": "Range Worker 
 worker_b = client.post("/workers", headers=headers, json={"name": "Range Worker B", "aadhaar_number": "555533334443"}).json()
 
 for wid, day in ((worker_a["id"], "2026-06-10"), (worker_a["id"], "2026-07-10"), (worker_a["id"], "2026-08-10"), (worker_b["id"], "2026-08-10")):
-    mark = client.post("/attendance", headers=headers, json={"worker_id": wid, "date": day, "slot": "AM", "status": "present"})
+    mark = client.post("/attendance", headers=headers, json={"worker_id": wid, "date": day, "slot": "Morning", "status": "present"})
     assert mark.status_code == 200, mark.text
 
 # --- Form 25: a single-month period vs. a 3-month period must produce

@@ -113,6 +113,10 @@ function PayrollView() {
   const [paymentReference, setPaymentReference] = useState("");
   const [savingPayment, setSavingPayment] = useState(false);
 
+  const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
+  const [bulkPaymentDate, setBulkPaymentDate] = useState(todayString());
+  const [savingBulkPayment, setSavingBulkPayment] = useState(false);
+
   const [detailTarget, setDetailTarget] = useState<WorkerWage | null>(null);
 
   const load = useCallback(async () => {
@@ -190,6 +194,30 @@ function PayrollView() {
     }
   }
 
+  async function handleBulkRecordPayment() {
+    if (!token) return;
+    const unpaid = rows.filter((r) => r.hasRate && !r.paid);
+    if (unpaid.length === 0) return;
+    setSavingBulkPayment(true);
+    try {
+      await Promise.all(
+        unpaid.map((r) =>
+          recordWagePayment(token, r.workerId, {
+            month,
+            year,
+            date_of_payment: bulkPaymentDate.trim() || undefined,
+          }),
+        ),
+      );
+      setBulkPaymentOpen(false);
+      await load();
+    } catch (e: any) {
+      Alert.alert("Could not record payment for all", e?.message ?? "Please try again.");
+    } finally {
+      setSavingBulkPayment(false);
+    }
+  }
+
   const rows: Row[] = useMemo(() => {
     if (mode === "monthly" && monthlySummary) {
       return monthlySummary.workers
@@ -224,6 +252,7 @@ function PayrollView() {
   const totalAmount = mode === "monthly" ? monthlySummary?.total_net ?? 0 : dailySummary?.total_daily_cost ?? 0;
 
   const slices = rows.map((r, i) => ({ value: r.amount, color: SLICE_COLORS[i % SLICE_COLORS.length] }));
+  const unpaidCount = rows.filter((r) => r.hasRate && !r.paid).length;
 
   if (loading || !token) {
     return (
@@ -322,6 +351,18 @@ function PayrollView() {
             </Text>
           )}
 
+          {mode === "monthly" && unpaidCount > 0 && (
+            <TouchableOpacity
+              style={styles.bulkButton}
+              onPress={() => {
+                setBulkPaymentDate(todayString());
+                setBulkPaymentOpen(true);
+              }}
+            >
+              <Text style={styles.bulkButtonText}>Record Payment for All ({unpaidCount})</Text>
+            </TouchableOpacity>
+          )}
+
           <Text style={styles.sectionLabel}>{mode === "monthly" ? "Net wage by worker" : "Cost by worker"}</Text>
         </View>
       }
@@ -341,19 +382,44 @@ function PayrollView() {
             <Text style={styles.workerAmount}>₹{item.amount.toFixed(2)}</Text>
             {mode === "monthly" && <Text style={styles.workerDetailLink}>View calculation →</Text>}
           </TouchableOpacity>
-          {mode === "monthly" &&
-            (item.paid ? (
-              <View style={styles.paidBadge}>
-                <Text style={styles.paidBadgeText}>Paid</Text>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.recordButton} onPress={() => openPaymentModal(item.workerId, item.workerName)}>
-                <Text style={styles.recordButtonText}>Record Payment</Text>
-              </TouchableOpacity>
-            ))}
+          {mode === "monthly" && (
+            <TouchableOpacity
+              style={[styles.recordButton, item.paid && styles.recordButtonDisabled]}
+              onPress={() => openPaymentModal(item.workerId, item.workerName)}
+              disabled={item.paid}
+            >
+              <Text style={[styles.recordButtonText, item.paid && styles.recordButtonTextDisabled]}>
+                {item.paid ? "Paid" : "Record Payment"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
       ListFooterComponent={
+        <>
+        <Modal visible={bulkPaymentOpen} transparent animationType="fade" onRequestClose={() => setBulkPaymentOpen(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Record payment for all</Text>
+              <Text style={styles.modalSubtitle}>
+                Marks all {unpaidCount} unpaid worker{unpaidCount === 1 ? "" : "s"} for {MONTH_NAMES[month - 1]} {year} as paid.
+              </Text>
+              <DateField label="Date of payment" value={bulkPaymentDate} onChange={setBulkPaymentDate} />
+              <View style={styles.modalButtonRow}>
+                <TouchableOpacity style={styles.modalCancelButton} onPress={() => setBulkPaymentOpen(false)}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalConfirmButton, savingBulkPayment && { opacity: 0.6 }]}
+                  onPress={handleBulkRecordPayment}
+                  disabled={savingBulkPayment}
+                >
+                  {savingBulkPayment ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.modalConfirmText}>Save</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
         <Modal visible={paymentTarget !== null} transparent animationType="fade" onRequestClose={() => setPaymentTarget(null)}>
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
@@ -383,6 +449,7 @@ function PayrollView() {
             </View>
           </View>
         </Modal>
+        </>
       }
     />
 
@@ -673,10 +740,18 @@ const styles = StyleSheet.create({
   detailRowTotal: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
   detailLabelBold: { fontSize: 14, color: colors.navy, fontWeight: "700" },
   detailValueBold: { fontSize: 14, color: colors.navy, fontWeight: "700" },
-  paidBadge: { backgroundColor: colors.presentTint, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
-  paidBadgeText: { color: colors.present, fontSize: 12, fontWeight: "700" },
   recordButton: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
   recordButtonText: { color: colors.surface, fontSize: 12, fontWeight: "700" },
+  recordButtonDisabled: { backgroundColor: colors.ground },
+  recordButtonTextDisabled: { color: colors.textSecondary },
+  bulkButton: {
+    backgroundColor: colors.navy,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm + 2,
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  bulkButtonText: { color: colors.surface, fontSize: 13, fontWeight: "700" },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
   modalCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, width: "85%" },
   modalTitle: { fontSize: 17, fontWeight: "700", color: colors.navy },

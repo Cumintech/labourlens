@@ -57,9 +57,9 @@ profile = client.put(
 assert profile.status_code == 200, profile.text
 
 am_shift = client.get("/shift-configs", headers=headers_a).json()[0]
-assert am_shift["slot_key"] == "AM"
+assert am_shift["slot_key"] == "Morning"
 set_hours = client.put(
-    f"/shift-configs/{am_shift['id']}", headers=headers_a, json={"slot_key": "AM", "label": "AM", "start_time": "06:00", "end_time": "14:00"}
+    f"/shift-configs/{am_shift['id']}", headers=headers_a, json={"slot_key": "Morning", "label": "Morning", "start_time": "06:00", "end_time": "14:00"}
 )
 assert set_hours.status_code == 200, set_hours.text  # AM is now an 8-hour shift
 
@@ -77,7 +77,7 @@ assert compliance.status_code == 201 and compliance.json()["category"] == "adult
 # 5 days present in AM (8h each), one of them with 4h overtime -> days_worked=5, total_hours=44
 for day, ot in (("2026-08-03", 0), ("2026-08-04", 0), ("2026-08-05", 0), ("2026-08-06", 0), ("2026-08-07", 4)):
     mark = client.post(
-        "/attendance", headers=headers_a, json={"worker_id": worker["id"], "date": day, "slot": "AM", "status": "present", "overtime_hours": ot}
+        "/attendance", headers=headers_a, json={"worker_id": worker["id"], "date": day, "slot": "Morning", "status": "present", "overtime_hours": ot}
     )
     assert mark.status_code == 200, mark.text
 

@@ -222,7 +222,7 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
       </ScrollView>
 
-      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.lg} />
+      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.xs} />
     </View>
   );
 }

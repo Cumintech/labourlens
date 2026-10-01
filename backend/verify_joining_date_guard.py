@@ -45,7 +45,7 @@ headers = {"Authorization": f"Bearer {token}"}
 # A real shift with real times -- the default-seeded shift has no
 # start_time/end_time, which _slot_for_time can't use.
 am_shift = client.get("/shift-configs", headers=headers).json()[0]
-client.put(f"/shift-configs/{am_shift['id']}", headers=headers, json={"slot_key": "AM", "label": "AM", "start_time": "08:00", "end_time": "17:00"})
+client.put(f"/shift-configs/{am_shift['id']}", headers=headers, json={"slot_key": "Morning", "label": "Morning", "start_time": "08:00", "end_time": "17:00"})
 
 worker_resp = client.post(
     "/workers", headers=headers,
@@ -63,17 +63,17 @@ on_joining = joining_date
 after_joining = "2026-06-10"
 
 # --- 1. Manual marking (POST /attendance) ---
-r = client.post("/attendance", headers=headers, json={"worker_id": worker_id, "date": before_joining, "slot": "AM", "status": "present"})
+r = client.post("/attendance", headers=headers, json={"worker_id": worker_id, "date": before_joining, "slot": "Morning", "status": "present"})
 assert r.status_code == 422 and "date of entry into service" in r.json()["detail"], r.text
 print("Manual attendance before joining date rejected: PASSED")
 
-r = client.post("/attendance", headers=headers, json={"worker_id": worker_id, "date": on_joining, "slot": "AM", "status": "present"})
+r = client.post("/attendance", headers=headers, json={"worker_id": worker_id, "date": on_joining, "slot": "Morning", "status": "present"})
 assert r.status_code == 200, r.text
 print("Manual attendance on joining date accepted: PASSED")
 
 # Future date also rejected (same endpoint, separate rule)
 future = (date.today() + timedelta(days=10)).isoformat()
-r = client.post("/attendance", headers=headers, json={"worker_id": worker_id, "date": future, "slot": "AM", "status": "present"})
+r = client.post("/attendance", headers=headers, json={"worker_id": worker_id, "date": future, "slot": "Morning", "status": "present"})
 assert r.status_code == 422 and "future" in r.json()["detail"], r.text
 print("Manual attendance for a future date rejected: PASSED")
 
@@ -142,7 +142,7 @@ unrestricted_resp = client.post(
 )
 assert unrestricted_resp.status_code == 201, unrestricted_resp.text
 unrestricted_id = unrestricted_resp.json()["id"]
-r = client.post("/attendance", headers=headers, json={"worker_id": unrestricted_id, "date": "2020-01-01", "slot": "AM", "status": "present"})
+r = client.post("/attendance", headers=headers, json={"worker_id": unrestricted_id, "date": "2020-01-01", "slot": "Morning", "status": "present"})
 assert r.status_code == 200, r.text
 print("Worker with no date_of_joining on file: attendance unrestricted: PASSED")
 

@@ -1,8 +1,11 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
+import { Camera, Images } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ActivityIndicator, Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
   ApiError,
   Attendance,
@@ -29,6 +32,7 @@ import {
   listWorkerLeaveRange,
   listWorkerTypes,
   markAttendance,
+  uploadWorkerPhoto,
 } from "../api/client";
 import DayAttendanceRow from "../components/DayAttendanceRow";
 import ErrorState from "../components/ErrorState";
@@ -43,6 +47,11 @@ import { colors, radius, spacing, type } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkerProfile">;
 type Tab = "overview" | "attendance" | "wages" | "documents";
+
+// Mirrors AddWorkerScreen's ID photo capture sizing exactly.
+const ID_PHOTO_WIDTH = 400;
+const ID_PHOTO_HEIGHT = 500;
+const ID_PHOTO_JPEG_QUALITY = 0.65;
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -180,12 +189,15 @@ function OverviewTab({
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [worker, setWorker] = useState<Worker | null>(null);
+  const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
-    setWorker(await getWorker(token, workerId));
+    const [w, types] = await Promise.all([getWorker(token, workerId), listWorkerTypes(token)]);
+    setWorker(w);
+    setWorkerTypes(types);
   }, [token, workerId]);
 
   useFocusEffect(
@@ -224,6 +236,7 @@ function OverviewTab({
   }
 
   const age = ageFromDob(worker.dob);
+  const workerTypeName = workerTypes.find((t) => t.id === worker.worker_type_id)?.name ?? "Not assigned";
 
   return (
     <ScrollView style={styles.tabScroll} contentContainerStyle={[styles.tabContent, { paddingBottom: spacing.xl + insets.bottom }]}>
@@ -231,6 +244,7 @@ function OverviewTab({
         <InfoRow label="Age" value={age !== null ? `${age} years` : "-"} />
         <InfoRow label="Gender" value={worker.gender ?? "-"} />
         <InfoRow label="Mobile" value={worker.mobile ?? "-"} />
+        <InfoRow label="Worker type" value={workerTypeName} warn={!worker.worker_type_id} />
         <InfoRow label="Employee code" value={worker.numeric_employee_code ? `#${worker.numeric_employee_code}` : "Not assigned yet"} />
         <InfoRow label="Device ID" value={worker.device_user_id ?? "Not mapped"} warn={!worker.device_user_id} />
       </View>
@@ -697,6 +711,9 @@ function DocumentsTab({ workerId }: { workerId: number }) {
   const [loadError, setLoadError] = useState(false);
   const [generatingCard, setGeneratingCard] = useState(false);
   const [generatingLetter, setGeneratingLetter] = useState(false);
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
+  const [rawPhotoUri, setRawPhotoUri] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -727,6 +744,50 @@ function DocumentsTab({ workerId }: { workerId: number }) {
     }
   }
 
+  async function pickPhoto(source: "camera" | "gallery") {
+    const permission =
+      source === "camera" ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        source === "camera" ? "Camera permission needed" : "Photo library permission needed",
+        `Enable ${source === "camera" ? "camera" : "photo library"} access to add an ID photo.`,
+      );
+      return;
+    }
+    const options: ImagePicker.ImagePickerOptions = {
+      mediaTypes: "images",
+      quality: 1,
+      allowsEditing: true,
+      aspect: [ID_PHOTO_WIDTH, ID_PHOTO_HEIGHT],
+    };
+    const result = source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+    if (result.canceled || !result.assets[0]) return;
+    setRawPhotoUri(result.assets[0].uri);
+  }
+
+  // Captures + uploads the missing photo, then falls straight into the
+  // normal generate flow -- the whole point of this path is "the ID card
+  // can't exist without a photo", not "stop and tell the user to go find
+  // one elsewhere".
+  async function handleConfirmPhotoThenGenerate() {
+    if (!rawPhotoUri || !token) return;
+    setUploadingPhoto(true);
+    try {
+      const rendered = await ImageManipulator.manipulate(rawPhotoUri).resize({ width: ID_PHOTO_WIDTH, height: ID_PHOTO_HEIGHT }).renderAsync();
+      const saved = await rendered.saveAsync({ compress: ID_PHOTO_JPEG_QUALITY, format: SaveFormat.JPEG });
+      await uploadWorkerPhoto(token, workerId, saved.uri);
+      setCapturingPhoto(false);
+      setRawPhotoUri(null);
+      await load();
+      await handleGenerateCard();
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't process or upload that photo.";
+      Alert.alert("Photo upload failed", message);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   async function handleGenerateLetter() {
     if (!token) return;
     setGeneratingLetter(true);
@@ -748,20 +809,57 @@ function DocumentsTab({ workerId }: { workerId: number }) {
 
   return (
     <ScrollView style={styles.tabScroll} contentContainerStyle={[styles.tabContent, { paddingBottom: spacing.xl + insets.bottom }]}>
-      <View style={styles.docRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.docTitle}>ID Card</Text>
-          <Text style={[styles.docStatus, worker.photo_key ? styles.docStatusOk : styles.docStatusWarn]}>
-            {worker.photo_key ? "Generated from the photo on file" : "No ID photo on file yet"}
-          </Text>
+      <View style={{ marginBottom: spacing.sm }}>
+        <View style={styles.docRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.docTitle}>ID Card</Text>
+            <Text style={[styles.docStatus, worker.photo_key ? styles.docStatusOk : styles.docStatusWarn]}>
+              {worker.photo_key ? "Generated from the photo on file" : "No ID photo on file yet"}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => (worker.photo_key ? handleGenerateCard() : setCapturingPhoto(true))}
+            disabled={generatingCard}
+            style={styles.docButton}
+          >
+            {generatingCard ? (
+              <ActivityIndicator color={colors.primary} size="small" />
+            ) : (
+              <Text style={styles.docButtonText}>{worker.photo_key ? "View / Reprint" : "Add photo & generate"}</Text>
+            )}
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handleGenerateCard} disabled={generatingCard} style={styles.docButton}>
-          {generatingCard ? (
-            <ActivityIndicator color={colors.primary} size="small" />
-          ) : (
-            <Text style={styles.docButtonText}>{worker.photo_key ? "View / Reprint" : "Generate now"}</Text>
-          )}
-        </TouchableOpacity>
+
+        {capturingPhoto && !rawPhotoUri && (
+          <View style={styles.photoCaptureRow}>
+            <TouchableOpacity style={styles.photoCaptureOption} onPress={() => pickPhoto("camera")}>
+              <Camera size={22} color={colors.teal} />
+              <Text style={styles.photoCaptureLabel}>Take Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.photoCaptureOption} onPress={() => pickPhoto("gallery")}>
+              <Images size={22} color={colors.teal} />
+              <Text style={styles.photoCaptureLabel}>Choose from Gallery</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {rawPhotoUri && (
+          <View style={styles.photoPreviewWrap}>
+            <Image source={{ uri: rawPhotoUri }} style={styles.photoPreview} resizeMode="cover" />
+            <View style={styles.photoPreviewActions}>
+              <TouchableOpacity onPress={() => setRawPhotoUri(null)} disabled={uploadingPhoto}>
+                <Text style={styles.docButtonText}>Retake</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.docButton, uploadingPhoto && styles.buttonDisabled]}
+                onPress={handleConfirmPhotoThenGenerate}
+                disabled={uploadingPhoto}
+              >
+                {uploadingPhoto ? <ActivityIndicator color={colors.primary} size="small" /> : <Text style={styles.docButtonText}>Confirm & Generate</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
 
       <View style={styles.docRow}>
@@ -889,4 +987,20 @@ const styles = StyleSheet.create({
   docStatusWarn: { color: colors.warningTintText },
   docButton: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
   docButtonText: { fontSize: 12.5, fontFamily: "PlusJakartaSans_700Bold", color: colors.primary },
+  buttonDisabled: { opacity: 0.5 },
+  photoCaptureRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
+  photoCaptureOption: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  photoCaptureLabel: { fontSize: 11.5, fontFamily: "PlusJakartaSans_700Bold", color: colors.navy },
+  photoPreviewWrap: { marginTop: spacing.xs, alignItems: "center" },
+  photoPreview: { width: 120, height: 150, borderRadius: radius.sm },
+  photoPreviewActions: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginTop: spacing.sm },
 });

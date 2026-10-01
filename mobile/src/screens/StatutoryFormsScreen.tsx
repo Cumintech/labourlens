@@ -2,8 +2,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { FileText } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { FormTemplate, Worker, emailForm, generateAppointmentLetter, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FormTemplate, Worker, generateAppointmentLetter, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
@@ -155,9 +155,7 @@ export default function StatutoryFormsScreen({ route }: Props) {
   const [preset, setPreset] = useState<PeriodPreset>("current_month");
   const [customStart, setCustomStart] = useState(dateStr(today.getFullYear(), today.getMonth() + 1, 1));
   const [customEnd, setCustomEnd] = useState(isoDate(today));
-  const [recipientEmail, setRecipientEmail] = useState("");
   const [downloading, setDownloading] = useState(false);
-  const [emailing, setEmailing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -272,28 +270,6 @@ export default function StatutoryFormsScreen({ route }: Props) {
     }
   }
 
-  async function handleEmail() {
-    if (!token || !validateSelection()) return;
-    if (!recipientEmail.includes("@")) {
-      Alert.alert("Check the email", "Enter a valid email address to send the form to.");
-      return;
-    }
-    setEmailing(true);
-    try {
-      await emailForm(token, formCode, {
-        worker_id: formOption.workerFilterable ? selectedWorkerId ?? undefined : undefined,
-        startDate: formOption.hasPeriod ? computed.start : undefined,
-        endDate: formOption.hasPeriod ? computed.end : undefined,
-        recipient_email: recipientEmail.trim(),
-      });
-      Alert.alert("Sent", `${formOption.label} sent to ${recipientEmail.trim()}.`);
-    } catch (e: any) {
-      Alert.alert("Could not send", e?.message ?? "Please try again.");
-    } finally {
-      setEmailing(false);
-    }
-  }
-
   const workerOptions = [
     { label: "All workers", value: "all" },
     ...workers.map((w) => ({
@@ -305,7 +281,7 @@ export default function StatutoryFormsScreen({ route }: Props) {
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
       <Text style={type.display}>Reports</Text>
-      <Text style={styles.subtitle}>Download or email any statutory form or report, for any period, for any worker.</Text>
+      <Text style={styles.subtitle}>Download any statutory form or report, for any period, for any worker.</Text>
 
       <Text style={styles.sectionLabel}>State</Text>
       <SelectField label="" value={state} options={INDIAN_STATE_OPTIONS} onChange={setState} />
@@ -380,27 +356,6 @@ export default function StatutoryFormsScreen({ route }: Props) {
             )}
           </TouchableOpacity>
           {DIRECT_PDF_HELPER_TEXT[formCode] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[formCode]}</Text>}
-
-          {!DIRECT_PDF_GENERATORS[formCode] && (
-            <>
-              <Text style={styles.sectionLabel}>Or email it</Text>
-              <View style={styles.emailRow}>
-                <TextInput
-                  style={[styles.input, styles.emailInput]}
-                  value={recipientEmail}
-                  onChangeText={setRecipientEmail}
-                  placeholder="owner@example.com"
-                  placeholderTextColor={colors.textSecondary}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="email-address"
-                />
-                <TouchableOpacity style={[styles.buttonGhost, styles.emailButton, emailing && styles.buttonDisabled]} onPress={handleEmail} disabled={emailing}>
-                  {emailing ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.buttonGhostText}>Send by email</Text>}
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
         </Card>
       )}
     </KeyboardScreen>
@@ -441,9 +396,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   buttonGhostText: { color: colors.primary, fontSize: 14, fontWeight: "700" },
-  emailRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
-  emailInput: { flex: 1 },
-  emailButton: { marginTop: 0, paddingHorizontal: spacing.md },
 
   formCard: { marginTop: spacing.sm, padding: spacing.md },
   formCardComingSoon: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.warningTintText, marginTop: 2 },

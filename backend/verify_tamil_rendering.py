@@ -76,7 +76,7 @@ assert client.post(f"/workers/{wid}/compliance", headers=headers, json={"designa
 assert client.post(
     f"/workers/{wid}/wage-profile", headers=headers, json={"rate_type": "daily", "basic": 500, "effective_from": "2026-08-01"}
 ).status_code == 201
-assert client.post("/attendance", headers=headers, json={"worker_id": wid, "date": "2026-08-01", "slot": "AM", "status": "present"}).status_code == 200
+assert client.post("/attendance", headers=headers, json={"worker_id": wid, "date": "2026-08-01", "slot": "Morning", "status": "present"}).status_code == 200
 
 # Form 12 -- Platypus table cell (_wrap_row)
 form12 = client.get(f"/forms/form12/{wid}", headers=headers)

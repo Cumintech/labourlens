@@ -48,9 +48,9 @@ worker_a = client.post("/workers", headers=headers, json={"name": "Worker A", "a
 worker_b = client.post("/workers", headers=headers, json={"name": "Worker B", "aadhaar_number": "444455556666"}).json()
 
 am_shift = client.get("/shift-configs", headers=headers).json()[0]
-assert am_shift["slot_key"] == "AM"
+assert am_shift["slot_key"] == "Morning"
 set_hours = client.put(
-    f"/shift-configs/{am_shift['id']}", headers=headers, json={"slot_key": "AM", "label": "AM", "start_time": "08:00", "end_time": "17:00"}
+    f"/shift-configs/{am_shift['id']}", headers=headers, json={"slot_key": "Morning", "label": "Morning", "start_time": "08:00", "end_time": "17:00"}
 )
 assert set_hours.status_code == 200, set_hours.text
 
@@ -163,7 +163,7 @@ print("Backlogged old-timestamp punch lands on its own real date, not today's sy
 
 # --- Manual override is never silently overwritten by a later sync ---
 manual_override = client.post(
-    "/attendance", headers=headers, json={"worker_id": worker_a["id"], "date": yesterday.date().isoformat(), "slot": "AM", "status": "absent"}
+    "/attendance", headers=headers, json={"worker_id": worker_a["id"], "date": yesterday.date().isoformat(), "slot": "Morning", "status": "absent"}
 )
 assert manual_override.status_code == 200, manual_override.text
 

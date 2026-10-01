@@ -41,6 +41,11 @@ assert signup.status_code == 201, signup.text
 token = signup.json()["access_token"]
 headers = {"Authorization": f"Bearer {token}"}
 
+# Default signup only seeds 2 shifts (Morning/Evening) -- add a 3rd
+# custom one so this test can still exercise a 3-shift dashboard.
+add_night = client.post("/shift-configs", headers=headers, json={"slot_key": "Night", "label": "Night"})
+assert add_night.status_code == 201, add_night.text
+
 worker_ids = []
 for i in range(3):
     r = client.post("/workers", headers=headers, json={"name": f"Worker {i}", "aadhaar_number": _valid_aadhaar(f"2111222{i:04d}")})
@@ -49,34 +54,34 @@ for i in range(3):
 w0, w1, w2 = worker_ids
 
 # --- Mark attendance: w0 present AM+PM+Evening, w1 present AM only, w2 absent everywhere ---
-for slot in ("AM", "PM", "Evening"):
+for slot in ("Morning", "Night", "Evening"):
     r = client.post("/attendance", headers=headers, json={"worker_id": w0, "date": str(TODAY), "slot": slot, "status": "present"})
     assert r.status_code == 200, r.text
 
-r = client.post("/attendance", headers=headers, json={"worker_id": w1, "date": str(TODAY), "slot": "AM", "status": "present"})
+r = client.post("/attendance", headers=headers, json={"worker_id": w1, "date": str(TODAY), "slot": "Morning", "status": "present"})
 assert r.status_code == 200, r.text
-for slot in ("PM", "Evening"):
+for slot in ("Night", "Evening"):
     r = client.post("/attendance", headers=headers, json={"worker_id": w1, "date": str(TODAY), "slot": slot, "status": "absent"})
     assert r.status_code == 200, r.text
 
-for slot in ("AM", "PM", "Evening"):
+for slot in ("Morning", "Night", "Evening"):
     r = client.post("/attendance", headers=headers, json={"worker_id": w2, "date": str(TODAY), "slot": slot, "status": "absent"})
     assert r.status_code == 200, r.text
 
 print("marked attendance for 3 workers across 3 slots each: PASSED")
 
 # --- Re-mark w0's AM slot: absent -> should UPDATE, not duplicate ---
-r = client.post("/attendance", headers=headers, json={"worker_id": w0, "date": str(TODAY), "slot": "AM", "status": "absent"})
+r = client.post("/attendance", headers=headers, json={"worker_id": w0, "date": str(TODAY), "slot": "Morning", "status": "absent"})
 assert r.status_code == 200, r.text
-am_records = [a for a in client.get("/attendance", headers=headers, params={"date": str(TODAY)}).json() if a["worker_id"] == w0 and a["slot"] == "AM"]
+am_records = [a for a in client.get("/attendance", headers=headers, params={"date": str(TODAY)}).json() if a["worker_id"] == w0 and a["slot"] == "Morning"]
 assert len(am_records) == 1, f"re-marking should update in place, not duplicate: {am_records}"
 assert am_records[0]["status"] == "absent"
 print("re-marking the same slot upserts (no duplicate row): PASSED")
 
 # --- Bad input rejected ---
-r = client.post("/attendance", headers=headers, json={"worker_id": w0, "date": str(TODAY), "slot": "Night", "status": "present"})
+r = client.post("/attendance", headers=headers, json={"worker_id": w0, "date": str(TODAY), "slot": "Graveyard", "status": "present"})
 assert r.status_code == 422, "invalid slot should be rejected"
-r = client.post("/attendance", headers=headers, json={"worker_id": w0, "date": str(TODAY), "slot": "AM", "status": "maybe"})
+r = client.post("/attendance", headers=headers, json={"worker_id": w0, "date": str(TODAY), "slot": "Morning", "status": "maybe"})
 assert r.status_code == 422, "invalid status should be rejected"
 print("invalid slot/status rejected with 422: PASSED")
 
@@ -86,7 +91,7 @@ signup2 = client.post(
     json={"name": "Other Owner", "mobile": "9000000076", "password": "pass12345", "factory_name": "Other Factory", "consent_given": True},
 )
 headers2 = {"Authorization": f"Bearer {signup2.json()['access_token']}"}
-r = client.post("/attendance", headers=headers2, json={"worker_id": w0, "date": str(TODAY), "slot": "AM", "status": "present"})
+r = client.post("/attendance", headers=headers2, json={"worker_id": w0, "date": str(TODAY), "slot": "Morning", "status": "present"})
 assert r.status_code == 404, "another owner should not be able to mark a worker they don't own"
 print("cross-owner attendance marking blocked: PASSED")
 
@@ -102,10 +107,10 @@ print("dashboard:", dashboard)
 assert dashboard["total_workers"] == 2, f"deactivated worker should not count toward total: {dashboard}"
 assert dashboard["present_today"] == 2, f"w0 and w1 both present in >=1 slot: {dashboard}"
 slots_by_name = {s["slot"]: s for s in dashboard["slots"]}
-assert slots_by_name["AM"]["present"] == 1, f"only w1 present in AM now: {slots_by_name}"  # w0 was flipped to absent
-assert slots_by_name["PM"]["present"] == 1, f"only w0 present in PM: {slots_by_name}"
+assert slots_by_name["Morning"]["present"] == 1, f"only w1 present in Morning now: {slots_by_name}"  # w0 was flipped to absent
+assert slots_by_name["Night"]["present"] == 1, f"only w0 present in Night: {slots_by_name}"
 assert slots_by_name["Evening"]["present"] == 1, f"only w0 present in Evening: {slots_by_name}"
-assert slots_by_name["AM"]["total"] == 2 and slots_by_name["PM"]["total"] == 2
+assert slots_by_name["Morning"]["total"] == 2 and slots_by_name["Night"]["total"] == 2
 print("dashboard summary math (present-today, per-slot, deactivated excluded): PASSED")
 
 print("\nALL ASSERTIONS PASSED")

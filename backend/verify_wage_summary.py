@@ -30,14 +30,14 @@ token_a = signup.json()["access_token"]
 headers_a = {"Authorization": f"Bearer {token_a}"}
 
 am_shift = client.get("/shift-configs", headers=headers_a).json()[0]
-assert am_shift["slot_key"] == "AM"
-client.put(f"/shift-configs/{am_shift['id']}", headers=headers_a, json={"slot_key": "AM", "label": "AM", "start_time": "06:00", "end_time": "14:00"})
+assert am_shift["slot_key"] == "Morning"
+client.put(f"/shift-configs/{am_shift['id']}", headers=headers_a, json={"slot_key": "Morning", "label": "Morning", "start_time": "06:00", "end_time": "14:00"})
 
 # --- Worker 1: daily rate, 3 days present in September, one with OT ---
 w1 = client.post("/workers", headers=headers_a, json={"name": "Wage Worker One", "aadhaar_number": "555511112225"}).json()
 client.post(f"/workers/{w1['id']}/wage-profile", headers=headers_a, json={"rate_type": "daily", "basic": 500, "hra": 0, "da": 0, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": "2026-09-01"})
 for day, ot in (("2026-09-01", 0), ("2026-09-02", 0), ("2026-09-03", 4)):
-    r = client.post("/attendance", headers=headers_a, json={"worker_id": w1["id"], "date": day, "slot": "AM", "status": "present", "overtime_hours": ot})
+    r = client.post("/attendance", headers=headers_a, json={"worker_id": w1["id"], "date": day, "slot": "Morning", "status": "present", "overtime_hours": ot})
     assert r.status_code == 200, r.text
 
 # --- Worker 2: monthly rate, no attendance marked at all this month ---

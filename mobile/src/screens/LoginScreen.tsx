@@ -1,9 +1,13 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Eye, EyeOff } from "lucide-react-native";
 import React, { useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import KeyboardScreen from "../components/KeyboardScreen";
+import SelectField from "../components/SelectField";
+import { INDIAN_STATE_OPTIONS } from "../indianStates";
+import { INDUSTRY_OPTIONS } from "../industries";
 import { AuthStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
 import { isValidEmail, isValidIndianMobile, isValidUsername, normalizeIndianMobile } from "../validators";
@@ -20,10 +24,15 @@ export default function LoginScreen({ navigation }: Props) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [factoryName, setFactoryName] = useState("");
+  const [factoryAddress, setFactoryAddress] = useState("");
+  const [factoryLicenceNo, setFactoryLicenceNo] = useState("");
+  const [state, setState] = useState("");
+  const [industry, setIndustry] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -41,6 +50,14 @@ export default function LoginScreen({ navigation }: Props) {
       } else {
         if (!name.trim() || !factoryName.trim()) {
           setError("Owner name and factory name are required.");
+          return;
+        }
+        if (!state) {
+          setError("Select your factory's state.");
+          return;
+        }
+        if (!industry) {
+          setError("Select your factory's industry.");
           return;
         }
         if (!isValidUsername(username)) {
@@ -62,7 +79,19 @@ export default function LoginScreen({ navigation }: Props) {
           setError("Please accept the Privacy Policy to create an account.");
           return;
         }
-        const newOwner = await signup(name.trim(), username.trim(), email.trim(), mobile, password, factoryName.trim(), consentChecked);
+        const newOwner = await signup(
+          name.trim(),
+          username.trim(),
+          email.trim(),
+          mobile,
+          password,
+          factoryName.trim(),
+          consentChecked,
+          factoryAddress.trim(),
+          factoryLicenceNo.trim(),
+          state,
+          industry,
+        );
         if (newOwner.plan_status === "trial") {
           Alert.alert(
             "Welcome to Labour Lens",
@@ -115,6 +144,32 @@ export default function LoginScreen({ navigation }: Props) {
             placeholder="Your factory's name"
             placeholderTextColor={colors.muted}
           />
+
+          <Text style={styles.label}>FACTORY ADDRESS</Text>
+          <TextInput
+            style={styles.input}
+            value={factoryAddress}
+            onChangeText={setFactoryAddress}
+            placeholder="42 Industrial Estate, Madurai"
+            placeholderTextColor={colors.muted}
+            multiline
+          />
+
+          <Text style={styles.label}>FACTORY LICENCE / REGISTRATION NO.</Text>
+          <TextInput
+            style={styles.input}
+            value={factoryLicenceNo}
+            onChangeText={setFactoryLicenceNo}
+            placeholder="e.g. TN/MDU/1234"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="characters"
+          />
+
+          <Text style={styles.label}>STATE</Text>
+          <SelectField label="" value={state || null} options={INDIAN_STATE_OPTIONS} onChange={setState} placeholder="Select your factory's state" />
+
+          <Text style={styles.label}>INDUSTRY</Text>
+          <SelectField label="" value={industry || null} options={INDUSTRY_OPTIONS} onChange={setIndustry} placeholder="Select your factory's industry" />
         </>
       )}
 
@@ -123,7 +178,7 @@ export default function LoginScreen({ navigation }: Props) {
         style={styles.input}
         value={username}
         onChangeText={setUsername}
-        placeholder="e.g. salemfactory"
+        placeholder="e.g. salemfactory or 9840XXX"
         placeholderTextColor={colors.muted}
         autoCapitalize="none"
         autoCorrect={false}
@@ -158,16 +213,21 @@ export default function LoginScreen({ navigation }: Props) {
       )}
 
       <Text style={styles.label}>PASSWORD</Text>
-      <TextInput
-        style={styles.input}
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        placeholder="••••••••"
-        placeholderTextColor={colors.muted}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
+      <View style={styles.passwordRow}>
+        <TextInput
+          style={[styles.input, styles.passwordInput]}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!passwordVisible}
+          placeholder="••••••••"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <TouchableOpacity style={styles.passwordEyeButton} onPress={() => setPasswordVisible((v) => !v)}>
+          {passwordVisible ? <EyeOff size={20} color={colors.muted} /> : <Eye size={20} color={colors.muted} />}
+        </TouchableOpacity>
+      </View>
 
       {mode === "login" && (
         <TouchableOpacity onPress={() => navigation.navigate("ForgotPassword")}>
@@ -231,6 +291,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.navy,
   },
+  passwordRow: { position: "relative", justifyContent: "center" },
+  passwordInput: { paddingRight: 44 },
+  passwordEyeButton: { position: "absolute", right: 12, padding: 4 },
   consentRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginTop: spacing.lg },
   checkbox: {
     width: 22,

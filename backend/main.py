@@ -309,6 +309,10 @@ def signup(request: Request, body: OwnerSignupIn, db: Session = Depends(get_db))
         email=body.email,
         password_hash=hash_password(body.password),
         factory_name=body.factory_name,
+        factory_address=body.factory_address,
+        factory_licence_no=body.factory_licence_no,
+        state=body.state,
+        industry=body.industry,
         consent_given_at=datetime.now(timezone.utc),
     )
     db.add(owner)
@@ -316,11 +320,23 @@ def signup(request: Request, body: OwnerSignupIn, db: Session = Depends(get_db))
     db.refresh(owner)
 
     # Every owner needs at least one shift to ever mark attendance --
-    # seed the same default 3-shift scheme the migration script backfills
+    # seed the same default 2-shift scheme the migration script backfills
     # onto pre-existing owners, so a brand-new signup isn't left with zero
     # valid slots. Owner can rename/retime/replace these afterward.
-    for slot_key, label, sort_order in (("AM", "AM", 0), ("PM", "PM", 1), ("Evening", "Evening", 2)):
-        db.add(models.ShiftConfig(owner_id=owner.id, slot_key=slot_key, label=label, sort_order=sort_order))
+    for slot_key, label, start_time, end_time, sort_order in (
+        ("Morning", "Morning", "06:00", "14:00", 0),
+        ("Evening", "Evening", "14:00", "22:00", 1),
+    ):
+        db.add(
+            models.ShiftConfig(
+                owner_id=owner.id,
+                slot_key=slot_key,
+                label=label,
+                start_time=start_time,
+                end_time=end_time,
+                sort_order=sort_order,
+            )
+        )
 
     # Sensible starting defaults for the Wage Rate feature -- fully
     # editable/removable like any owner-created type, seeded once at
@@ -1397,6 +1413,18 @@ def get_home_alerts(
                     count=unmapped_count,
                 )
             )
+
+    underage_count = sum(
+        1 for w in active_workers if w.dob and _age_years(w.dob, date_.today()) < MINIMUM_WORKING_AGE
+    )
+    if underage_count > 0:
+        alerts.append(
+            HomeAlertOut(
+                code="underage_workers",
+                message=f"{underage_count} worker{'s' if underage_count != 1 else ''} under the legal minimum working age ({MINIMUM_WORKING_AGE})",
+                count=underage_count,
+            )
+        )
 
     today = date_.today()
     marked_worker_ids = {

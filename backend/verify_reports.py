@@ -79,7 +79,7 @@ try:
 
     w = client.post("/workers", headers=headers, json={"name": "Report Worker", "aadhaar_number": "999988887779"}).json()
     mark = client.post(
-        "/attendance", headers=headers, json={"worker_id": w["id"], "date": str(TODAY), "slot": "AM", "status": "present"}
+        "/attendance", headers=headers, json={"worker_id": w["id"], "date": str(TODAY), "slot": "Morning", "status": "present"}
     )
     assert mark.status_code == 200, mark.text
 
@@ -104,7 +104,7 @@ try:
     assert resp.status_code == 200, resp.text
     assert resp.content[:4] == b"%PDF", "response is not a real PDF"
     text = pdf_text(resp.content)
-    assert "Report Worker" in text and "AM" in text, "attendance row missing from PDF report"
+    assert "Report Worker" in text and "Morning" in text, "attendance row missing from PDF report"
     assert "Leaving Worker" in text, "deactivated-worker section missing from PDF report"
     print("PDF report download: real PDF, attendance row and deactivated-worker section both present: PASSED")
 

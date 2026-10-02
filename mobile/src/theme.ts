@@ -9,6 +9,7 @@ export const colors = {
   primaryPressed: "#0D47A1", // pressed state
   primaryDark: "#0D47A1", // dark blue: important headings, selected states
   secondary: "#1976D2", // secondary blue accents
+  action: "#2196F3", // lighter blue for in-card primary actions (e.g. Mark attendance)
   brandTeal: "#0D47A1", // logo mark background (dark brand blue)
   primaryTint: "#EAF3FF", // icon chips, active tab pill, light blue surfaces
   onPrimaryMuted: "#C9DDF7", // muted text/icons drawn on a primary-bg surface

@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Fingerprint, Plus, RefreshCw, UserPlus } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -11,6 +12,7 @@ import {
   listWorkers,
   triggerBiometricSync,
 } from "../api/client";
+import { TerminalArt } from "../components/BiometricArt";
 import ErrorState from "../components/ErrorState";
 import { ListSkeleton } from "../components/Skeleton";
 import { useAuth } from "../context/AuthContext";
@@ -29,6 +31,7 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
   const [devices, setDevices] = useState<BiometricDevice[]>([]);
   const [unmappedCount, setUnmappedCount] = useState(0);
   const [unmappedWorkerCount, setUnmappedWorkerCount] = useState(0);
+  const [activeWorkerCount, setActiveWorkerCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,6 +53,7 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
     // meaningful once workers are already mapped and punches from
     // someone who ISN'T need resolving individually (see UnmappedPunches).
     setUnmappedWorkerCount(w.filter((worker) => worker.status === "active" && !worker.device_user_id).length);
+    setActiveWorkerCount(w.filter((worker) => worker.status === "active").length);
   }, [token]);
 
   useFocusEffect(
@@ -152,54 +156,86 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
     >
-      <Text style={styles.title}>Biometric Devices</Text>
-      <Text style={styles.subtitle}>Fingerprint attendance terminals, e.g. one per gate.</Text>
+      <View style={styles.hero}>
+        <View style={styles.heroArt} pointerEvents="none">
+          <TerminalArt />
+        </View>
+        <Text style={styles.heroTitle}>Attendance terminals</Text>
+        <Text style={styles.heroSub}>Attendance clocks in automatically, e.g. one device per gate.</Text>
+      </View>
 
-      {unmappedWorkerCount > 0 ? (
-        <View style={styles.leadStat}>
-          <Text style={styles.leadStatNumber}>{unmappedWorkerCount}</Text>
-          <Text style={styles.leadStatLabel}>worker{unmappedWorkerCount === 1 ? "" : "s"} not mapped yet</Text>
-          {unmappedCount > 0 && (
-            <TouchableOpacity style={styles.punchLinkRow} onPress={() => navigation.navigate("UnmappedPunches")}>
-              <Text style={styles.punchLinkText}>
-                {unmappedCount} unmapped punch{unmappedCount === 1 ? "" : "es"} need attention ›
-              </Text>
-            </TouchableOpacity>
-          )}
-          {devices.length > 0 && (
-            <TouchableOpacity style={styles.bannerMapButton} onPress={handleMapUsersFromBanner}>
-              <Text style={styles.bannerMapButtonText}>Map users</Text>
-            </TouchableOpacity>
+      <View style={styles.body}>
+      <TouchableOpacity
+        style={styles.progressCard}
+        onPress={handleMapUsersFromBanner}
+        disabled={devices.length === 0}
+        accessibilityRole="button"
+      >
+        <View style={styles.progressTop}>
+          <Text style={styles.progressTitle}>
+            {activeWorkerCount - unmappedWorkerCount} of {activeWorkerCount} workers mapped
+          </Text>
+          {unmappedWorkerCount > 0 ? (
+            <View style={styles.pendingPill}>
+              <Text style={styles.pendingPillText}>{unmappedWorkerCount} pending</Text>
+            </View>
+          ) : (
+            <View style={styles.okPill}>
+              <Text style={styles.okPillText}>All mapped</Text>
+            </View>
           )}
         </View>
-      ) : (
-        <View style={styles.leadStatOk}>
-          <Text style={styles.leadStatOkText}>All active workers are mapped to a device</Text>
-          {unmappedCount > 0 && (
-            <TouchableOpacity onPress={() => navigation.navigate("UnmappedPunches")}>
-              <Text style={styles.warningText}>
-                {unmappedCount} unmapped punch{unmappedCount === 1 ? "" : "es"} need attention →
-              </Text>
-            </TouchableOpacity>
-          )}
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${activeWorkerCount ? Math.round(((activeWorkerCount - unmappedWorkerCount) / activeWorkerCount) * 100) : 0}%` as `${number}%` },
+            ]}
+          />
         </View>
-      )}
+        <Text style={styles.progressHint}>
+          {unmappedWorkerCount > 0
+            ? "Unmapped workers won't clock in from the device until mapped."
+            : "All active workers are mapped to a device."}
+        </Text>
+        {unmappedCount > 0 && (
+          <TouchableOpacity style={styles.punchLinkRow} onPress={() => navigation.navigate("UnmappedPunches")}>
+            <Text style={styles.punchLinkText}>
+              {unmappedCount} unmapped punch{unmappedCount === 1 ? "" : "es"} need attention ›
+            </Text>
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
 
+      <Text style={styles.sectionLabel}>Devices</Text>
       {devices.length === 0 ? (
         <Text style={styles.empty}>No devices added yet.</Text>
       ) : (
         devices.map((d) => (
           <View key={d.id} style={styles.deviceCard}>
             <View style={styles.deviceHeaderRow}>
-              <Text style={styles.deviceName}>{d.name}</Text>
-              <View style={[styles.statusDot, d.is_stale ? styles.statusDotStale : styles.statusDotOk]} />
+              <View style={styles.deviceIcon}>
+                <Fingerprint size={22} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.deviceName} numberOfLines={1}>{d.name}</Text>
+                <Text style={styles.deviceMeta} numberOfLines={1}>{d.ip_address} · port {d.port}</Text>
+              </View>
+              <View style={[styles.statusPill, d.is_stale ? styles.statusPillStale : styles.statusPillOk]}>
+                <View style={[styles.statusDot, d.is_stale ? styles.statusDotStale : styles.statusDotOk]} />
+                <Text style={[styles.statusPillText, d.is_stale ? styles.statusPillTextStale : styles.statusPillTextOk]}>
+                  {d.is_stale ? "Not syncing" : "Online"}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.deviceMeta}>{d.ip_address}:{d.port}</Text>
-            <Text style={styles.deviceMeta}>
-              {d.last_synced_at
-                ? `Last synced: ${new Date(d.last_synced_at).toLocaleString()} (${d.last_sync_status})`
-                : "Never synced yet"}
-            </Text>
+            <View style={styles.syncRow}>
+              <RefreshCw size={14} color={colors.textSecondary} />
+              <Text style={styles.syncText}>
+                {d.last_synced_at
+                  ? `Last synced ${new Date(d.last_synced_at).toLocaleString()} (${d.last_sync_status})`
+                  : "Never synced yet"}
+              </Text>
+            </View>
             {d.is_stale && <Text style={styles.staleWarning}>Hasn't synced recently -- check the device is powered and reachable.</Text>}
 
             <View style={styles.deviceActions}>
@@ -211,14 +247,20 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
                 {syncingId === d.id ? (
                   <ActivityIndicator color={colors.white} size="small" />
                 ) : (
-                  <Text style={styles.actionButtonText}>Sync now</Text>
+                  <View style={styles.btnInner}>
+                    <RefreshCw size={16} color={colors.white} />
+                    <Text style={styles.actionButtonText}>Sync now</Text>
+                  </View>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionButtonGhost}
                 onPress={() => navigation.navigate("DeviceUserMapping", { deviceId: d.id, deviceName: d.name })}
               >
-                <Text style={styles.actionButtonGhostText}>Map users</Text>
+                <View style={styles.btnInner}>
+                  <UserPlus size={16} color={colors.primary} />
+                  <Text style={styles.actionButtonGhostText}>Map users</Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -249,16 +291,46 @@ export default function BiometricDevicesScreen({ navigation }: Props) {
         </View>
       ) : (
         <TouchableOpacity style={styles.addLink} onPress={() => setShowAddForm(true)}>
-          <Text style={styles.addLinkText}>+ Add device</Text>
+          <View style={styles.btnInner}>
+            <Plus size={18} color={colors.primary} />
+            <Text style={styles.addLinkText}>Add device</Text>
+          </View>
         </TouchableOpacity>
       )}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  content: { padding: spacing.lg, paddingBottom: spacing.xl },
+  container: { flex: 1, backgroundColor: colors.ground },
+  content: { paddingBottom: spacing.xl },
+  hero: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 48, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, overflow: "hidden", minHeight: 150 },
+  heroArt: { position: "absolute", right: 18, bottom: 30 },
+  heroTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 22, color: colors.surface, paddingRight: 100 },
+  heroSub: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, lineHeight: 18, color: colors.onPrimaryMuted, marginTop: 4, paddingRight: 110 },
+  body: { paddingHorizontal: spacing.md, marginTop: -30, gap: 12 },
+  progressCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 14, gap: 10, elevation: 4, shadowColor: colors.primaryDark, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  progressTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  progressTitle: { flex: 1, fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  pendingPill: { backgroundColor: colors.leaveTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
+  pendingPillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.leave },
+  okPill: { backgroundColor: colors.presentTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
+  okPillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.present },
+  progressTrack: { height: 8, borderRadius: 4, backgroundColor: colors.divider, overflow: "hidden" },
+  progressFill: { height: 8, borderRadius: 4, backgroundColor: colors.present },
+  progressHint: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary },
+  sectionLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, letterSpacing: 0.6, textTransform: "uppercase", color: colors.textSecondary, marginTop: 4 },
+  deviceIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.primaryTint, alignItems: "center", justifyContent: "center" },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  statusPillOk: { backgroundColor: colors.presentTint },
+  statusPillStale: { backgroundColor: colors.leaveTint },
+  statusPillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 11 },
+  statusPillTextOk: { color: colors.present },
+  statusPillTextStale: { color: colors.leave },
+  syncRow: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.ground, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  syncText: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary },
+  btnInner: { flexDirection: "row", alignItems: "center", gap: 6 },
   title: { fontSize: 22, fontWeight: "700", color: colors.navy },
   subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
   empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
@@ -286,20 +358,20 @@ const styles = StyleSheet.create({
   },
   punchLinkText: { color: colors.amberDark, fontWeight: "700", fontSize: 12.5 },
   warningText: { color: colors.amberDark, fontWeight: "700", fontSize: 13, marginTop: spacing.sm },
-  deviceCard: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
-  deviceHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  deviceCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 12 },
+  deviceHeaderRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   deviceName: { fontSize: 16, fontWeight: "700", color: colors.navy },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusDotOk: { backgroundColor: colors.present },
-  statusDotStale: { backgroundColor: colors.danger },
-  deviceMeta: { fontSize: 12, color: colors.muted, marginTop: 4 },
+  statusDotStale: { backgroundColor: colors.leave },
+  deviceMeta: { fontSize: 12, color: colors.muted, marginTop: 1 },
   staleWarning: { fontSize: 12, color: colors.danger, marginTop: 6, fontWeight: "600" },
-  deviceActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
-  actionButton: { flex: 1, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 10, alignItems: "center" },
+  deviceActions: { flexDirection: "row", gap: 10 },
+  actionButton: { flex: 1, backgroundColor: colors.primary, borderRadius: 12, height: 44, alignItems: "center", justifyContent: "center" },
   actionButtonText: { color: colors.white, fontWeight: "700", fontSize: 13 },
-  actionButtonGhost: { flex: 1, borderWidth: 1.5, borderColor: colors.teal, borderRadius: radius.sm, paddingVertical: 10, alignItems: "center" },
+  actionButtonGhost: { flex: 1, borderWidth: 1.5, borderColor: colors.primary, borderRadius: 12, height: 44, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   actionButtonGhostText: { color: colors.teal, fontWeight: "700", fontSize: 13 },
-  addLink: { marginTop: spacing.sm, paddingVertical: spacing.sm },
+  addLink: { height: 56, borderRadius: 16, borderWidth: 1.5, borderStyle: "dashed", borderColor: "#90CAF9", alignItems: "center", justifyContent: "center" },
   addLinkText: { color: colors.teal, fontWeight: "700", fontSize: 14 },
   addForm: { backgroundColor: colors.fieldBg, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs, marginTop: spacing.sm },

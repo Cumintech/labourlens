@@ -1,11 +1,14 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { FileText } from "lucide-react-native";
+import { Download, FileText } from "lucide-react-native";
+import Svg, { Circle } from "react-native-svg";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { FormTemplate, Worker, generateAppointmentLetter, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
+import { FormTemplate, Worker, generateAppointmentLetter, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers, listWorkersMissingCompliance } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
+import ReportsHeroArt from "../components/ReportsHeroArt";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import SelectField from "../components/SelectField";
 import { BlueHeader, Card } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
@@ -156,6 +159,8 @@ export default function StatutoryFormsScreen({ route }: Props) {
   const [customStart, setCustomStart] = useState(dateStr(today.getFullYear(), today.getMonth() + 1, 1));
   const [customEnd, setCustomEnd] = useState(isoDate(today));
   const [downloading, setDownloading] = useState(false);
+  const [missingCount, setMissingCount] = useState<number | null>(null);
+  const insets = useSafeAreaInsets();
 
   useFocusEffect(
     useCallback(() => {
@@ -163,6 +168,10 @@ export default function StatutoryFormsScreen({ route }: Props) {
       listWorkers(token)
         .then(setWorkers)
         .catch(() => {});
+      // Read-only: powers the "Compliance ready" ring only.
+      listWorkersMissingCompliance(token)
+        .then((m) => setMissingCount(m.length))
+        .catch(() => setMissingCount(null));
     }, [token]),
   );
 
@@ -280,17 +289,60 @@ export default function StatutoryFormsScreen({ route }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.ground }}>
-    <BlueHeader title="Reports" subtitle="Download any statutory form or report, for any period, for any worker." />
     <KeyboardScreen contentContainerStyle={styles.container}>
+      <View style={[styles.hero, { paddingTop: insets.top + spacing.md }]}>
+        <View style={styles.heroArt} pointerEvents="none">
+          <ReportsHeroArt width={124} height={100} />
+        </View>
+        <Text style={styles.heroTitle} accessibilityRole="header">Reports</Text>
+        <Text style={styles.heroTagline}>Insights, records and compliance — simplified.</Text>
+      </View>
 
-      <Text style={styles.sectionLabel}>State</Text>
+      <View style={styles.body}>
+      {(() => {
+        const active = workers.filter((w) => w.status === "active").length;
+        if (missingCount === null || active === 0) return null;
+        const ready = Math.max(active - missingCount, 0);
+        const pct = Math.round((ready / active) * 100);
+        const r = 26;
+        const c = 2 * Math.PI * r;
+        return (
+          <View style={styles.complianceCard}>
+            <View style={styles.ringWrap}>
+              <Svg width={64} height={64} viewBox="0 0 64 64" style={{ transform: [{ rotate: "-90deg" }] }}>
+                <Circle cx={32} cy={32} r={r} stroke={colors.divider} strokeWidth={7} fill="none" />
+                <Circle
+                  cx={32}
+                  cy={32}
+                  r={r}
+                  stroke={pct === 100 ? colors.present : pct >= 70 ? colors.present : colors.leave}
+                  strokeWidth={7}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray={`${(c * pct) / 100} ${c}`}
+                />
+              </Svg>
+              <Text style={styles.ringText}>{pct}%</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.complianceTitle}>{pct === 100 ? "Compliance ready" : "Compliance check"}</Text>
+              <Text style={styles.complianceSub}>
+                {ready} of {active} workers have complete Form 12 details
+              </Text>
+            </View>
+          </View>
+        );
+      })()}
+
+      <View style={styles.formCard}>
+      <Text style={styles.fieldLabel}>State</Text>
       <SelectField label="" value={state} options={INDIAN_STATE_OPTIONS} onChange={setState} />
 
       {availableForms.length === 0 ? (
         <Text style={styles.empty}>No forms available for this state yet.</Text>
       ) : (
-        <Card style={styles.formCard}>
-          <Text style={styles.sectionLabel}>Report</Text>
+        <>
+          <Text style={styles.fieldLabel}>Report</Text>
           {lockForm ? (
             <View style={styles.lockedField}>
               <FileText size={18} color={colors.primary} />
@@ -309,7 +361,7 @@ export default function StatutoryFormsScreen({ route }: Props) {
           )}
           {!formOption.isAvailable && <Text style={styles.formCardComingSoon}>Coming soon</Text>}
 
-          <Text style={styles.sectionLabel}>Time Period</Text>
+          <Text style={styles.fieldLabel}>Time period</Text>
           <SelectField
             label=""
             value={preset}
@@ -334,7 +386,7 @@ export default function StatutoryFormsScreen({ route }: Props) {
             </Text>
           )}
 
-          <Text style={styles.sectionLabel}>Worker</Text>
+          <Text style={styles.fieldLabel}>Worker</Text>
           {!formOption.workerFilterable ? (
             <SelectField label="" value="all" options={[{ label: "All workers", value: "all" }]} onChange={() => {}} disabled />
           ) : workers.length === 0 ? (
@@ -352,19 +404,48 @@ export default function StatutoryFormsScreen({ route }: Props) {
             {downloading ? (
               <ActivityIndicator color={colors.surface} />
             ) : (
-              <Text style={styles.buttonText}>{DIRECT_PDF_GENERATORS[formCode] ? "Download / Share PDF" : "Download PDF"}</Text>
+              <View style={styles.buttonInner}>
+                <Download size={18} color={colors.surface} />
+                <Text style={styles.buttonText}>{DIRECT_PDF_GENERATORS[formCode] ? "Download / Share PDF" : "Download PDF"}</Text>
+              </View>
             )}
           </TouchableOpacity>
           {DIRECT_PDF_HELPER_TEXT[formCode] && <Text style={styles.helper}>{DIRECT_PDF_HELPER_TEXT[formCode]}</Text>}
-        </Card>
+        </>
       )}
+      </View>
+      </View>
     </KeyboardScreen>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, backgroundColor: colors.ground, flexGrow: 1, paddingBottom: spacing.xl * 2 },
+  container: { backgroundColor: colors.ground, flexGrow: 1, paddingBottom: spacing.xl * 2 },
+  hero: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingBottom: 48, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, overflow: "hidden" },
+  heroArt: { position: "absolute", right: 10, bottom: 30 },
+  heroTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 26, color: colors.surface },
+  heroTagline: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, lineHeight: 18, color: "#FFE0B2", marginTop: 6, maxWidth: 210 },
+  body: { paddingHorizontal: spacing.md, marginTop: -28, gap: 12 },
+  complianceCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    elevation: 4,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  ringWrap: { width: 64, height: 64, alignItems: "center", justifyContent: "center" },
+  ringText: { position: "absolute", fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
+  complianceTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  complianceSub: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  fieldLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.textSecondary, marginTop: spacing.sm, marginBottom: spacing.xs },
+  buttonInner: { flexDirection: "row", alignItems: "center", gap: 8 },
   subtitle: { ...type.small, color: colors.textSecondary, marginBottom: spacing.md },
   sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.md, marginBottom: spacing.xs, textTransform: "uppercase" },
   empty: { fontSize: 13, color: colors.textSecondary },
@@ -381,7 +462,9 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: radius.sm,
+    borderRadius: 12,
+    minHeight: 48,
+    justifyContent: "center",
     paddingVertical: spacing.sm + 4,
     alignItems: "center",
     marginTop: spacing.md,
@@ -398,7 +481,7 @@ const styles = StyleSheet.create({
   },
   buttonGhostText: { color: colors.primary, fontSize: 14, fontWeight: "700" },
 
-  formCard: { marginTop: spacing.sm, padding: spacing.md },
+  formCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14 },
   formCardComingSoon: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.warningTintText, marginTop: 2 },
   lockedField: {
     flexDirection: "row",

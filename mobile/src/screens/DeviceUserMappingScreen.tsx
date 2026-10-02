@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { CheckCircle2, ChevronDown, ChevronRight, Fingerprint, Trash2 } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -13,7 +14,9 @@ import {
   listWorkers,
   verifyPunch,
 } from "../api/client";
+import { LinkArt } from "../components/BiometricArt";
 import ErrorState from "../components/ErrorState";
+import { Avatar } from "../components/ui";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
 import { ListSkeleton } from "../components/Skeleton";
@@ -180,10 +183,17 @@ export default function DeviceUserMappingScreen({ route, navigation }: Props) {
 
   return (
     <KeyboardScreen contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{deviceName}</Text>
-      <Text style={styles.subtitle}>Map device users to workers, or generate a direct employee code instead.</Text>
+      <View style={styles.hero}>
+        <View style={styles.heroArt} pointerEvents="none">
+          <LinkArt />
+        </View>
+        <Text style={styles.heroTitle} numberOfLines={1}>{deviceName}</Text>
+        <Text style={styles.heroSub}>Link each worker to their ID on this device, or generate a direct employee code.</Text>
+      </View>
 
-      <Text style={styles.sectionLabel}>Add a manual mapping</Text>
+      <View style={styles.body}>
+      <View style={styles.addCard}>
+      <Text style={styles.cardTitle}>Add a mapping</Text>
       <SelectField
         label="Worker"
         value={selectedWorkerId !== null ? String(selectedWorkerId) : null}
@@ -197,7 +207,7 @@ export default function DeviceUserMappingScreen({ route, navigation }: Props) {
         style={styles.input}
         value={deviceUserId}
         onChangeText={setDeviceUserId}
-        placeholder="ID shown on the device at enrollment"
+        placeholder="ID shown on the device at enrolment"
         placeholderTextColor={colors.muted}
       />
       <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleCreateMapping} disabled={saving}>
@@ -208,29 +218,46 @@ export default function DeviceUserMappingScreen({ route, navigation }: Props) {
           <Text style={styles.altLink}>Or generate a direct employee code for this worker instead →</Text>
         </TouchableOpacity>
       )}
+      </View>
 
-      <Text style={styles.sectionLabel}>Current mappings</Text>
+      <Text style={styles.sectionLabel}>Mapped · {mappings.length}</Text>
       {mappings.length === 0 ? (
         <Text style={styles.empty}>No manual mappings yet on this device.</Text>
       ) : (
-        mappings.map((m) => (
-          <View key={m.id} style={styles.mappingRow}>
-            <Text style={styles.mappingLine}>
-              {m.worker_name}
-              {m.worker_employee_code ? ` (#${m.worker_employee_code})` : ""}
-              <Text style={styles.mappingArrow}>  →  </Text>
-              {m.device_user_id}
-            </Text>
-            <TouchableOpacity onPress={() => handleRemoveMapping(m)}>
-              <Text style={styles.removeLink}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-        ))
+        <View style={styles.listCard}>
+          {mappings.map((m, i) => (
+            <View key={m.id} style={[styles.mappingRow, i > 0 && styles.mappingDivider]}>
+              <Avatar workerId={m.worker_id} name={m.worker_name} size={36} />
+              <Text style={styles.mappingLine} numberOfLines={1}>
+                {m.worker_name}
+                {m.worker_employee_code ? <Text style={styles.mappingCode}>{`  #${m.worker_employee_code}`}</Text> : null}
+              </Text>
+              <View style={styles.idChip}>
+                <Fingerprint size={12} color={colors.primary} />
+                <Text style={styles.idChipText}>{m.device_user_id}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.removeButton}
+                onPress={() => handleRemoveMapping(m)}
+                accessibilityLabel={`Remove mapping for ${m.worker_name}`}
+              >
+                <Trash2 size={18} color={colors.danger} />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
       )}
 
-      <TouchableOpacity style={styles.collapsibleHead} onPress={() => setVerifyOpen((v) => !v)}>
-        <Text style={styles.collapsibleHeadText}>Verify a punch</Text>
-        <Text style={styles.collapsibleChevron}>{verifyOpen ? "‹" : "›"}</Text>
+      <View style={styles.verifyCard}>
+      <TouchableOpacity style={styles.collapsibleHead} onPress={() => setVerifyOpen((v) => !v)} accessibilityState={{ expanded: verifyOpen }}>
+        <View style={styles.verifyIcon}>
+          <CheckCircle2 size={18} color={colors.present} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.collapsibleHeadText}>Verify a punch</Text>
+          <Text style={styles.verifySub}>Check the latest punch for a worker</Text>
+        </View>
+        {verifyOpen ? <ChevronDown size={18} color={colors.disabled} /> : <ChevronRight size={18} color={colors.disabled} />}
       </TouchableOpacity>
       {verifyOpen && (
         <View style={styles.collapsibleBody}>
@@ -251,44 +278,41 @@ export default function DeviceUserMappingScreen({ route, navigation }: Props) {
           {verifyMessage && <Text style={styles.verifyMessage}>{verifyMessage}</Text>}
         </View>
       )}
+      </View>
+      </View>
     </KeyboardScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy },
-  subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
-  sectionLabel: { fontSize: 12, fontWeight: "700", color: colors.navy, marginTop: spacing.lg, marginBottom: spacing.sm, textTransform: "uppercase" },
-  empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.sm },
-  mappingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: colors.fieldBg,
-    borderRadius: radius.sm,
-    padding: spacing.sm + 4,
-    marginBottom: spacing.xs,
-  },
-  mappingLine: { fontSize: 14, fontWeight: "700", color: colors.navy, flexShrink: 1 },
-  mappingArrow: { color: colors.teal, fontWeight: "700" },
-  removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700", marginLeft: spacing.sm },
-  collapsibleHead: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: spacing.sm + 4,
-    marginTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.fieldBg,
-  },
-  collapsibleHeadText: { fontSize: 13, fontWeight: "700", color: colors.navy },
-  collapsibleChevron: { fontSize: 16, color: colors.muted },
-  collapsibleBody: { paddingTop: spacing.xs },
+  container: { backgroundColor: colors.ground, flexGrow: 1, paddingBottom: spacing.xl },
+  hero: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 44, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, overflow: "hidden", minHeight: 130 },
+  heroArt: { position: "absolute", right: 14, bottom: 26 },
+  heroTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 22, color: colors.surface, paddingRight: 130 },
+  heroSub: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, lineHeight: 18, color: colors.onPrimaryMuted, marginTop: 4, paddingRight: 130 },
+  body: { paddingHorizontal: spacing.md, marginTop: -26, gap: 12 },
+  addCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 14, elevation: 4, shadowColor: colors.primaryDark, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  cardTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy, marginBottom: spacing.sm },
+  sectionLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, letterSpacing: 0.6, color: colors.textSecondary, textTransform: "uppercase", marginTop: 4 },
+  empty: { fontSize: 13, color: colors.muted },
+  listCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
+  mappingRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 56, paddingLeft: 14, paddingRight: 6, paddingVertical: 8 },
+  mappingDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
+  mappingLine: { flex: 1, fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
+  mappingCode: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary },
+  idChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  idChipText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primary },
+  removeButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  verifyCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14 },
+  collapsibleHead: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 60 },
+  verifyIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.presentTint, alignItems: "center", justifyContent: "center" },
+  collapsibleHeadText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
+  verifySub: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary },
+  collapsibleBody: { paddingBottom: 14 },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
-  input: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 15, color: colors.navy, marginBottom: spacing.md },
+  input: { backgroundColor: colors.ground, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, fontSize: 15, color: colors.navy, marginBottom: spacing.md },
   helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
-  button: { backgroundColor: colors.teal, borderRadius: radius.sm, padding: 14, alignItems: "center" },
+  button: { backgroundColor: colors.primary, borderRadius: 12, height: 46, alignItems: "center", justifyContent: "center" },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: colors.white, fontWeight: "700", fontSize: 15 },
   buttonGhost: { borderWidth: 1.5, borderColor: colors.teal, borderRadius: radius.sm, padding: 14, alignItems: "center" },

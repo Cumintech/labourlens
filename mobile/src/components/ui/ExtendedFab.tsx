@@ -47,5 +47,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  label: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.surface },
+  label: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.surface },
 });

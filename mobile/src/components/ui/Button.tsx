@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
   secondaryOutline: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.primary },
   destructiveText: { backgroundColor: "transparent" },
   disabled: { opacity: 0.5 },
-  text: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15 },
+  text: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15 },
   textPrimary: { color: colors.surface },
   textSecondaryOutline: { color: colors.primary },
   textDestructive: { color: colors.danger },

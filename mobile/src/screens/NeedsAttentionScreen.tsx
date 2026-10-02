@@ -119,5 +119,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  alertMessage: { flex: 1, fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: colors.navy },
+  alertMessage: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.navy },
 });

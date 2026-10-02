@@ -5,6 +5,7 @@ import { colors, radius, spacing } from "../../theme";
 
 export default function ListRow({
   icon: Icon,
+  left,
   title,
   subtitle,
   onPress,
@@ -12,6 +13,8 @@ export default function ListRow({
   right,
 }: {
   icon?: LucideIcon;
+  // Overrides `icon` when given -- e.g. an Avatar for a worker row.
+  left?: React.ReactNode;
   title: string;
   subtitle?: string;
   onPress?: () => void;
@@ -20,11 +23,12 @@ export default function ListRow({
 }) {
   return (
     <Pressable accessibilityRole={onPress ? "button" : undefined} onPress={onPress} style={styles.row}>
-      {Icon && (
-        <View style={styles.iconChip}>
-          <Icon size={20} color={colors.primary} />
-        </View>
-      )}
+      {left ??
+        (Icon && (
+          <View style={styles.iconChip}>
+            <Icon size={20} color={colors.primary} />
+          </View>
+        ))}
       <View style={styles.textWrap}>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}
@@ -46,6 +50,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   textWrap: { flex: 1 },
-  title: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.navy },
-  subtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  title: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  subtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 });

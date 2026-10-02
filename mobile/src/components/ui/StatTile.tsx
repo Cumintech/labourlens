@@ -25,9 +25,9 @@ const styles = StyleSheet.create({
   tile: { flex: 1, borderRadius: radius.sm, paddingVertical: spacing.sm + 4, alignItems: "center" },
   defaultBg: { backgroundColor: colors.ground },
   value: {
-    fontFamily: "PlusJakartaSans_800ExtraBold",
+    fontFamily: "IBMPlexSans_700Bold",
     fontSize: 20,
     fontVariant: ["tabular-nums"],
   },
-  label: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  label: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.textSecondary, marginTop: 2 },
 });

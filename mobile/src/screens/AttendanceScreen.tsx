@@ -458,6 +458,13 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
   );
   const isToday = selectedDate === today;
 
+  // For the sticky "x of y marked" bar -- counts the Morning shift only,
+  // the same shift Mark All acts on (see handleBulkPresent above).
+  const morningMarkedCount = morningShift
+    ? activeWorkers.filter((w) => attendanceByWorkerSlot.get(`${w.id}:${morningShift.slot_key}`)?.status).length
+    : 0;
+  const morningPendingCount = activeWorkers.length - morningMarkedCount;
+
   if (loading) {
     return (
       <View style={styles.dayContainer}>
@@ -552,7 +559,8 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
             {missingComplianceCount > 0 && (
               <TouchableOpacity style={styles.complianceBanner} onPress={handleMissingCompliancePress}>
                 <Text style={styles.complianceBannerText}>
-                  {missingComplianceCount} worker{missingComplianceCount === 1 ? "" : "s"} need Form 12 details ›
+                  {missingComplianceCount} worker{missingComplianceCount === 1 ? "" : "s"}{" "}
+                  {missingComplianceCount === 1 ? "needs" : "need"} Form 12 details ›
                 </Text>
               </TouchableOpacity>
             )}
@@ -627,13 +635,14 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
       />
 
       {statusTab === "active" && activeWorkers.length > 0 && (
-        <TouchableOpacity
-          style={[styles.fab, { bottom: spacing.lg + insets.bottom }]}
-          onPress={handleBulkPresent}
-          disabled={bulkBusy}
-        >
-          {bulkBusy ? <ActivityIndicator color={colors.surface} size="small" /> : <Text style={styles.fabText}>✓ Mark All</Text>}
-        </TouchableOpacity>
+        <View style={[styles.stickyBar, { paddingBottom: spacing.sm + insets.bottom }]}>
+          <Text style={styles.stickyBarText}>
+            {morningMarkedCount} of {activeWorkers.length} marked · {morningPendingCount} pending
+          </Text>
+          <TouchableOpacity style={styles.stickyBarButton} onPress={handleBulkPresent} disabled={bulkBusy}>
+            {bulkBusy ? <ActivityIndicator color={colors.surface} size="small" /> : <Text style={styles.stickyBarButtonText}>Mark all</Text>}
+          </TouchableOpacity>
+        </View>
       )}
 
       <OtHoursModal
@@ -983,17 +992,17 @@ function RangeView() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ground },
   header: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  subtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
+  subtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
   modeWrap: {},
   dayContainer: { flex: 1, backgroundColor: colors.ground },
 
-  dateNavCard: { backgroundColor: colors.navy, marginHorizontal: spacing.md, marginTop: spacing.md, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
+  dateNavCard: { backgroundColor: colors.primary, marginHorizontal: spacing.md, marginTop: spacing.md, borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   dateNavRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   dateNavButton: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: colors.heroDivider,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1053,27 +1062,34 @@ const styles = StyleSheet.create({
   statusTabRow: { flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm, marginBottom: spacing.xs },
   statusTab: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: spacing.sm - 2, alignItems: "center" },
   statusTabActive: { backgroundColor: colors.primary },
-  statusTabActiveMuted: { backgroundColor: colors.navy },
+  statusTabActiveMuted: { backgroundColor: colors.primary },
   statusTabText: { fontSize: 12.5, fontWeight: "700", color: colors.textSecondary },
   statusTabTextActive: { color: colors.surface },
   statusTabTextActiveMuted: { color: colors.surface },
   empty: { textAlign: "center", color: colors.textSecondary, marginTop: 40 },
-  fab: {
-    position: "absolute",
-    right: spacing.md,
-    backgroundColor: colors.primary,
-    borderRadius: 999,
-    paddingHorizontal: spacing.md + 2,
-    paddingVertical: spacing.sm + 4,
+  stickyBar: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
     shadowColor: colors.navy,
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.08,
     shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: -2 },
     elevation: 6,
   },
-  fabText: { color: colors.surface, fontSize: 13, fontWeight: "700" },
+  stickyBarText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.textSecondary },
+  stickyBarButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  stickyBarButtonText: { color: colors.surface, fontFamily: "IBMPlexSans_700Bold", fontSize: 13 },
 
   // Range view
   rangeSubtitle: { fontSize: 13, color: colors.textSecondary, marginBottom: spacing.md },

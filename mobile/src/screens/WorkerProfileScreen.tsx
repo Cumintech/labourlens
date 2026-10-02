@@ -43,6 +43,7 @@ import { SegmentedControl } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
+import { formatINR } from "../format";
 import { colors, radius, spacing, type } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkerProfile">;
@@ -520,9 +521,9 @@ function AttendanceTab({ workerId }: { workerId: number }) {
                       </View>
                     )}
                   </View>
-                  <Text style={styles.monthWageValue}>₹{wage.net_wage.toFixed(2)}</Text>
+                  <Text style={styles.monthWageValue}>₹{formatINR(wage.net_wage)}</Text>
                   <Text style={styles.monthWageDetail}>
-                    Gross ₹{wage.gross_wage.toFixed(2)} · {wage.days_worked} day{wage.days_worked === 1 ? "" : "s"} worked
+                    Gross ₹{formatINR(wage.gross_wage)} · {wage.days_worked} day{wage.days_worked === 1 ? "" : "s"} worked
                   </Text>
                 </>
               ) : (
@@ -890,9 +891,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  complianceTitle: { ...type.small, fontFamily: "PlusJakartaSans_700Bold", color: colors.navy },
+  complianceTitle: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
   complianceSubtitle: { ...type.small, color: colors.textSecondary, marginTop: 2 },
-  complianceLink: { ...type.small, fontFamily: "PlusJakartaSans_700Bold", color: colors.primary },
+  complianceLink: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.primary },
   segmentWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.ground },
   tabScroll: { flex: 1, backgroundColor: colors.ground },
   tabContent: { padding: spacing.lg },
@@ -901,12 +902,12 @@ const styles = StyleSheet.create({
   infoCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
   infoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
   infoLabel: { ...type.small, color: colors.textSecondary },
-  infoValue: { ...type.small, fontFamily: "PlusJakartaSans_700Bold", color: colors.navy },
-  infoValueWarn: { fontSize: 11.5, fontFamily: "PlusJakartaSans_700Bold", color: colors.warningTintText },
+  infoValue: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
+  infoValueWarn: { fontSize: 11.5, fontFamily: "IBMPlexSans_700Bold", color: colors.warningTintText },
   editButton: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingVertical: spacing.sm + 4, alignItems: "center", marginTop: spacing.md },
-  editButtonText: { ...type.small, fontFamily: "PlusJakartaSans_700Bold", color: colors.primary },
+  editButtonText: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.primary },
   deactivateButton: { backgroundColor: colors.absentTint, borderRadius: radius.sm, paddingVertical: spacing.sm + 4, alignItems: "center", marginTop: spacing.sm },
-  deactivateButtonText: { ...type.small, fontFamily: "PlusJakartaSans_700Bold", color: colors.absentTintText },
+  deactivateButtonText: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.absentTintText },
 
   // Attendance
   monthRow: {
@@ -920,51 +921,51 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   monthArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.ground, alignItems: "center", justifyContent: "center" },
-  monthArrowText: { fontSize: 18, fontFamily: "PlusJakartaSans_700Bold", color: colors.navy },
-  monthLabel: { ...type.small, fontFamily: "PlusJakartaSans_700Bold", color: colors.navy },
+  monthArrowText: { fontSize: 18, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
+  monthLabel: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
   summaryRow: { flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.lg, marginTop: spacing.md },
   statCard: { flex: 1, borderRadius: radius.sm, paddingVertical: spacing.sm, alignItems: "center" },
-  statValue: { fontSize: 20, fontFamily: "PlusJakartaSans_700Bold" },
-  statLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, fontFamily: "PlusJakartaSans_700Bold" },
+  statValue: { fontSize: 20, fontFamily: "IBMPlexSans_700Bold" },
+  statLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, fontFamily: "IBMPlexSans_700Bold" },
   monthWageCard: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
     borderRadius: radius.md,
     padding: spacing.md,
   },
   monthWageTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  monthWageLabel: { color: "rgba(255,255,255,0.7)", fontSize: 12, fontFamily: "PlusJakartaSans_700Bold" },
+  monthWageLabel: { color: colors.onPrimaryMuted, fontSize: 12, fontFamily: "IBMPlexSans_700Bold" },
   paidBadge: { backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
-  paidBadgeText: { color: colors.surface, fontSize: 10, fontFamily: "PlusJakartaSans_700Bold" },
-  monthWageValue: { color: colors.surface, fontSize: 28, fontFamily: "PlusJakartaSans_700Bold", marginTop: 4 },
-  monthWageDetail: { color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 2 },
-  monthWageEmpty: { color: "rgba(255,255,255,0.85)", fontSize: 13 },
+  paidBadgeText: { color: colors.surface, fontSize: 10, fontFamily: "IBMPlexSans_700Bold" },
+  monthWageValue: { color: colors.surface, fontSize: 28, fontFamily: "IBMPlexSans_700Bold", marginTop: 4 },
+  monthWageDetail: { color: colors.onPrimaryMuted, fontSize: 12, marginTop: 2 },
+  monthWageEmpty: { color: colors.onPrimaryMuted, fontSize: 13 },
   tableHeaderRow: { flexDirection: "row", paddingHorizontal: spacing.lg, marginTop: spacing.lg, marginBottom: spacing.xs },
-  tableHeaderCell: { fontSize: 11, fontFamily: "PlusJakartaSans_700Bold", color: colors.textSecondary, textTransform: "uppercase" },
+  tableHeaderCell: { fontSize: 11, fontFamily: "IBMPlexSans_700Bold", color: colors.textSecondary, textTransform: "uppercase" },
   dayRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
   dayRowToday: { backgroundColor: colors.presentTint },
   dateRow: { flexDirection: "row", alignItems: "baseline", gap: spacing.xs, marginBottom: spacing.xs },
-  dateNumber: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", color: colors.navy },
+  dateNumber: { fontSize: 15, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
   dateWeekday: { fontSize: 11, color: colors.textSecondary },
   notJoinedRow: { flex: 1, backgroundColor: colors.unmarkedTint, borderRadius: radius.sm, paddingVertical: spacing.sm + 2, alignItems: "center" },
-  notJoinedText: { fontSize: 12, fontFamily: "PlusJakartaSans_700Bold", color: colors.unmarked },
+  notJoinedText: { fontSize: 12, fontFamily: "IBMPlexSans_700Bold", color: colors.unmarked },
   shiftTagsRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.xs },
   shiftTag: { paddingHorizontal: spacing.xs + 2, paddingVertical: 3, borderRadius: 6 },
-  shiftTagOn: { backgroundColor: colors.navy },
+  shiftTagOn: { backgroundColor: colors.primary },
   shiftTagOff: { backgroundColor: colors.ground },
-  shiftTagText: { fontSize: 9.5, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  shiftTagText: { fontSize: 9.5, fontFamily: "IBMPlexSans_700Bold" },
   shiftTagTextOn: { color: colors.surface },
   shiftTagTextOff: { color: colors.unmarked },
 
   // Wages
   rateSectionCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
   rateSectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
-  rateSectionTitle: { fontSize: 13, fontFamily: "PlusJakartaSans_800ExtraBold", color: colors.navy, textTransform: "uppercase" },
-  rateSectionEdit: { fontSize: 12.5, fontFamily: "PlusJakartaSans_700Bold", color: colors.primary },
+  rateSectionTitle: { fontSize: 13, fontFamily: "IBMPlexSans_700Bold", color: colors.navy, textTransform: "uppercase" },
+  rateSectionEdit: { fontSize: 12.5, fontFamily: "IBMPlexSans_700Bold", color: colors.primary },
   helper: { fontSize: 11, color: colors.textSecondary, marginTop: -spacing.sm, marginBottom: spacing.sm },
   rateCard: { backgroundColor: colors.primaryTint, borderRadius: radius.md, padding: spacing.sm + 4 },
-  rateValue: { fontSize: 20, fontFamily: "PlusJakartaSans_700Bold", color: colors.primaryPressed },
+  rateValue: { fontSize: 20, fontFamily: "IBMPlexSans_700Bold", color: colors.primaryPressed },
   rateDetail: { fontSize: 12, color: colors.primaryPressed, marginTop: 2 },
   rateCardEmpty: { backgroundColor: colors.ground, borderRadius: radius.md, padding: spacing.sm + 4, alignItems: "center" },
   empty: { fontSize: 13, color: colors.textSecondary },
@@ -981,12 +982,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     gap: spacing.sm,
   },
-  docTitle: { ...type.small, fontFamily: "PlusJakartaSans_700Bold", color: colors.navy },
+  docTitle: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
   docStatus: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   docStatusOk: { color: colors.present },
   docStatusWarn: { color: colors.warningTintText },
   docButton: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
-  docButtonText: { fontSize: 12.5, fontFamily: "PlusJakartaSans_700Bold", color: colors.primary },
+  docButtonText: { fontSize: 12.5, fontFamily: "IBMPlexSans_700Bold", color: colors.primary },
   buttonDisabled: { opacity: 0.5 },
   photoCaptureRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
   photoCaptureOption: {
@@ -999,7 +1000,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  photoCaptureLabel: { fontSize: 11.5, fontFamily: "PlusJakartaSans_700Bold", color: colors.navy },
+  photoCaptureLabel: { fontSize: 11.5, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
   photoPreviewWrap: { marginTop: spacing.xs, alignItems: "center" },
   photoPreview: { width: 120, height: 150, borderRadius: radius.sm },
   photoPreviewActions: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginTop: spacing.sm },

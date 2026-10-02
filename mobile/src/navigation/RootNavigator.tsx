@@ -98,7 +98,7 @@ export default function RootNavigator() {
         <AuthStack.Navigator
           screenOptions={{
             headerStyle: { backgroundColor: colors.surface },
-            headerTitleStyle: { color: colors.navy, fontFamily: "PlusJakartaSans_700Bold", fontSize: 17 },
+            headerTitleStyle: { color: colors.navy, fontFamily: "IBMPlexSans_700Bold", fontSize: 17 },
             headerTintColor: colors.primary,
           }}
         >
@@ -116,7 +116,7 @@ export default function RootNavigator() {
         initialRouteName="Home"
         screenOptions={{
           headerStyle: { backgroundColor: colors.surface },
-          headerTitleStyle: { color: colors.navy, fontFamily: "PlusJakartaSans_700Bold", fontSize: 17 },
+          headerTitleStyle: { color: colors.navy, fontFamily: "IBMPlexSans_700Bold", fontSize: 17 },
           headerTintColor: colors.primary,
         }}
       >

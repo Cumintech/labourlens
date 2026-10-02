@@ -82,7 +82,7 @@ export default function AppLockScreen() {
 const KEY_SIZE = 84;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.navy, alignItems: "center", justifyContent: "center", padding: spacing.lg },
+  container: { flex: 1, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", padding: spacing.lg },
   lockIcon: { marginBottom: spacing.sm },
   title: { color: colors.white, fontSize: 16, fontWeight: "700", marginBottom: spacing.lg, textAlign: "center" },
   dotsRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.sm },
@@ -94,5 +94,5 @@ const styles = StyleSheet.create({
   key: { width: KEY_SIZE, height: KEY_SIZE, alignItems: "center", justifyContent: "center" },
   keyText: { color: colors.white, fontSize: 26, fontWeight: "600" },
   forgotLink: { marginTop: spacing.lg },
-  forgotLinkText: { color: "rgba(255,255,255,0.6)", fontSize: 13, fontWeight: "600" },
+  forgotLinkText: { color: colors.onPrimaryMuted, fontSize: 13, fontWeight: "600" },
 });

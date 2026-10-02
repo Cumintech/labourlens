@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AttendanceStatus, ShiftConfig, Worker } from "../api/client";
+import { Avatar } from "./ui";
 import { colors, radius, spacing } from "../theme";
 
 type Props = {
@@ -16,12 +17,6 @@ type Props = {
   onDeactivate: () => void;
   onPressDetail: () => void;
 };
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
 
 // Redesigned per attendance-mockup.html (batch 3) -- collapses what
 // used to be up to 4 full-width buttons per shift/leave/OT plus an
@@ -55,10 +50,12 @@ export default function AttendanceRowCard({
   return (
     <View style={styles.card}>
       <View style={[styles.edge, { backgroundColor: edgeColor }]} />
-      <TouchableOpacity onPress={onPressDetail} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials(worker.name)}</Text>
-        </View>
+      <TouchableOpacity
+        onPress={onPressDetail}
+        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        style={{ marginRight: spacing.sm }}
+      >
+        <Avatar workerId={worker.id} name={worker.name} size={36} />
       </TouchableOpacity>
 
       <View style={styles.main}>
@@ -177,16 +174,6 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   edge: { width: 4, alignSelf: "stretch", borderRadius: 2, marginRight: spacing.sm },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.navy,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: spacing.sm,
-  },
-  avatarText: { color: colors.white, fontSize: 13, fontWeight: "700" },
   main: { flex: 1, minWidth: 0 },
   identityRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
   nameTouchable: { flexShrink: 1, maxWidth: "60%" },
@@ -204,7 +191,7 @@ const styles = StyleSheet.create({
   inactiveBadge: { backgroundColor: colors.muted, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   inactiveBadgeText: { color: colors.white, fontSize: 9.5, fontWeight: "700" },
   tooltip: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     padding: spacing.sm,
     marginTop: spacing.xs,

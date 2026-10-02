@@ -75,7 +75,7 @@ export default function SelectField<T extends string>({ label, value, options, o
 
 const styles = StyleSheet.create({
   fieldWrap: { marginBottom: spacing.md },
-  label: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
+  label: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   input: {
     backgroundColor: colors.ground,
     borderRadius: radius.sm,
@@ -86,14 +86,14 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   inputDisabled: { opacity: 0.6 },
-  valueText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.navy },
-  placeholderText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.textSecondary },
+  valueText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 16, color: colors.navy },
+  placeholderText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 16, color: colors.textSecondary },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, maxHeight: "70%" },
-  sheetTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.navy, marginBottom: spacing.sm },
+  sheetTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy, marginBottom: spacing.sm },
   list: { flexGrow: 0 },
   optionHeader: {
-    fontFamily: "PlusJakartaSans_700Bold",
+    fontFamily: "IBMPlexSans_700Bold",
     fontSize: 11,
     color: colors.textSecondary,
     textTransform: "uppercase",
@@ -103,8 +103,8 @@ const styles = StyleSheet.create({
   },
   option: { paddingVertical: 14, paddingHorizontal: spacing.sm, borderRadius: radius.sm },
   optionSelected: { backgroundColor: colors.primaryTint },
-  optionText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 15, color: colors.navy },
-  optionTextSelected: { color: colors.primary, fontFamily: "PlusJakartaSans_700Bold" },
+  optionText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 15, color: colors.navy },
+  optionTextSelected: { color: colors.primary, fontFamily: "IBMPlexSans_700Bold" },
   cancelButton: { paddingVertical: 14, alignItems: "center", marginTop: spacing.xs },
-  cancelText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.textSecondary },
+  cancelText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.textSecondary },
 });

@@ -35,6 +35,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", backgroundColor: colors.ground, borderRadius: radius.sm, padding: 4 },
   option: { flex: 1, paddingVertical: spacing.sm + 2, alignItems: "center", borderRadius: radius.sm - 2 },
   optionSelected: { backgroundColor: colors.surface, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  label: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 13, color: colors.textSecondary },
+  label: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.textSecondary },
   labelSelected: { color: colors.primary },
 });

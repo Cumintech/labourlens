@@ -199,7 +199,7 @@ export default function DateField({
 
 const styles = StyleSheet.create({
   fieldWrap: { marginBottom: spacing.md },
-  label: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
+  label: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   partInputDay: {
     width: 32,
     paddingVertical: 12,
-    fontFamily: "PlusJakartaSans_500Medium",
+    fontFamily: "IBMPlexSans_500Medium",
     fontSize: 16,
     color: colors.navy,
     textAlign: "center",
@@ -220,13 +220,13 @@ const styles = StyleSheet.create({
   partInputYear: {
     width: 52,
     paddingVertical: 12,
-    fontFamily: "PlusJakartaSans_500Medium",
+    fontFamily: "IBMPlexSans_500Medium",
     fontSize: 16,
     color: colors.navy,
     textAlign: "center",
   },
   separator: { color: colors.textSecondary, fontSize: 16 },
   calendarButton: { marginLeft: "auto", padding: 8 },
-  placeholderHint: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.textSecondary, marginTop: 4 },
-  errorText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.danger, marginTop: 4 },
+  placeholderHint: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.textSecondary, marginTop: 4 },
+  errorText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.danger, marginTop: 4 },
 });

@@ -1,9 +1,9 @@
 import {
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold,
+  IBMPlexSans_500Medium,
+  IBMPlexSans_600SemiBold,
+  IBMPlexSans_700Bold,
   useFonts,
-} from "@expo-google-fonts/plus-jakarta-sans";
+} from "@expo-google-fonts/ibm-plex-sans";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
@@ -42,13 +42,13 @@ function Gate() {
 // native-stack swipe-back gesture and reanimated both depend on it.
 export default function App() {
   // Splash stays visible (app.json's own splash config) until this
-  // resolves -- the v2 redesign's type scale (theme.ts) is entirely
-  // Plus Jakarta Sans; rendering any screen before it's loaded would
-  // show the system font for a flash, then visibly swap.
+  // resolves -- the type scale (theme.ts) is entirely IBM Plex Sans;
+  // rendering any screen before it's loaded would show the system font
+  // for a flash, then visibly swap.
   const [fontsLoaded] = useFonts({
-    PlusJakartaSans_500Medium,
-    PlusJakartaSans_700Bold,
-    PlusJakartaSans_800ExtraBold,
+    IBMPlexSans_500Medium,
+    IBMPlexSans_600SemiBold,
+    IBMPlexSans_700Bold,
   });
 
   useEffect(() => {

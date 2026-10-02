@@ -33,9 +33,10 @@ import DateField, { isoDate } from "../components/DateField";
 import DonutChart from "../components/DonutChart";
 import ErrorState from "../components/ErrorState";
 import { ListSkeleton } from "../components/Skeleton";
-import { SegmentedControl } from "../components/ui";
+import { Avatar, SegmentedControl } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { formatINR } from "../format";
 import { colors, radius, spacing, type } from "../theme";
 import { workerLabel } from "../workerLabel";
 
@@ -322,7 +323,7 @@ function PayrollView() {
                 <Text style={styles.summaryStatLabel}>Labourers Contributed</Text>
               </View>
               <View style={styles.summaryStat}>
-                <Text style={styles.summaryStatValue}>₹{totalAmount.toFixed(0)}</Text>
+                <Text style={styles.summaryStatValue}>₹{formatINR(totalAmount)}</Text>
                 <Text style={styles.summaryStatLabel}>{mode === "monthly" ? "Total Net Wage" : "Total Labour Cost"}</Text>
               </View>
             </View>
@@ -347,7 +348,7 @@ function PayrollView() {
 
           {noRateCount > 0 && (
             <Text style={styles.noRateNote}>
-              {noRateCount} worker{noRateCount === 1 ? "" : "s"} have no wage rate set and aren't included above.
+              {noRateCount} worker{noRateCount === 1 ? "" : "s"} {noRateCount === 1 ? "has" : "have"} no wage rate set and {noRateCount === 1 ? "isn't" : "aren't"} included above.
             </Text>
           )}
 
@@ -373,13 +374,14 @@ function PayrollView() {
       }
       renderItem={({ item }) => (
         <View style={styles.workerRow}>
+          <Avatar workerId={item.workerId} name={item.workerName} size={36} />
           <TouchableOpacity
-            style={{ flex: 1 }}
+            style={{ flex: 1, marginLeft: spacing.sm }}
             onPress={() => (mode === "monthly" ? openDetail(item.workerId) : undefined)}
             disabled={mode !== "monthly"}
           >
             <Text style={styles.workerName}>{item.workerName}</Text>
-            <Text style={styles.workerAmount}>₹{item.amount.toFixed(2)}</Text>
+            <Text style={styles.workerAmount}>₹{formatINR(item.amount)}</Text>
             {mode === "monthly" && <Text style={styles.workerDetailLink}>View calculation →</Text>}
           </TouchableOpacity>
           {mode === "monthly" && (
@@ -460,7 +462,7 @@ function PayrollView() {
             <>
               <Text style={styles.modalTitle}>{detailTarget.worker_name}</Text>
               <Text style={styles.modalSubtitle}>
-                {MONTH_NAMES[month - 1]} {year} · ₹{detailTarget.rate_amount.toFixed(2)}/{detailTarget.rate_type}
+                {MONTH_NAMES[month - 1]} {year} · ₹{formatINR(detailTarget.rate_amount)}/{detailTarget.rate_type}
               </Text>
 
               <View style={styles.daysRow}>
@@ -480,11 +482,11 @@ function PayrollView() {
                   <Text style={styles.detailLabel}>Basic Wages</Text>
                   <Text style={styles.detailFormula}>
                     {detailTarget.rate_type === "daily"
-                      ? `${detailTarget.days_worked} days × ₹${detailTarget.rate_amount.toFixed(2)}`
-                      : `₹${detailTarget.rate_amount.toFixed(2)} / month`}
+                      ? `${detailTarget.days_worked} days × ₹${formatINR(detailTarget.rate_amount)}`
+                      : `₹${formatINR(detailTarget.rate_amount)} / month`}
                   </Text>
                 </View>
-                <Text style={styles.detailValue}>₹{detailTarget.basic_wage.toFixed(2)}</Text>
+                <Text style={styles.detailValue}>₹{formatINR(detailTarget.basic_wage)}</Text>
               </View>
               {[
                 ["Dearness Allowance", detailTarget.da],
@@ -495,40 +497,40 @@ function PayrollView() {
               ].map(([label, value]) => (
                 <View key={label as string} style={styles.detailRow}>
                   <Text style={styles.detailLabel}>{label}</Text>
-                  <Text style={styles.detailValue}>₹{(value as number).toFixed(2)}</Text>
+                  <Text style={styles.detailValue}>₹{formatINR((value as number))}</Text>
                 </View>
               ))}
               <View style={styles.detailRowTotal}>
                 <Text style={styles.detailLabelBold}>Gross Wages</Text>
-                <Text style={styles.detailValueBold}>₹{detailTarget.gross_wage.toFixed(2)}</Text>
+                <Text style={styles.detailValueBold}>₹{formatINR(detailTarget.gross_wage)}</Text>
               </View>
               <View style={styles.detailDivider} />
               <View style={styles.detailRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.detailLabel}>Provident Fund</Text>
                   <Text style={styles.detailFormula}>
-                    {detailTarget.pf_rate}% of ₹{detailTarget.pf_base.toFixed(2)} (Basic+DA)
+                    {detailTarget.pf_rate}% of ₹{formatINR(detailTarget.pf_base)} (Basic+DA)
                   </Text>
                 </View>
-                <Text style={styles.detailValueNegative}>-₹{detailTarget.pf.toFixed(2)}</Text>
+                <Text style={styles.detailValueNegative}>-₹{formatINR(detailTarget.pf)}</Text>
               </View>
               <View style={styles.detailRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.detailLabel}>Employees State Insurance</Text>
                   <Text style={styles.detailFormula}>
-                    {detailTarget.esi_rate}% of ₹{detailTarget.esi_base.toFixed(2)} (Gross)
+                    {detailTarget.esi_rate}% of ₹{formatINR(detailTarget.esi_base)} (Gross)
                   </Text>
                 </View>
-                <Text style={styles.detailValueNegative}>-₹{detailTarget.esi.toFixed(2)}</Text>
+                <Text style={styles.detailValueNegative}>-₹{formatINR(detailTarget.esi)}</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Labour Welfare Fund</Text>
-                <Text style={styles.detailValueNegative}>-₹{detailTarget.lwf.toFixed(2)}</Text>
+                <Text style={styles.detailValueNegative}>-₹{formatINR(detailTarget.lwf)}</Text>
               </View>
               <View style={styles.detailDivider} />
               <View style={styles.detailRowTotal}>
                 <Text style={styles.detailLabelBold}>Net Wages</Text>
-                <Text style={[styles.detailValueBold, { color: colors.primary }]}>₹{detailTarget.net_wage.toFixed(2)}</Text>
+                <Text style={[styles.detailValueBold, { color: colors.primary }]}>₹{formatINR(detailTarget.net_wage)}</Text>
               </View>
               <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDetailTarget(null)}>
                 <Text style={styles.modalCancelText}>Close</Text>
@@ -659,7 +661,8 @@ function RatesView({ navigation }: { navigation: NativeStackNavigationProp<RootS
               })
             }
           >
-            <View style={{ flex: 1 }}>
+            <Avatar workerId={item.id} name={item.name} size={36} />
+            <View style={{ flex: 1, marginLeft: spacing.sm }}>
               <Text style={styles.name}>{workerLabel(item)}</Text>
               <Text style={styles.meta}>
                 {wtype ? wtype.name : "No type"} · {rate ? `₹${rate.basic} / ${rate.rate_type === "daily" ? "day" : "month"}` : "no rate set"}
@@ -696,11 +699,11 @@ const styles = StyleSheet.create({
   periodArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   periodArrowText: { fontSize: 18, fontWeight: "700", color: colors.navy },
   periodLabel: { fontSize: 15, fontWeight: "700", color: colors.navy },
-  summaryCard: { backgroundColor: colors.navy, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
+  summaryCard: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
   summaryStatRow: { flexDirection: "row" },
   summaryStat: { flex: 1, alignItems: "center" },
   summaryStatValue: { color: colors.surface, fontSize: 24, fontWeight: "700" },
-  summaryStatLabel: { color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 4, textAlign: "center" },
+  summaryStatLabel: { color: colors.onPrimaryMuted, fontSize: 11, marginTop: 4, textAlign: "center" },
   chartCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
@@ -745,7 +748,7 @@ const styles = StyleSheet.create({
   recordButtonDisabled: { backgroundColor: colors.ground },
   recordButtonTextDisabled: { color: colors.textSecondary },
   bulkButton: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     paddingVertical: spacing.sm + 2,
     alignItems: "center",

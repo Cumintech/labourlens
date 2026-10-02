@@ -17,7 +17,7 @@ import {
   listWorkers,
 } from "../api/client";
 import { isoDate } from "../components/DateField";
-import { ExtendedFab, IconButton, LogoMark } from "../components/ui";
+import { IconButton, LogoMark } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { trialStatusText } from "../planStatus";
@@ -212,7 +212,13 @@ export default function HomeScreen({ navigation }: Props) {
         )}
 
         <View style={styles.quickActionsWrap}>
-          <Text style={[type.caption, styles.quickActionsLabel]}>Quick actions</Text>
+          <View style={styles.quickActionsHeaderRow}>
+            <Text style={[type.caption, styles.quickActionsLabel]}>Quick actions</Text>
+            <Pressable style={styles.addWorkerButton} onPress={() => navigation.navigate("NewWorkerScan")} accessibilityRole="button">
+              <UserPlus size={14} color={colors.primary} />
+              <Text style={styles.addWorkerButtonText}>Add worker</Text>
+            </Pressable>
+          </View>
           <View style={styles.quickActionsGrid}>
             <QuickAction icon={CreditCard} label="Record payment" onPress={() => goToTab("WagesTab")} />
             <QuickAction icon={FileText} label="Wage slips" onPress={() => goToTab("ReportsTab", { formCode: "wageslip", lockForm: true })} />
@@ -221,8 +227,6 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </View>
       </ScrollView>
-
-      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.xs} />
     </View>
   );
 }
@@ -250,7 +254,7 @@ function QuickAction({ icon: Icon, label, onPress }: { icon: typeof Users; label
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ground },
   header: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     padding: spacing.lg,
@@ -258,18 +262,18 @@ const styles = StyleSheet.create({
   },
   headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  brandText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.surface },
-  dateText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: spacing.md },
-  factoryName: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 26, color: colors.surface, marginTop: 2 },
+  brandText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
+  dateText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.onPrimaryMuted, marginTop: spacing.md },
+  factoryName: { fontFamily: "IBMPlexSans_700Bold", fontSize: 26, color: colors.surface, marginTop: 2 },
   trialPill: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: colors.heroDivider,
     borderRadius: 999,
     paddingHorizontal: spacing.sm + 4,
     paddingVertical: 6,
     marginTop: spacing.sm,
   },
-  trialPillText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 11, color: colors.surface },
+  trialPillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 11, color: colors.surface },
   attendanceCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
@@ -286,28 +290,40 @@ const styles = StyleSheet.create({
   barSegment: { height: 8 },
   statRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.md },
   statBlock: { flex: 1, alignItems: "center" },
-  statValue: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 20, fontVariant: ["tabular-nums"] },
-  statLabel: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 10, color: colors.textSecondary, marginTop: 2 },
+  statValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 20, fontVariant: ["tabular-nums"] },
+  statLabel: { fontFamily: "IBMPlexSans_500Medium", fontSize: 10, color: colors.textSecondary, marginTop: 2 },
   shiftRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.md, flexWrap: "wrap" },
   shiftTile: { flex: 1, minWidth: 80, backgroundColor: colors.ground, borderRadius: radius.sm, paddingVertical: spacing.sm, alignItems: "center" },
-  shiftTileLabel: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 11, color: colors.textSecondary },
-  shiftTileValue: { fontFamily: "PlusJakartaSans_800ExtraBold", fontSize: 15, color: colors.navy, marginTop: 2, fontVariant: ["tabular-nums"] },
+  shiftTileLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 11, color: colors.textSecondary },
+  shiftTileValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy, marginTop: 2, fontVariant: ["tabular-nums"] },
   markButton: { marginTop: spacing.md, backgroundColor: colors.primary, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
-  markButtonText: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.surface },
+  markButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
   attentionCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     padding: spacing.md,
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
   },
-  attentionCardTitle: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 14, color: colors.surface },
-  attentionCardSubtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 2 },
+  attentionCardTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.surface },
+  attentionCardSubtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.onPrimaryMuted, marginTop: 2 },
   quickActionsWrap: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
-  quickActionsLabel: { color: colors.textSecondary, marginBottom: spacing.sm },
+  quickActionsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
+  quickActionsLabel: { color: colors.textSecondary },
+  addWorkerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  addWorkerButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.primary },
   quickActionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   quickActionTile: {
     width: "47%",
@@ -326,5 +342,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: spacing.xs,
   },
-  quickActionLabel: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 13, color: colors.navy },
+  quickActionLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.navy },
 });

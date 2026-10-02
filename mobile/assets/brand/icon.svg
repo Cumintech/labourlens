@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- App icon source: navy full-bleed background with the brandTeal
-       mark (logo-mark.svg) centered and scaled down inside it. Needs
+  <!-- App icon source: primary-green (#17472E) full-bleed background with
+       the mark (logo-mark.svg) centered and scaled down inside it. Needs
        rasterizing to icon.png (1024x1024) - see mobile/assets/brand/README.md. -->
-  <rect x="0" y="0" width="1024" height="1024" fill="#1B2340"/>
+  <rect x="0" y="0" width="1024" height="1024" fill="#17472E"/>
   <g transform="translate(112,112) scale(0.78)">
-    <rect x="0" y="0" width="1024" height="1024" rx="307" ry="307" fill="#1F9D82"/>
+    <rect x="0" y="0" width="1024" height="1024" rx="307" ry="307" fill="#17472E"/>
     <g transform="translate(432,420)">
       <circle cx="0" cy="-70" r="72" fill="none" stroke="#FFFFFF" stroke-width="34"/>
       <path

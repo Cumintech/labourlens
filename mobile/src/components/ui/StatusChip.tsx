@@ -27,5 +27,5 @@ export default function StatusChip({ status, label }: { status: WorkerStatus; la
 
 const styles = StyleSheet.create({
   chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, alignSelf: "flex-start" },
-  text: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 12 },
+  text: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12 },
 });

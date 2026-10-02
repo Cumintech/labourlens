@@ -2,17 +2,17 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Search, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Attendance, LeaveEntry, Worker, listAttendance, listLeaveForDate, listWorkers, listWorkersMissingCompliance } from "../api/client";
 import { isoDate } from "../components/DateField";
 import { ListSkeleton } from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
-import { Chip, EmptyState, ExtendedFab, ListRow, StatusChip } from "../components/ui";
+import { Avatar, Chip, EmptyState, ListRow, StatusChip } from "../components/ui";
 import type { WorkerStatus } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { colors, spacing, type } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
@@ -125,7 +125,13 @@ export default function WorkersScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={type.display}>Workers</Text>
+        <View style={styles.titleRow}>
+          <Text style={type.display}>Workers</Text>
+          <Pressable style={styles.addButton} onPress={() => navigation.navigate("NewWorkerScan")} accessibilityRole="button">
+            <UserPlus size={16} color={colors.primary} />
+            <Text style={styles.addButtonText}>Add worker</Text>
+          </Pressable>
+        </View>
         <Text style={styles.subtitle}>{activeCount} active · {inactiveCount} inactive</Text>
         <View style={styles.searchRow}>
           <Search size={16} color={colors.textSecondary} />
@@ -161,6 +167,7 @@ export default function WorkersScreen({ navigation }: Props) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
           renderItem={({ item }) => (
             <ListRow
+              left={<Avatar workerId={item.id} name={item.name} />}
               title={item.name}
               subtitle={`#${item.numeric_employee_code ?? "no code yet"}${missingComplianceIds.has(item.id) ? " · Details missing" : ""}${item.status === "active" && !item.worker_type_id ? " · No wage rate" : ""}`}
               onPress={() => openWorker(item)}
@@ -170,8 +177,6 @@ export default function WorkersScreen({ navigation }: Props) {
           )}
         />
       )}
-
-      <ExtendedFab icon={UserPlus} label="Add worker" onPress={() => navigation.navigate("NewWorkerScan")} bottomOffset={insets.bottom + spacing.xs} />
     </View>
   );
 }
@@ -179,7 +184,19 @@ export default function WorkersScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ground },
   header: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  subtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2,
+  },
+  addButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primary },
+  subtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -189,6 +206,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 4,
     marginBottom: spacing.sm,
   },
-  searchInput: { flex: 1, fontFamily: "PlusJakartaSans_500Medium", fontSize: 14, color: colors.navy, paddingVertical: 10 },
+  searchInput: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 14, color: colors.navy, paddingVertical: 10 },
   chipsRow: { flexDirection: "row", gap: spacing.xs, flexWrap: "wrap" },
 });

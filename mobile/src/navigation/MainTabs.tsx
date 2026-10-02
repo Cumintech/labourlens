@@ -50,7 +50,7 @@ export default function MainTabs() {
           paddingBottom: insets.bottom + 8,
           paddingTop: 4,
         },
-        tabBarLabelStyle: { fontSize: 11, fontFamily: "PlusJakartaSans_700Bold" },
+        tabBarLabelStyle: { fontSize: 11, fontFamily: "IBMPlexSans_700Bold" },
       }}
     >
       <Tab.Screen

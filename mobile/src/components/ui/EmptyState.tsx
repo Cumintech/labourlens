@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: spacing.md,
   },
-  title: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.navy, textAlign: "center" },
-  subtitle: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: colors.textSecondary, textAlign: "center", marginTop: 4 },
+  title: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy, textAlign: "center" },
+  subtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.textSecondary, textAlign: "center", marginTop: 4 },
   cta: { marginTop: spacing.md, alignSelf: "stretch" },
 });

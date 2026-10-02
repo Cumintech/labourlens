@@ -26,6 +26,6 @@ export default function ErrorState({ message = "Couldn't load this. Check your c
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl },
-  message: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 14, color: colors.textSecondary, textAlign: "center", marginBottom: spacing.md },
+  message: { fontFamily: "IBMPlexSans_500Medium", fontSize: 14, color: colors.textSecondary, textAlign: "center", marginBottom: spacing.md },
   button: { paddingHorizontal: spacing.lg, minHeight: 40 },
 });

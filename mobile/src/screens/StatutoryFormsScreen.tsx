@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   buttonGhostText: { color: colors.primary, fontSize: 14, fontWeight: "700" },
 
   formCard: { marginTop: spacing.sm, padding: spacing.md },
-  formCardComingSoon: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 11, color: colors.warningTintText, marginTop: 2 },
+  formCardComingSoon: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.warningTintText, marginTop: 2 },
   lockedField: {
     flexDirection: "row",
     alignItems: "center",
@@ -408,5 +408,5 @@ const styles = StyleSheet.create({
     padding: 12,
     minHeight: 44,
   },
-  lockedFieldText: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 16, color: colors.navy },
+  lockedFieldText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 16, color: colors.navy },
 });

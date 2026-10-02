@@ -797,13 +797,13 @@ function Field({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-  header: { backgroundColor: colors.navy, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm + 4 },
+  header: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm + 4 },
   stepsRow: { flexDirection: "row", gap: spacing.sm },
   stepItem: { flex: 1 },
-  stepBar: { height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)" },
+  stepBar: { height: 4, borderRadius: 2, backgroundColor: colors.heroDivider },
   stepBarDone: { backgroundColor: colors.teal },
   stepBarCurrent: { backgroundColor: colors.white },
-  stepLabel: { fontSize: 11, fontWeight: "600", color: "rgba(255,255,255,0.5)", marginTop: 6 },
+  stepLabel: { fontSize: 11, fontWeight: "600", color: colors.onPrimaryMuted, marginTop: 6 },
   stepLabelDone: { color: colors.tealPale },
   stepLabelCurrent: { color: colors.white, fontWeight: "700" },
   body: { flex: 1 },

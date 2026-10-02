@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: spacing.lg,
     right: spacing.lg,
-    backgroundColor: colors.navy,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 4,
@@ -72,6 +72,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.sm,
   },
-  message: { flex: 1, fontFamily: "PlusJakartaSans_500Medium", fontSize: 13, color: colors.surface },
-  action: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 13, color: colors.primaryTint },
+  message: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.surface },
+  action: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primaryTint },
 });

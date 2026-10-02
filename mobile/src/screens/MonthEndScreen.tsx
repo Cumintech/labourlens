@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepIconWrapDone: { backgroundColor: colors.presentTint },
-  stepLabel: { fontFamily: "PlusJakartaSans_700Bold", fontSize: 15, color: colors.navy },
-  stepDetail: { fontFamily: "PlusJakartaSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  stepLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  stepDetail: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   stepButton: { marginTop: spacing.sm },
 });

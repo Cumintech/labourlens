@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
-import { Copy } from "lucide-react-native";
+import { Calendar, Check, ChevronLeft, ChevronRight, Copy, Search } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -36,6 +36,7 @@ import {
 } from "../api/client";
 import AttendanceRowCard from "../components/AttendanceRowCard";
 import DateField, { isoDate } from "../components/DateField";
+import YearMonthDayPicker from "../components/YearMonthDayPicker";
 import DayAttendanceRow from "../components/DayAttendanceRow";
 import ErrorState from "../components/ErrorState";
 import OtHoursModal from "../components/OtHoursModal";
@@ -86,19 +87,25 @@ export default function AttendanceScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <BlueHeader title="Attendance" subtitle={owner?.factory_name ?? undefined} />
-      <View style={styles.header}>
-        <View style={styles.modeWrap}>
-          <SegmentedControl<Mode>
-            options={[
-              { label: "Day", value: "day" },
-              { label: "Range", value: "range" },
-            ]}
-            value={mode}
-            onChange={setMode}
-          />
-        </View>
-      </View>
+      <BlueHeader
+        title="Attendance"
+        subtitle={owner?.factory_name ?? undefined}
+        right={
+          <View style={styles.modePill} accessibilityRole="tablist">
+            {(["day", "range"] as Mode[]).map((m) => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.modePillOption, mode === m && styles.modePillOptionActive]}
+                onPress={() => setMode(m)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: mode === m }}
+              >
+                <Text style={[styles.modePillText, mode === m && styles.modePillTextActive]}>{m === "day" ? "Day" : "Range"}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        }
+      />
       {mode === "day" ? <DayView navigation={navigation} /> : <RangeView />}
     </View>
   );
@@ -134,6 +141,7 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
   // row -- mounting a Modal inside every FlatList row was the likely
   // cause of the reported "Attendance page isn't scrollable" bug.
   const [otModalWorker, setOtModalWorker] = useState<Worker | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -482,89 +490,107 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
 
   return (
     <View style={styles.dayContainer}>
+      <View style={styles.weekBand}>
+        <View style={styles.monthRow}>
+          <TouchableOpacity style={styles.weekNavButton} onPress={() => setSelectedDate((d) => addDays(d, -7))} accessibilityLabel="Previous week">
+            <ChevronLeft size={18} color={colors.surface} />
+          </TouchableOpacity>
+          <View style={styles.monthCenter}>
+            <TouchableOpacity style={styles.monthLabelButton} onPress={() => setPickerOpen(true)} accessibilityLabel="Open date picker">
+              <Calendar size={18} color={colors.surface} />
+              <Text style={styles.monthLabel}>{formatMonthLabel(selectedDate)}</Text>
+            </TouchableOpacity>
+            {!isToday && (
+              <TouchableOpacity style={styles.todayPill} onPress={() => setSelectedDate(today)}>
+                <Text style={styles.todayPillText}>Today</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity
+            style={[styles.weekNavButton, isToday && styles.weekNavButtonDisabled]}
+            onPress={() => !isToday && setSelectedDate((d) => { const n = addDays(d, 7); return n > today ? today : n; })}
+            disabled={isToday}
+            accessibilityLabel="Next week"
+          >
+            <ChevronRight size={18} color={colors.surface} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.weekRow}>
+          {weekDates(selectedDate).map((d) => {
+            const selected = d === selectedDate;
+            const future = d > today;
+            return (
+              <TouchableOpacity
+                key={d}
+                style={[styles.dayCell, selected && styles.dayCellSelected]}
+                onPress={() => setSelectedDate(d)}
+                disabled={future}
+                accessibilityState={{ selected, disabled: future }}
+                accessibilityLabel={d}
+              >
+                <Text style={[styles.dayCellDow, selected && styles.dayCellDowSelected, future && styles.dayCellFuture]}>{weekdayShort(d)}</Text>
+                <Text style={[styles.dayCellNum, selected && styles.dayCellNumSelected, future && styles.dayCellFuture]}>{Number(d.slice(8, 10))}</Text>
+                <View style={[styles.dayCellDot, d === today && !selected && styles.dayCellDotToday, d === today && selected && styles.dayCellDotTodaySel]} />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+      <YearMonthDayPicker
+        visible={pickerOpen}
+        initialDate={new Date(selectedDate)}
+        onSelect={(d) => { setPickerOpen(false); setSelectedDate(isoDate(d)); }}
+        onClose={() => setPickerOpen(false)}
+      />
       <FlatList
         style={{ flex: 1 }}
         data={filtered}
         keyExtractor={(w) => String(w.id)}
-        contentContainerStyle={{ paddingBottom: spacing.xl * 3 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 96 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
         ListHeaderComponent={
-          <View>
-            <View style={styles.dateNavCard}>
-              <View style={styles.dateNavRow}>
-                <TouchableOpacity style={styles.dateNavButton} onPress={() => setSelectedDate((d) => addDays(d, -1))}>
-                  <Text style={styles.dateNavButtonText}>‹</Text>
-                </TouchableOpacity>
-                <View style={styles.dateNavField}>
-                  <DateField label="" value={selectedDate} onChange={setSelectedDate} />
+          <View style={styles.listHeader}>
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.summaryCaption}>
+                    {formatSummaryDate(selectedDate)} · {summary?.total_workers ?? 0} workers
+                  </Text>
+                  <Text style={styles.summaryTitle}>
+                    {morningMarkedCount} of {activeWorkers.length} marked
+                  </Text>
                 </View>
                 <TouchableOpacity
-                  style={[styles.dateNavButton, isToday && styles.dateNavButtonDisabled]}
-                  onPress={() => !isToday && setSelectedDate((d) => addDays(d, 1))}
-                  disabled={isToday}
+                  style={styles.copyButton}
+                  onPress={handleCopyYesterday}
+                  disabled={bulkBusy}
+                  accessibilityLabel="Copy yesterday's attendance"
                 >
-                  <Text style={styles.dateNavButtonText}>›</Text>
+                  {bulkBusy ? <ActivityIndicator color={colors.primary} size="small" /> : <Copy size={18} color={colors.primary} />}
                 </TouchableOpacity>
-                {!isToday && (
-                  <TouchableOpacity style={styles.todayLink} onPress={() => setSelectedDate(today)}>
-                    <Text style={styles.todayLinkText}>Today</Text>
-                  </TouchableOpacity>
-                )}
               </View>
-            </View>
-
-            <View style={styles.statBlock}>
-              <View style={styles.statBlockText}>
-                <View style={styles.statPrimaryRow}>
-                  <Text style={styles.statPrimaryItem}>
-                    {summary?.total_workers ?? 0}
-                    <Text style={styles.statPrimaryLabel}> Total</Text>
-                  </Text>
-                  <Text style={styles.statPrimaryItem}>
-                    {summary?.present_today ?? 0}
-                    <Text style={styles.statPrimaryLabel}> Present</Text>
-                  </Text>
-                </View>
-                <View style={styles.statSecondaryRow}>
-                  {(summary?.slots ?? []).map((s, i) => {
-                    const accent = SLOT_ACCENTS[i % SLOT_ACCENTS.length];
-                    return (
-                      <View key={s.slot} style={styles.statDot}>
-                        <View style={[styles.dot, { backgroundColor: accent.dot }]} />
-                        <Text style={styles.statSecondaryText}>
-                          {s.slot} {s.present}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                  <View style={styles.statDot}>
-                    <View style={[styles.dot, { backgroundColor: colors.warning }]} />
-                    <Text style={styles.statSecondaryText}>Leave {leave.length}</Text>
-                  </View>
-                </View>
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${activeWorkers.length ? Math.round((morningMarkedCount / activeWorkers.length) * 100) : 0}%` as `${number}%` },
+                  ]}
+                />
               </View>
-              <TouchableOpacity
-                style={styles.copyChip}
-                onPress={handleCopyYesterday}
-                disabled={bulkBusy}
-                accessibilityLabel="Copy yesterday's attendance"
-              >
-                {bulkBusy ? <ActivityIndicator color={colors.navy} size="small" /> : <Copy size={14} color={colors.navy} />}
-              </TouchableOpacity>
+              <View style={styles.tileRow}>
+                <StatTileBox value={summary?.present_today ?? 0} label="Present" fg={colors.present} bg={colors.presentTint} />
+                {(summary?.slots ?? []).map((s, i) => {
+                  const accent = TILE_ACCENTS[i % TILE_ACCENTS.length];
+                  return <StatTileBox key={s.slot} value={s.present} label={s.slot} fg={accent.fg} bg={accent.bg} />;
+                })}
+                <StatTileBox value={leave.length} label="Leave" fg={colors.leave} bg={colors.leaveTint} />
+              </View>
             </View>
 
             {isSunday && <Text style={styles.sundayNote}>Sunday defaults to Absent unless you mark a shift present.</Text>}
 
-            {missingComplianceCount > 0 && (
-              <TouchableOpacity style={styles.complianceBanner} onPress={handleMissingCompliancePress}>
-                <Text style={styles.complianceBannerText}>
-                  {missingComplianceCount} worker{missingComplianceCount === 1 ? "" : "s"}{" "}
-                  {missingComplianceCount === 1 ? "needs" : "need"} Form 12 details ›
-                </Text>
-              </TouchableOpacity>
-            )}
-
             <View style={styles.searchWrap}>
+              <Search size={18} color={colors.textSecondary} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search workers"
@@ -576,32 +602,22 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
             </View>
 
             {shifts.length > 1 && (
-              <View style={styles.shiftFilterRow}>
-                <Chip label="All shifts" selected={shiftFilter === "all"} onPress={() => setShiftFilter("all")} />
-                {shifts.map((s) => (
-                  <Chip key={s.slot_key} label={s.label} selected={shiftFilter === s.slot_key} onPress={() => setShiftFilter(s.slot_key)} />
-                ))}
-              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shiftFilterRow}>
+                {[{ key: "all", label: "All shifts" }, ...shifts.map((s) => ({ key: s.slot_key, label: s.label }))].map((c) => {
+                  const selected = shiftFilter === c.key;
+                  return (
+                    <TouchableOpacity
+                      key={c.key}
+                      style={[styles.filterChip, selected && styles.filterChipSelected]}
+                      onPress={() => setShiftFilter(c.key)}
+                      accessibilityState={{ selected }}
+                    >
+                      <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{c.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             )}
-
-            <View style={styles.statusTabRow}>
-              <TouchableOpacity
-                style={[styles.statusTab, statusTab === "active" && styles.statusTabActive]}
-                onPress={() => setStatusTab("active")}
-              >
-                <Text style={[styles.statusTabText, statusTab === "active" && styles.statusTabTextActive]}>
-                  Active · {activeWorkers.length}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.statusTab, statusTab === "deactivated" && styles.statusTabActiveMuted]}
-                onPress={() => setStatusTab("deactivated")}
-              >
-                <Text style={[styles.statusTabText, statusTab === "deactivated" && styles.statusTabTextActiveMuted]}>
-                  Deactivated · {deactivatedWorkers.length}
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
         }
         ListEmptyComponent={
@@ -634,14 +650,16 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
       />
 
       {statusTab === "active" && activeWorkers.length > 0 && (
-        <View style={[styles.stickyBar, { paddingBottom: spacing.sm + insets.bottom }]}>
-          <Text style={styles.stickyBarText}>
-            {morningMarkedCount} of {activeWorkers.length} marked · {morningPendingCount} pending
-          </Text>
-          <TouchableOpacity style={styles.stickyBarButton} onPress={handleBulkPresent} disabled={bulkBusy}>
-            {bulkBusy ? <ActivityIndicator color={colors.surface} size="small" /> : <Text style={styles.stickyBarButtonText}>Mark all</Text>}
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={[styles.markAllFab, bulkBusy && { opacity: 0.7 }]}
+          onPress={handleBulkPresent}
+          disabled={bulkBusy}
+          accessibilityRole="button"
+          accessibilityLabel={`Mark all present, ${morningPendingCount} pending`}
+        >
+          {bulkBusy ? <ActivityIndicator color={colors.surface} size="small" /> : <Check size={18} color={colors.surface} strokeWidth={2.6} />}
+          <Text style={styles.markAllFabText}>Mark all</Text>
+        </TouchableOpacity>
       )}
 
       <OtHoursModal
@@ -670,6 +688,52 @@ function datesBetween(from: string, to: string): string[] {
     guard += 1;
   }
   return dates;
+}
+
+const TILE_ACCENTS = [
+  { fg: colors.primary, bg: colors.primaryTint },
+  { fg: colors.evening, bg: colors.violetLight },
+  { fg: colors.skyBlue, bg: colors.skyBlueLight },
+  { fg: colors.coral, bg: colors.coralLight },
+];
+
+const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function localDate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// Mon..Sun of the week containing `iso` (display only).
+function weekDates(iso: string): string[] {
+  const offset = (localDate(iso).getDay() + 6) % 7;
+  const monday = addDays(iso, -offset);
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}
+
+function weekdayShort(iso: string): string {
+  return DOW_SHORT[localDate(iso).getDay()];
+}
+
+function formatMonthLabel(iso: string): string {
+  const d = localDate(iso);
+  return `${MONTH_LONG[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function formatSummaryDate(iso: string): string {
+  const d = localDate(iso);
+  return `${DOW_SHORT[d.getDay()]}, ${d.getDate()} ${MONTH_SHORT[d.getMonth()]}`;
+}
+
+function StatTileBox({ value, label, fg, bg }: { value: number; label: string; fg: string; bg: string }) {
+  return (
+    <View style={[styles.tile, { backgroundColor: bg }]}>
+      <Text style={[styles.tileValue, { color: fg }]}>{value}</Text>
+      <Text style={styles.tileLabel} numberOfLines={1}>{label}</Text>
+    </View>
+  );
 }
 
 function formatDateLabel(dateStr: string): string {
@@ -989,6 +1053,84 @@ function RangeView() {
 }
 
 const styles = StyleSheet.create({
+  modePill: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.16)", borderRadius: radius.pill, padding: 3 },
+  modePillOption: { minHeight: 36, paddingHorizontal: 16, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  modePillOptionActive: { backgroundColor: colors.surface },
+  modePillText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.surface },
+  modePillTextActive: { fontFamily: "IBMPlexSans_700Bold", color: colors.primary },
+  weekBand: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    gap: 10,
+  },
+  monthRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  monthCenter: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  monthLabelButton: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 44, paddingHorizontal: spacing.xs },
+  monthLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
+  todayPill: { backgroundColor: "rgba(255,255,255,0.18)", borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  todayPillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.surface },
+  weekNavButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)" },
+  weekNavButtonDisabled: { opacity: 0.35 },
+  weekRow: { flexDirection: "row", gap: 6 },
+  dayCell: { flex: 1, height: 62, borderRadius: 14, alignItems: "center", justifyContent: "center", gap: 2, backgroundColor: "rgba(255,255,255,0.10)" },
+  dayCellSelected: { backgroundColor: colors.surface, elevation: 4, shadowColor: colors.primaryDark, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  dayCellDow: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11, color: colors.onPrimaryMuted },
+  dayCellDowSelected: { color: colors.primary },
+  dayCellNum: { fontFamily: "IBMPlexSans_700Bold", fontSize: 17, color: colors.surface },
+  dayCellNumSelected: { color: colors.primaryDark },
+  dayCellFuture: { opacity: 0.5 },
+  dayCellDot: { width: 5, height: 5, borderRadius: 3 },
+  dayCellDotToday: { backgroundColor: colors.surface },
+  dayCellDotTodaySel: { backgroundColor: colors.primary },
+  listHeader: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: 12 },
+  summaryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 12,
+    elevation: 1,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  summaryTopRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  summaryCaption: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 12, color: colors.textSecondary, letterSpacing: 0.4, textTransform: "uppercase" },
+  summaryTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy, marginTop: 2 },
+  copyButton: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.ground, alignItems: "center", justifyContent: "center" },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.divider, overflow: "hidden" },
+  progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.present },
+  tileRow: { flexDirection: "row", gap: spacing.sm },
+  tile: { flex: 1, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: "center" },
+  tileValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 20, fontVariant: ["tabular-nums"] },
+  tileLabel: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11, color: colors.textSecondary },
+  filterChip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  filterChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterChipText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.navy },
+  filterChipTextSelected: { color: colors.surface },
+  markAllFab: {
+    position: "absolute",
+    right: spacing.md,
+    bottom: 12,
+    height: 48,
+    paddingHorizontal: 20,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    elevation: 6,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  markAllFabText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.surface },
   container: { flex: 1, backgroundColor: colors.ground },
   header: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
   subtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
@@ -1037,7 +1179,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sundayNote: { color: colors.textSecondary, fontSize: 11, marginTop: spacing.xs, textAlign: "center" },
+  sundayNote: { color: colors.textSecondary, fontSize: 12, textAlign: "center" },
   complianceBanner: {
     backgroundColor: colors.warningTint,
     borderColor: colors.warningBorder,
@@ -1048,16 +1190,19 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   complianceBannerText: { color: colors.navy, fontSize: 12, fontWeight: "700" },
-  searchWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  searchInput: {
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    height: 44,
     backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.sm - 2,
-    fontSize: 13,
-    color: colors.navy,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
   },
-  shiftFilterRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm },
+  searchInput: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 14, color: colors.navy, paddingVertical: 0 },
+  shiftFilterRow: { flexDirection: "row", gap: spacing.sm, paddingBottom: 2 },
   statusTabRow: { flexDirection: "row", gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm, marginBottom: spacing.xs },
   statusTab: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.sm, paddingVertical: spacing.sm - 2, alignItems: "center" },
   statusTabActive: { backgroundColor: colors.primary },

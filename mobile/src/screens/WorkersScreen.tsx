@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Search, UserPlus, Users } from "lucide-react-native";
+import { AlertTriangle, ChevronRight, Search, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
@@ -153,6 +153,32 @@ export default function WorkersScreen({ navigation }: Props) {
         </View>
       </View>
 
+      {missingComplianceIds.size > 0 && (() => {
+        // Moved here from the Attendance tab; same target screen as before.
+        const firstMissing = workers.find((w) => missingComplianceIds.has(w.id));
+        const n = missingComplianceIds.size;
+        return firstMissing ? (
+          <Pressable
+            style={styles.complianceBanner}
+            accessibilityRole="button"
+            onPress={() =>
+              navigation.navigate("WorkerEdit", {
+                workerId: firstMissing.id,
+                workerName: firstMissing.name,
+                workerStatus: firstMissing.status,
+                deactivatedAt: firstMissing.deactivated_at,
+              })
+            }
+          >
+            <AlertTriangle size={18} color={colors.warning} />
+            <Text style={styles.complianceBannerText}>
+              {n} worker{n === 1 ? "" : "s"} {n === 1 ? "needs" : "need"} Form 12 details
+            </Text>
+            <ChevronRight size={16} color={colors.warning} />
+          </Pressable>
+        ) : null;
+      })()}
+
       {filtered.length === 0 ? (
         <EmptyState
           icon={Users}
@@ -184,6 +210,21 @@ export default function WorkersScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  complianceBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 44,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    backgroundColor: colors.warningTint,
+  },
+  complianceBannerText: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.warningTintText },
   container: { flex: 1, backgroundColor: colors.ground },
   header: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
   titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

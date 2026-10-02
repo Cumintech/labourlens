@@ -6,7 +6,18 @@ import Svg, { Circle, Ellipse, G, Line, Path, Rect } from "react-native-svg";
 // SVG (no external image, no licensing question). Drawn to sit on the
 // brand-blue header, so it uses white/light-blue line work plus the
 // safety-yellow hard hat as the single warm accent.
-export default function WorkerHeroArt({ width = 128, height = 120 }: { width?: number; height?: number }) {
+export default function WorkerHeroArt({
+  width = 128,
+  height = 120,
+  hat = "yellow",
+}: {
+  width?: number;
+  height?: number;
+  hat?: "yellow" | "orange";
+}) {
+  const hatMain = hat === "orange" ? "#F57C00" : "#FFC107";
+  const hatBrim = hat === "orange" ? "#EF6C00" : "#FFB300";
+  const hatRidge = hat === "orange" ? "#FFB74D" : "#FFD54F";
   const line = "rgba(255,255,255,0.35)";
   return (
     <Svg width={width} height={height} viewBox="0 0 128 120" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -32,9 +43,9 @@ export default function WorkerHeroArt({ width = 128, height = 120 }: { width?: n
       <Rect x={77} y={70} width={10} height={12} rx={4} fill="#C68642" />
       <Circle cx={82} cy={60} r={13} fill="#D49A5B" />
       {/* Hard hat */}
-      <Path d="M67 55 C67 42 74 36 82 36 C90 36 97 42 97 55 Z" fill="#FFC107" />
-      <Rect x={64} y={53} width={36} height={5} rx={2.5} fill="#FFB300" />
-      <Rect x={80} y={37} width={4} height={16} rx={2} fill="#FFD54F" />
+      <Path d="M67 55 C67 42 74 36 82 36 C90 36 97 42 97 55 Z" fill={hatMain} />
+      <Rect x={64} y={53} width={36} height={5} rx={2.5} fill={hatBrim} />
+      <Rect x={80} y={37} width={4} height={16} rx={2} fill={hatRidge} />
       {/* Clipboard */}
       <Rect x={98} y={92} width={14} height={18} rx={2} fill="#FFFFFF" />
       <Rect x={102} y={90} width={6} height={4} rx={1} fill="#90CAF9" />

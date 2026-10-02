@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
-import { Camera, Images } from "lucide-react-native";
+import { Briefcase, Calendar as CalendarIcon, Camera, FileCheck2, Fingerprint, Hash, Images, Pencil, Phone, User, UserX } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, Alert, FlatList, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -39,7 +39,7 @@ import ErrorState from "../components/ErrorState";
 import OtHoursModal from "../components/OtHoursModal";
 import { ListSkeleton } from "../components/Skeleton";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
-import { SegmentedControl } from "../components/ui";
+import { Avatar, SegmentedControl } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
@@ -125,27 +125,55 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.headerCard}>
-        <Text style={type.title}>{workerName}</Text>
-        {!isActive && (
-          <Text style={styles.deactivatedText}>
-            Deactivated{deactivatedAt ? ` · ${deactivatedAt.slice(0, 10)}` : ""}
-          </Text>
-        )}
+        <View style={styles.avatarRing}>
+          <Avatar workerId={workerId} name={workerName} size={60} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.headerName} numberOfLines={1}>{workerName}</Text>
+          <View style={styles.headerChips}>
+            <View style={[styles.headerChip, isActive && styles.headerChipActive]}>
+              <Text style={[styles.headerChipText, isActive && styles.headerChipTextActive]}>
+                {isActive ? "Active" : `Deactivated${deactivatedAt ? ` · ${deactivatedAt.slice(0, 10)}` : ""}`}
+              </Text>
+            </View>
+          </View>
+        </View>
       </View>
 
-      {complianceLoaded && (
+      {complianceLoaded ? (
         <TouchableOpacity
           style={styles.complianceCard}
           onPress={() => navigation.navigate("WorkerEdit", { workerId, workerName, workerStatus, deactivatedAt })}
+          accessibilityRole="button"
         >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.complianceTitle}>Form 12 details</Text>
-            <Text style={styles.complianceSubtitle}>
-              {completeness.complete ? "All details on file" : `${completeness.filled} of ${completeness.total} details filled`}
-            </Text>
+          <View style={styles.complianceTopRow}>
+            <View style={[styles.complianceIcon, completeness.complete && { backgroundColor: colors.presentTint }]}>
+              <FileCheck2 size={20} color={completeness.complete ? colors.present : colors.leave} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.complianceTitle}>Form 12 details</Text>
+              <Text style={styles.complianceSubtitle}>
+                {completeness.complete ? "All details on file" : `${completeness.filled} of ${completeness.total} filled`}
+              </Text>
+            </View>
+            <View style={[styles.complianceAction, completeness.complete && styles.complianceActionDone]}>
+              <Text style={[styles.complianceLink, completeness.complete && { color: colors.primary }]}>
+                {completeness.complete ? "View" : "Complete"}
+              </Text>
+            </View>
           </View>
-          <Text style={styles.complianceLink}>{completeness.complete ? "View ›" : "Complete ›"}</Text>
+          <View style={styles.complianceTrack}>
+            <View
+              style={[
+                styles.complianceFill,
+                { width: `${Math.round((completeness.filled / completeness.total) * 100)}%` as `${number}%` },
+                completeness.complete && { backgroundColor: colors.present },
+              ]}
+            />
+          </View>
         </TouchableOpacity>
+      ) : (
+        <View style={styles.complianceSpacer} />
       )}
 
       <View style={styles.segmentWrap}>
@@ -154,7 +182,7 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
             { label: "Overview", value: "overview" },
             { label: "Attendance", value: "attendance" },
             { label: "Wages", value: "wages" },
-            { label: "Documents", value: "documents" },
+            { label: "Docs", value: "documents" },
           ]}
           value={tab}
           onChange={setTab}
@@ -242,35 +270,60 @@ function OverviewTab({
   return (
     <ScrollView style={styles.tabScroll} contentContainerStyle={[styles.tabContent, { paddingBottom: spacing.xl + insets.bottom }]}>
       <View style={styles.infoCard}>
-        <InfoRow label="Age" value={age !== null ? `${age} years` : "-"} />
-        <InfoRow label="Gender" value={worker.gender ?? "-"} />
-        <InfoRow label="Mobile" value={worker.mobile ?? "-"} />
-        <InfoRow label="Worker type" value={workerTypeName} warn={!worker.worker_type_id} />
-        <InfoRow label="Employee code" value={worker.numeric_employee_code ? `#${worker.numeric_employee_code}` : "Not assigned yet"} />
-        <InfoRow label="Device ID" value={worker.device_user_id ?? "Not mapped"} warn={!worker.device_user_id} />
+        <InfoRow icon={CalendarIcon} label="Age" value={age !== null ? `${age} years` : "-"} first />
+        <InfoRow icon={User} label="Gender" value={worker.gender ?? "-"} />
+        <InfoRow icon={Phone} label="Mobile" value={worker.mobile ?? "-"} />
+        <InfoRow icon={Briefcase} label="Worker type" value={workerTypeName} warn={!worker.worker_type_id} />
+        <InfoRow icon={Hash} label="Employee code" value={worker.numeric_employee_code ? `#${worker.numeric_employee_code}` : "Not assigned yet"} />
+        <InfoRow icon={Fingerprint} label="Device ID" value={worker.device_user_id ?? "Not mapped"} warn={!worker.device_user_id} />
       </View>
 
-      <TouchableOpacity
-        style={styles.editButton}
-        onPress={() => navigation.navigate("WorkerEdit", { workerId, workerName, workerStatus, deactivatedAt })}
-      >
-        <Text style={styles.editButtonText}>Edit Form 12 details &amp; payments</Text>
-      </TouchableOpacity>
-
-      {isActive && (
-        <TouchableOpacity style={styles.deactivateButton} onPress={handleDeactivate}>
-          <Text style={styles.deactivateButtonText}>Deactivate worker</Text>
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => navigation.navigate("WorkerEdit", { workerId, workerName, workerStatus, deactivatedAt })}
+          accessibilityLabel="Edit Form 12 details and payments"
+        >
+          <Pencil size={16} color={colors.primary} />
+          <Text style={styles.editButtonText}>Edit details</Text>
         </TouchableOpacity>
-      )}
+        {isActive && (
+          <TouchableOpacity style={styles.deactivateButton} onPress={handleDeactivate} accessibilityLabel="Deactivate worker">
+            <UserX size={16} color={colors.danger} />
+            <Text style={styles.deactivateButtonText}>Deactivate</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </ScrollView>
   );
 }
 
-function InfoRow({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+function InfoRow({
+  icon: Icon,
+  label,
+  value,
+  warn,
+  first,
+}: {
+  icon: typeof User;
+  label: string;
+  value: string;
+  warn?: boolean;
+  first?: boolean;
+}) {
   return (
-    <View style={styles.infoRow}>
+    <View style={[styles.infoRow, !first && styles.infoRowDivider]}>
+      <View style={styles.infoIcon}>
+        <Icon size={16} color={colors.primary} />
+      </View>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={[styles.infoValue, warn && styles.infoValueWarn]}>{value}</Text>
+      {warn ? (
+        <View style={styles.infoWarnPill}>
+          <Text style={styles.infoValueWarn} numberOfLines={1}>{value}</Text>
+        </View>
+      ) : (
+        <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>
+      )}
     </View>
   );
 }
@@ -878,36 +931,67 @@ function DocumentsTab({ workerId }: { workerId: number }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ground },
-  headerCard: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.sm },
-  deactivatedText: { ...type.small, color: colors.textSecondary, marginTop: 2 },
-  complianceCard: {
+  headerCard: {
+    backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
+    gap: 14,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: 44,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  avatarRing: { borderRadius: 34, borderWidth: 3, borderColor: "rgba(255,255,255,0.9)" },
+  headerName: { fontFamily: "IBMPlexSans_700Bold", fontSize: 24, color: colors.surface },
+  headerChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+  headerChip: { backgroundColor: "rgba(255,255,255,0.16)", borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
+  headerChipActive: { backgroundColor: colors.surface },
+  headerChipText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.surface },
+  headerChipTextActive: { color: colors.primaryDark },
+  complianceCard: {
     backgroundColor: colors.surface,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radius.md,
+    marginHorizontal: spacing.md,
+    marginTop: -28,
+    padding: 14,
+    gap: 10,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
+    elevation: 4,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
-  complianceTitle: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
-  complianceSubtitle: { ...type.small, color: colors.textSecondary, marginTop: 2 },
-  complianceLink: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.primary },
-  segmentWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.ground },
+  complianceSpacer: { height: 0 },
+  complianceTopRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  complianceIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.leaveTint, alignItems: "center", justifyContent: "center" },
+  complianceTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  complianceSubtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 1 },
+  complianceAction: { height: 40, paddingHorizontal: 14, borderRadius: 12, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  complianceActionDone: { backgroundColor: colors.primaryTint },
+  complianceLink: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.surface },
+  complianceTrack: { height: 6, borderRadius: 3, backgroundColor: colors.divider, overflow: "hidden" },
+  complianceFill: { height: 6, borderRadius: 3, backgroundColor: colors.leave },
+  segmentWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.xs, backgroundColor: colors.ground },
   tabScroll: { flex: 1, backgroundColor: colors.ground },
-  tabContent: { padding: spacing.lg },
+  tabContent: { padding: spacing.md },
 
   // Overview
-  infoCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
-  infoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
-  infoLabel: { ...type.small, color: colors.textSecondary },
-  infoValue: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.navy },
-  infoValueWarn: { fontSize: 11.5, fontFamily: "IBMPlexSans_700Bold", color: colors.warningTintText },
-  editButton: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingVertical: spacing.sm + 4, alignItems: "center", marginTop: spacing.md },
-  editButtonText: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.primary },
-  deactivateButton: { backgroundColor: colors.absentTint, borderRadius: radius.sm, paddingVertical: spacing.sm + 4, alignItems: "center", marginTop: spacing.sm },
-  deactivateButtonText: { ...type.small, fontFamily: "IBMPlexSans_700Bold", color: colors.absentTintText },
+  infoCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingHorizontal: 14 },
+  infoRowDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
+  infoIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: colors.primaryTint, alignItems: "center", justifyContent: "center" },
+  infoLabel: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 14, color: colors.textSecondary },
+  infoValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy, maxWidth: "55%" },
+  infoWarnPill: { backgroundColor: colors.leaveTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3, maxWidth: "55%" },
+  infoValueWarn: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.warningTintText },
+  actionRow: { flexDirection: "row", gap: 10, marginTop: spacing.md },
+  editButton: { flex: 1, flexDirection: "row", gap: 6, height: 48, borderWidth: 1.5, borderColor: colors.primary, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  editButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primary },
+  deactivateButton: { flex: 1, flexDirection: "row", gap: 6, height: 48, borderWidth: 1.5, borderColor: "#F5C2C2", borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  deactivateButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.danger },
 
   // Attendance
   monthRow: {

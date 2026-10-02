@@ -1,5 +1,6 @@
 import { useFocusEffect, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Briefcase, Check, ChevronLeft, ChevronRight } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,6 +32,7 @@ import {
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import DonutChart from "../components/DonutChart";
+import WagesHeroArt from "../components/WagesHeroArt";
 import ErrorState from "../components/ErrorState";
 import { ListSkeleton } from "../components/Skeleton";
 import { Avatar, BlueHeader, SegmentedControl } from "../components/ui";
@@ -67,20 +69,28 @@ function todayString() {
 export default function WagesScreen({ navigation }: Props) {
   const route = useRoute<{ key: string; name: string; params?: { segment?: Segment } }>();
   const [segment, setSegment] = useState<Segment>(route.params?.segment === "rates" ? "rates" : "payroll");
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.container}>
-      <BlueHeader title="Wages" />
-      <View style={styles.header}>
-        <View style={styles.segmentWrap}>
-          <SegmentedControl<Segment>
-            options={[
-              { label: "Payroll", value: "payroll" },
-              { label: "Rates", value: "rates" },
-            ]}
-            value={segment}
-            onChange={setSegment}
-          />
+      <View style={[styles.hero, { paddingTop: insets.top + spacing.md }]}>
+        <View style={styles.heroArt} pointerEvents="none">
+          <WagesHeroArt width={156} height={115} />
+        </View>
+        <Text style={styles.heroTitle} accessibilityRole="header">Wages</Text>
+        <Text style={styles.heroSubtitle}>Fair pay, on time</Text>
+        <View style={styles.heroPill} accessibilityRole="tablist">
+          {(["payroll", "rates"] as Segment[]).map((sg) => (
+            <TouchableOpacity
+              key={sg}
+              style={[styles.heroPillOption, segment === sg && styles.heroPillOptionActive]}
+              onPress={() => setSegment(sg)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: segment === sg }}
+            >
+              <Text style={[styles.heroPillText, segment === sg && styles.heroPillTextActive]}>{sg === "payroll" ? "Payroll" : "Rates"}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
       {segment === "payroll" ? <PayrollView /> : <RatesView navigation={navigation} />}
@@ -93,7 +103,7 @@ export default function WagesScreen({ navigation }: Props) {
 // minus its own "Wage Calculation" title (the shared header above
 // already reads "Wages").
 // ---------------------------------------------------------------------
-type Row = { workerId: number; workerName: string; amount: number; hasRate: boolean; paid?: boolean; present?: boolean };
+type Row = { workerId: number; workerName: string; name: string; code: string; amount: number; hasRate: boolean; paid?: boolean; present?: boolean };
 
 function PayrollView() {
   const { token } = useAuth();
@@ -119,6 +129,10 @@ function PayrollView() {
   const [savingBulkPayment, setSavingBulkPayment] = useState(false);
 
   const [detailTarget, setDetailTarget] = useState<WorkerWage | null>(null);
+  const [split, setSplit] = useState<"worker" | "type">("worker");
+  // Worker id -> worker type name, only for the "By type" chart split.
+  // Read-only lookup; a failure just leaves the type split as "No type set".
+  const [typeByWorker, setTypeByWorker] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -128,6 +142,19 @@ function PayrollView() {
       setDailySummary(await getDailyWageSummary(token, date));
     }
   }, [token, mode, month, year, date]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (token) {
+        Promise.all([listWorkers(token), listWorkerTypes(token)])
+          .then(([ws, types]) => {
+            const names = Object.fromEntries(types.map((t) => [t.id, t.name]));
+            setTypeByWorker(Object.fromEntries(ws.map((w) => [w.id, (w.worker_type_id && names[w.worker_type_id]) || ""])));
+          })
+          .catch(() => {});
+      }
+    }, [token]),
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -227,6 +254,8 @@ function PayrollView() {
         .map((w) => ({
           workerId: w.worker_id,
           workerName: `${w.worker_name} (${w.numeric_employee_code ? `#${w.numeric_employee_code}` : "no code yet"})`,
+          name: w.worker_name,
+          code: w.numeric_employee_code ? `#${w.numeric_employee_code}` : "no code yet",
           amount: w.net_wage,
           hasRate: true,
           paid: w.paid,
@@ -239,6 +268,8 @@ function PayrollView() {
         .map((w) => ({
           workerId: w.worker_id,
           workerName: `${w.worker_name} (${w.numeric_employee_code ? `#${w.numeric_employee_code}` : "no code yet"})`,
+          name: w.worker_name,
+          code: w.numeric_employee_code ? `#${w.numeric_employee_code}` : "no code yet",
           amount: w.daily_cost,
           hasRate: w.has_rate,
           present: w.present,
@@ -252,7 +283,29 @@ function PayrollView() {
   const totalLabourers = mode === "monthly" ? monthlySummary?.total_workers ?? 0 : dailySummary?.total_workers_present ?? 0;
   const totalAmount = mode === "monthly" ? monthlySummary?.total_net ?? 0 : dailySummary?.total_daily_cost ?? 0;
 
-  const slices = rows.map((r, i) => ({ value: r.amount, color: SLICE_COLORS[i % SLICE_COLORS.length] }));
+  // Chart split: per worker (top 5 + Others) or per worker type.
+  const chartItems = useMemo(() => {
+    const positive = rows.filter((r) => r.amount > 0);
+    let items: { label: string; value: number }[];
+    if (split === "type") {
+      const byType = new Map<string, number>();
+      for (const r of positive) {
+        const t = typeByWorker[r.workerId] || "No type set";
+        byType.set(t, (byType.get(t) ?? 0) + r.amount);
+      }
+      items = [...byType.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+    } else {
+      items = positive.map((r) => ({ label: r.name, value: r.amount }));
+    }
+    if (items.length > 6) {
+      const rest = items.slice(5).reduce((sum, i) => sum + i.value, 0);
+      items = [...items.slice(0, 5), { label: "Others", value: rest }];
+    }
+    return items.map((it, i) => ({ ...it, color: SLICE_COLORS[i % SLICE_COLORS.length] }));
+  }, [rows, split, typeByWorker]);
+  const chartTotal = chartItems.reduce((sum, i) => sum + i.value, 0);
+  const earningCount = rows.filter((r) => r.amount > 0).length;
+  const zeroCount = rows.length - earningCount;
   const unpaidCount = rows.filter((r) => r.hasRate && !r.paid).length;
 
   if (loading || !token) {
@@ -281,67 +334,104 @@ function PayrollView() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       ListHeaderComponent={
         <View>
-          <View style={styles.modeRow}>
-            <TouchableOpacity
-              style={[styles.modeButton, mode === "daily" && styles.modeButtonActive]}
-              onPress={() => setMode("daily")}
-            >
-              <Text style={[styles.modeText, mode === "daily" && styles.modeTextActive]}>Daily</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeButton, mode === "monthly" && styles.modeButtonActive]}
-              onPress={() => setMode("monthly")}
-            >
-              <Text style={[styles.modeText, mode === "monthly" && styles.modeTextActive]}>Monthly</Text>
-            </TouchableOpacity>
-          </View>
-
-          {mode === "monthly" ? (
-            <View style={styles.periodRow}>
-              <TouchableOpacity style={styles.periodArrow} onPress={() => changeMonth(-1)}>
-                <Text style={styles.periodArrowText}>‹</Text>
-              </TouchableOpacity>
-              <Text style={styles.periodLabel}>
-                {MONTH_NAMES[month - 1]} {year}
-              </Text>
-              <TouchableOpacity style={styles.periodArrow} onPress={() => changeMonth(1)}>
-                <Text style={styles.periodArrowText}>›</Text>
-              </TouchableOpacity>
+          <View style={styles.periodBar}>
+            <View style={styles.modeRow}>
+              {(["daily", "monthly"] as PayrollMode[]).map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.modeButton, mode === m && styles.modeButtonActive]}
+                  onPress={() => setMode(m)}
+                  accessibilityState={{ selected: mode === m }}
+                >
+                  <Text style={[styles.modeText, mode === m && styles.modeTextActive]}>{m === "daily" ? "Daily" : "Monthly"}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          ) : (
-            <View style={styles.periodRow}>
-              <View style={{ flex: 1 }}>
-                <DateField label="" value={date} onChange={setDate} />
+            {mode === "monthly" && (
+              <View style={styles.periodNav}>
+                <TouchableOpacity style={styles.periodArrow} onPress={() => changeMonth(-1)} accessibilityLabel="Previous month">
+                  <ChevronLeft size={16} color={colors.primary} />
+                </TouchableOpacity>
+                <Text style={styles.periodLabel}>
+                  {MONTH_NAMES[month - 1].slice(0, 3)} {year}
+                </Text>
+                <TouchableOpacity style={styles.periodArrow} onPress={() => changeMonth(1)} accessibilityLabel="Next month">
+                  <ChevronRight size={16} color={colors.primary} />
+                </TouchableOpacity>
               </View>
-            </View>
-          )}
+            )}
+          </View>
+          {mode === "daily" && <DateField label="" value={date} onChange={setDate} />}
 
           <View style={styles.summaryCard}>
-            <View style={styles.summaryStatRow}>
-              <View style={styles.summaryStat}>
-                <Text style={styles.summaryStatValue}>{totalLabourers}</Text>
-                <Text style={styles.summaryStatLabel}>Labourers Contributed</Text>
+            <View style={styles.summaryTopRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.summaryCaption}>
+                  {mode === "monthly" ? `Total net wage · ${MONTH_NAMES[month - 1]}` : "Total labour cost"}
+                </Text>
+                <Text style={styles.summaryAmount}>₹{formatINR(totalAmount)}</Text>
               </View>
-              <View style={styles.summaryStat}>
-                <Text style={styles.summaryStatValue}>₹{formatINR(totalAmount)}</Text>
-                <Text style={styles.summaryStatLabel}>{mode === "monthly" ? "Total Net Wage" : "Total Labour Cost"}</Text>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={styles.summaryCount}>{totalLabourers}</Text>
+                <Text style={styles.summaryCountLabel}>{mode === "monthly" ? "workers" : "present"}</Text>
               </View>
             </View>
+            {mode === "monthly" && unpaidCount > 0 && (
+              <TouchableOpacity
+                style={styles.bulkButton}
+                onPress={() => {
+                  setBulkPaymentDate(todayString());
+                  setBulkPaymentOpen(true);
+                }}
+              >
+                <Check size={18} color={colors.primaryDark} strokeWidth={2.6} />
+                <Text style={styles.bulkButtonText}>Record payment for all ({unpaidCount})</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {rows.length > 0 && (
+          {chartItems.length > 0 && (
             <View style={styles.chartCard}>
-              <DonutChart slices={slices} />
-              <View style={styles.legend}>
-                {rows.map((r, i) => (
-                  <View key={r.workerId} style={styles.legendRow}>
-                    <View style={[styles.legendDot, { backgroundColor: SLICE_COLORS[i % SLICE_COLORS.length] }]} />
-                    <Text style={styles.legendName} numberOfLines={1}>
-                      {r.workerName}
+              <View style={styles.chartHeader}>
+                <Text style={styles.chartTitle}>Wage split</Text>
+                <View style={styles.splitToggle} accessibilityRole="tablist">
+                  {(["worker", "type"] as const).map((k) => (
+                    <TouchableOpacity
+                      key={k}
+                      style={[styles.splitOption, split === k && styles.splitOptionActive]}
+                      onPress={() => setSplit(k)}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: split === k }}
+                    >
+                      <Text style={[styles.splitText, split === k && styles.splitTextActive]}>{k === "worker" ? "By worker" : "By type"}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View style={styles.chartBody}>
+                <View style={styles.donutWrap}>
+                  <DonutChart slices={chartItems.map((c) => ({ value: c.value, color: c.color }))} size={132} strokeWidth={20} />
+                  <View style={styles.donutCenter} pointerEvents="none">
+                    <Text style={styles.donutCenterValue}>
+                      {split === "worker" ? `${earningCount} of ${rows.length}` : chartItems.length}
                     </Text>
-                    <Text style={styles.legendPercent}>{totalAmount > 0 ? ((r.amount / totalAmount) * 100).toFixed(0) : 0}%</Text>
+                    <Text style={styles.donutCenterLabel}>{split === "worker" ? "earning" : chartItems.length === 1 ? "type" : "types"}</Text>
                   </View>
-                ))}
+                </View>
+                <View style={styles.legend}>
+                  {chartItems.map((c) => (
+                    <View key={c.label} style={styles.legendRow}>
+                      <View style={[styles.legendDot, { backgroundColor: c.color }]} />
+                      <Text style={styles.legendName} numberOfLines={1}>{c.label}</Text>
+                      <Text style={styles.legendPercent}>{chartTotal > 0 ? Math.round((c.value / chartTotal) * 100) : 0}%</Text>
+                    </View>
+                  ))}
+                  {split === "worker" && zeroCount > 0 && (
+                    <Text style={styles.legendNote}>
+                      {zeroCount} worker{zeroCount === 1 ? "" : "s"} at ₹0 {mode === "monthly" ? "this month" : "today"}
+                    </Text>
+                  )}
+                </View>
               </View>
             </View>
           )}
@@ -352,18 +442,6 @@ function PayrollView() {
             </Text>
           )}
 
-          {mode === "monthly" && unpaidCount > 0 && (
-            <TouchableOpacity
-              style={styles.bulkButton}
-              onPress={() => {
-                setBulkPaymentDate(todayString());
-                setBulkPaymentOpen(true);
-              }}
-            >
-              <Text style={styles.bulkButtonText}>Record Payment for All ({unpaidCount})</Text>
-            </TouchableOpacity>
-          )}
-
           <Text style={styles.sectionLabel}>{mode === "monthly" ? "Net wage by worker" : "Cost by worker"}</Text>
         </View>
       }
@@ -372,26 +450,31 @@ function PayrollView() {
           {mode === "monthly" ? "No workers with a wage rate and activity this month." : "No workers present on this date."}
         </Text>
       }
-      renderItem={({ item }) => (
-        <View style={styles.workerRow}>
-          <Avatar workerId={item.workerId} name={item.workerName} size={36} />
+      renderItem={({ item, index }) => (
+        <View style={[styles.workerRow, index === 0 && styles.workerRowFirst, index === rows.length - 1 && styles.workerRowLast, index > 0 && styles.workerRowDivider]}>
+          <Avatar workerId={item.workerId} name={item.name} size={40} />
           <TouchableOpacity
-            style={{ flex: 1, marginLeft: spacing.sm }}
+            style={{ flex: 1, minWidth: 0 }}
             onPress={() => (mode === "monthly" ? openDetail(item.workerId) : undefined)}
             disabled={mode !== "monthly"}
           >
-            <Text style={styles.workerName}>{item.workerName}</Text>
-            <Text style={styles.workerAmount}>₹{formatINR(item.amount)}</Text>
-            {mode === "monthly" && <Text style={styles.workerDetailLink}>View calculation →</Text>}
+            <View style={styles.workerTopLine}>
+              <Text style={styles.workerName} numberOfLines={1}>
+                {item.name} <Text style={styles.workerCode}>{item.code}</Text>
+              </Text>
+              <Text style={styles.workerAmount}>₹{formatINR(item.amount)}</Text>
+            </View>
+            {mode === "monthly" && <Text style={styles.workerDetailLink}>View calculation ›</Text>}
           </TouchableOpacity>
           {mode === "monthly" && (
             <TouchableOpacity
               style={[styles.recordButton, item.paid && styles.recordButtonDisabled]}
               onPress={() => openPaymentModal(item.workerId, item.workerName)}
               disabled={item.paid}
+              accessibilityLabel={item.paid ? "Paid" : `Record payment for ${item.name}`}
             >
               <Text style={[styles.recordButtonText, item.paid && styles.recordButtonTextDisabled]}>
-                {item.paid ? "Paid" : "Record Payment"}
+                {item.paid ? "Paid" : "Pay"}
               </Text>
             </TouchableOpacity>
           )}
@@ -630,27 +713,29 @@ function RatesView({ navigation }: { navigation: NativeStackNavigationProp<RootS
       keyExtractor={(w) => String(w.id)}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       ListHeaderComponent={
-        <>
-          <View style={styles.headerRow}>
-            <TouchableOpacity style={styles.typesLink} onPress={() => navigation.navigate("WorkerTypes")}>
-              <Text style={styles.typesLinkText}>Worker Types →</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.infoNote}>
-            <Text style={styles.infoNoteText}>
-              If a worker's device ID isn't mapped yet, their attendance won't be clocked automatically from the fingerprint
-              machine — map them from the Biometric Mapping screen.
-            </Text>
-          </View>
-        </>
+        <View style={{ gap: 12, marginBottom: 12 }}>
+          <TouchableOpacity style={styles.typesCard} onPress={() => navigation.navigate("WorkerTypes")} accessibilityRole="button">
+            <View style={styles.typesIcon}>
+              <Briefcase size={18} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.typesTitle}>Worker types &amp; default rates</Text>
+              <Text style={styles.typesSub} numberOfLines={1}>
+                {workerTypes.length ? workerTypes.map((t) => t.name).join(", ") : "Set up types like Carpenter, Helper"}
+              </Text>
+            </View>
+            <ChevronRight size={16} color={colors.disabled} />
+          </TouchableOpacity>
+          <Text style={styles.sectionLabel}>Rate by worker</Text>
+        </View>
       }
       ListEmptyComponent={<Text style={styles.empty}>No active workers yet.</Text>}
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         const wtype = workerTypes.find((t) => t.id === item.worker_type_id);
         const rate = rates[item.id];
         return (
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, index === 0 && styles.workerRowFirst, index === workers.length - 1 && styles.workerRowLast, index > 0 && styles.workerRowDivider]}
             onPress={() =>
               navigation.navigate("WorkerProfile", {
                 workerId: item.id,
@@ -661,15 +746,24 @@ function RatesView({ navigation }: { navigation: NativeStackNavigationProp<RootS
               })
             }
           >
-            <Avatar workerId={item.id} name={item.name} size={36} />
-            <View style={{ flex: 1, marginLeft: spacing.sm }}>
-              <Text style={styles.name}>{workerLabel(item)}</Text>
-              <Text style={styles.meta}>
-                {wtype ? wtype.name : "No type"} · {rate ? `₹${rate.basic} / ${rate.rate_type === "daily" ? "day" : "month"}` : "no rate set"}
+            <Avatar workerId={item.id} name={item.name} size={40} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.name} numberOfLines={1}>
+                {item.name} <Text style={styles.workerCode}>{item.numeric_employee_code ? `#${item.numeric_employee_code}` : "no code yet"}</Text>
               </Text>
+              {wtype ? (
+                <Text style={styles.meta}>{wtype.name}</Text>
+              ) : (
+                <View style={styles.noTypePill}>
+                  <Text style={styles.noTypePillText}>No type set</Text>
+                </View>
+              )}
             </View>
-            <View style={[styles.dot, item.device_user_id ? styles.dotGreen : styles.dotAmber]} />
-            <Text style={styles.arrow}>›</Text>
+            <Text style={rate ? styles.rateValue : styles.rateMissing}>
+              {rate ? `₹${formatINR(Number(rate.basic))}` : "No rate"}
+              {rate ? <Text style={styles.rateUnit}> /{rate.rate_type === "daily" ? "day" : "month"}</Text> : null}
+            </Text>
+            <ChevronRight size={16} color={colors.disabled} />
           </TouchableOpacity>
         );
       }}
@@ -679,57 +773,64 @@ function RatesView({ navigation }: { navigation: NativeStackNavigationProp<RootS
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ground },
-  header: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  segmentWrap: { marginTop: spacing.md },
+  hero: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, overflow: "hidden", minHeight: 150 },
+  heroArt: { position: "absolute", right: 4, bottom: 0 },
+  heroTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 26, color: colors.surface },
+  heroSubtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.onPrimaryMuted, marginTop: 2, marginBottom: spacing.sm + 4 },
+  heroPill: { flexDirection: "row", alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.16)", borderRadius: radius.pill, padding: 3 },
+  heroPillOption: { minHeight: 36, paddingHorizontal: 18, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  heroPillOptionActive: { backgroundColor: colors.surface },
+  heroPillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.surface },
+  heroPillTextActive: { color: colors.primary },
   viewContainer: { flex: 1, backgroundColor: colors.ground },
 
   // Payroll
-  modeRow: { flexDirection: "row", backgroundColor: colors.ground, borderRadius: radius.sm, padding: 4, marginBottom: spacing.md },
-  modeButton: { flex: 1, paddingVertical: spacing.sm + 2, alignItems: "center", borderRadius: radius.sm - 2 },
+  periodBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, marginBottom: 12 },
+  modeRow: { flexDirection: "row", backgroundColor: colors.primaryTint, borderRadius: 10, padding: 3 },
+  modeButton: { height: 36, paddingHorizontal: 12, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   modeButtonActive: { backgroundColor: colors.primary },
-  modeText: { fontSize: 14, fontWeight: "700", color: colors.textSecondary },
+  modeText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.textSecondary },
   modeTextActive: { color: colors.surface },
-  periodRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  periodArrow: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
-  periodArrowText: { fontSize: 18, fontWeight: "700", color: colors.navy },
-  periodLabel: { fontSize: 15, fontWeight: "700", color: colors.navy },
-  summaryCard: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
-  summaryStatRow: { flexDirection: "row" },
-  summaryStat: { flex: 1, alignItems: "center" },
-  summaryStatValue: { color: colors.surface, fontSize: 24, fontWeight: "700" },
-  summaryStatLabel: { color: colors.onPrimaryMuted, fontSize: 11, marginTop: 4, textAlign: "center" },
-  chartCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    alignItems: "center",
-    marginBottom: spacing.md,
-  },
-  legend: { width: "100%", marginTop: spacing.md },
-  legendRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: spacing.xs },
-  legendName: { flex: 1, fontSize: 12, color: colors.navy, fontWeight: "600" },
-  legendPercent: { fontSize: 12, color: colors.textSecondary, fontWeight: "700" },
-  noRateNote: { fontSize: 11, color: colors.textSecondary, marginBottom: spacing.sm, fontStyle: "italic" },
-  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginTop: spacing.sm, marginBottom: spacing.xs },
+  periodNav: { flexDirection: "row", alignItems: "center", gap: 4 },
+  periodArrow: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  periodLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy, minWidth: 72, textAlign: "center" },
+  summaryCard: { backgroundColor: colors.primary, borderRadius: 18, padding: spacing.md, gap: 14, marginBottom: 12, elevation: 4, shadowColor: colors.primaryDark, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } },
+  summaryTopRow: { flexDirection: "row", alignItems: "flex-end" },
+  summaryCaption: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 12, letterSpacing: 0.4, textTransform: "uppercase", color: colors.onPrimaryMuted },
+  summaryAmount: { fontFamily: "IBMPlexSans_700Bold", fontSize: 32, color: colors.surface, fontVariant: ["tabular-nums"] },
+  summaryCount: { fontFamily: "IBMPlexSans_700Bold", fontSize: 20, color: colors.surface },
+  summaryCountLabel: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 12, color: colors.onPrimaryMuted },
+  chartCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 12, marginBottom: 12 },
+  chartHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  chartTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  splitToggle: { flexDirection: "row", backgroundColor: colors.primaryTint, borderRadius: 10, padding: 3 },
+  splitOption: { height: 34, paddingHorizontal: 12, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  splitOptionActive: { backgroundColor: colors.surface },
+  splitText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.textSecondary },
+  splitTextActive: { color: colors.primary },
+  chartBody: { flexDirection: "row", alignItems: "center", gap: 14 },
+  donutWrap: { width: 132, height: 132, alignItems: "center", justifyContent: "center" },
+  donutCenter: { position: "absolute", alignItems: "center" },
+  donutCenterValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 17, color: colors.navy },
+  donutCenterLabel: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11, color: colors.textSecondary },
+  legend: { flex: 1, minWidth: 0, gap: 8 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendName: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.navy },
+  legendPercent: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.textSecondary },
+  legendNote: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.disabled, marginTop: 2 },
+  noRateNote: { fontSize: 12, color: colors.textSecondary, marginBottom: 12 },
+  sectionLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, letterSpacing: 0.6, textTransform: "uppercase", color: colors.textSecondary, marginBottom: spacing.sm },
   empty: { textAlign: "center", color: colors.textSecondary, marginTop: 40 },
-  workerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    padding: spacing.sm + 4,
-    marginBottom: spacing.xs,
-  },
-  workerName: { fontSize: 14, fontWeight: "700", color: colors.navy },
-  workerAmount: { fontSize: 16, fontWeight: "700", color: colors.primary, marginTop: 2 },
-  workerDetailLink: { fontSize: 11, color: colors.skyBlue, fontWeight: "700", marginTop: 4 },
+  workerRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: colors.surface, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
+  workerRowFirst: { borderTopWidth: 1, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+  workerRowLast: { borderBottomWidth: 1, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
+  workerRowDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
+  workerTopLine: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: spacing.sm },
+  workerName: { flex: 1, fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
+  workerCode: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary },
+  workerAmount: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy, fontVariant: ["tabular-nums"] },
+  workerDetailLink: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 12, color: colors.primary, marginTop: 4 },
   daysRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
   dayStat: { flex: 1, borderRadius: radius.sm, paddingVertical: spacing.sm, alignItems: "center" },
   dayStatValue: { fontSize: 20, fontWeight: "700" },
@@ -743,18 +844,12 @@ const styles = StyleSheet.create({
   detailRowTotal: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
   detailLabelBold: { fontSize: 14, color: colors.navy, fontWeight: "700" },
   detailValueBold: { fontSize: 14, color: colors.navy, fontWeight: "700" },
-  recordButton: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.sm },
-  recordButtonText: { color: colors.surface, fontSize: 12, fontWeight: "700" },
-  recordButtonDisabled: { backgroundColor: colors.ground },
-  recordButtonTextDisabled: { color: colors.textSecondary },
-  bulkButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm + 2,
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  bulkButtonText: { color: colors.surface, fontSize: 13, fontWeight: "700" },
+  recordButton: { minWidth: 60, height: 40, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  recordButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.surface },
+  recordButtonDisabled: { backgroundColor: colors.presentTint },
+  recordButtonTextDisabled: { color: colors.present },
+  bulkButton: { height: 46, borderRadius: 12, backgroundColor: colors.surface, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  bulkButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.primaryDark },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", alignItems: "center", justifyContent: "center" },
   modalCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, width: "85%" },
   modalTitle: { fontSize: 17, fontWeight: "700", color: colors.navy },
@@ -769,23 +864,16 @@ const styles = StyleSheet.create({
 
   // Rates
   content: { padding: spacing.md, paddingBottom: spacing.xl },
-  headerRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", marginBottom: spacing.sm },
-  typesLink: { paddingVertical: spacing.xs },
-  typesLinkText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
-  infoNote: { backgroundColor: colors.primaryTint, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.md },
-  infoNoteText: { color: colors.primaryPressed, fontSize: 12, lineHeight: 17 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    padding: spacing.sm + 4,
-    marginBottom: spacing.xs,
-  },
-  name: { fontSize: 15, fontWeight: "700", color: colors.navy },
-  meta: { fontSize: 11.5, color: colors.textSecondary, marginTop: 2 },
-  dot: { width: 8, height: 8, borderRadius: 4, marginRight: spacing.sm },
-  dotGreen: { backgroundColor: colors.present },
-  dotAmber: { backgroundColor: colors.warning },
-  arrow: { fontSize: 22, color: colors.textSecondary },
+  typesCard: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 60, backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 12 },
+  typesIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primaryTint, alignItems: "center", justifyContent: "center" },
+  typesTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
+  typesSub: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 1 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: colors.surface, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
+  name: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
+  meta: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  noTypePill: { alignSelf: "flex-start", backgroundColor: colors.leaveTint, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2, marginTop: 3 },
+  noTypePillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 11, color: colors.warningTintText },
+  rateValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  rateUnit: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11, color: colors.textSecondary },
+  rateMissing: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.warningTintText },
 });

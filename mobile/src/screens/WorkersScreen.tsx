@@ -2,12 +2,13 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { AlertTriangle, ChevronRight, Search, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Attendance, LeaveEntry, Worker, listAttendance, listLeaveForDate, listWorkers, listWorkersMissingCompliance } from "../api/client";
 import { isoDate } from "../components/DateField";
 import { ListSkeleton } from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
+import WorkerHeroArt from "../components/WorkerHeroArt";
 import { Avatar, BlueHeader, Chip, EmptyState, ListRow, StatusChip } from "../components/ui";
 import type { WorkerStatus } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
@@ -124,87 +125,133 @@ export default function WorkersScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <BlueHeader
-        title="Workers"
-        right={
-          <Pressable style={styles.addButton} onPress={() => navigation.navigate("NewWorkerScan")} accessibilityRole="button">
-            <UserPlus size={16} color={colors.primary} />
-            <Text style={styles.addButtonText}>Add worker</Text>
-          </Pressable>
-        }
-      />
-      <View style={styles.header}>
-        <Text style={styles.subtitle}>{activeCount} active · {inactiveCount} inactive</Text>
+      <View style={[styles.hero, { paddingTop: insets.top + spacing.md }]}>
+        <View style={styles.heroArt} pointerEvents="none">
+          <WorkerHeroArt width={124} height={116} hat="orange" />
+        </View>
+        <Text style={styles.heroTitle} accessibilityRole="header">Workers</Text>
+        <Text style={styles.heroSubtitle}>{activeCount} active · {inactiveCount} inactive</Text>
+        <Text style={styles.heroTagline}>Every worker. Every record. Every compliance detail. One place.</Text>
+      </View>
+
+      <View style={styles.searchWrap}>
         <View style={styles.searchRow}>
-          <Search size={16} color={colors.textSecondary} />
+          <Search size={18} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search name, code, or mobile"
+            placeholder="Search name, code or mobile"
             placeholderTextColor={colors.textSecondary}
           />
         </View>
-        <View style={styles.chipsRow}>
-          <Chip label="All" selected={filter === "all"} onPress={() => setFilter("all")} count={workers.length} />
-          <Chip label="Details missing" selected={filter === "missing"} onPress={() => setFilter("missing")} count={missingCount} />
-          <Chip label="No wage rate" selected={filter === "no_wage"} onPress={() => setFilter("no_wage")} count={noWageCount} />
-          <Chip label="Inactive" selected={filter === "inactive"} onPress={() => setFilter("inactive")} count={inactiveCount} />
-        </View>
       </View>
 
-      {missingComplianceIds.size > 0 && (() => {
-        // Moved here from the Attendance tab; same target screen as before.
-        const firstMissing = workers.find((w) => missingComplianceIds.has(w.id));
-        const n = missingComplianceIds.size;
-        return firstMissing ? (
-          <Pressable
-            style={styles.complianceBanner}
-            accessibilityRole="button"
-            onPress={() =>
-              navigation.navigate("WorkerEdit", {
-                workerId: firstMissing.id,
-                workerName: firstMissing.name,
-                workerStatus: firstMissing.status,
-                deactivatedAt: firstMissing.deactivated_at,
-              })
-            }
-          >
-            <AlertTriangle size={18} color={colors.warning} />
-            <Text style={styles.complianceBannerText}>
-              {n} worker{n === 1 ? "" : "s"} {n === 1 ? "needs" : "need"} Form 12 details
-            </Text>
-            <ChevronRight size={16} color={colors.warning} />
-          </Pressable>
-        ) : null;
-      })()}
+      <FlatList
+        data={filtered}
+        keyExtractor={(w) => String(w.id)}
+        contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: 96 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+        ListHeaderComponent={
+          <View style={styles.listHeader}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+              {([
+                ["all", "All", workers.length],
+                ["missing", "Details missing", missingCount],
+                ["no_wage", "No wage rate", noWageCount],
+                ["inactive", "Inactive", inactiveCount],
+              ] as [Filter, string, number][]).map(([key, label, count]) => {
+                const selected = filter === key;
+                return (
+                  <Pressable
+                    key={key}
+                    style={[styles.filterChip, selected && styles.filterChipSelected]}
+                    onPress={() => setFilter(key)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                  >
+                    <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{label}</Text>
+                    <View style={[styles.countBadge, selected && styles.countBadgeSelected]}>
+                      <Text style={[styles.countBadgeText, selected && styles.countBadgeTextSelected]}>{count}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
 
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title={workers.length === 0 ? "No workers yet" : "No workers match this filter"}
-          subtitle={workers.length === 0 ? "Add your first worker to get started." : undefined}
-          ctaLabel={workers.length === 0 ? "Add worker" : undefined}
-          onPressCta={workers.length === 0 ? () => navigation.navigate("NewWorkerScan") : undefined}
-        />
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(w) => String(w.id)}
-          contentContainerStyle={{ padding: spacing.lg, paddingBottom: 120 + insets.bottom }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
-          renderItem={({ item }) => (
-            <ListRow
-              left={<Avatar workerId={item.id} name={item.name} />}
-              title={item.name}
-              subtitle={`#${item.numeric_employee_code ?? "no code yet"}${missingComplianceIds.has(item.id) ? " · Details missing" : ""}${item.status === "active" && !item.worker_type_id ? " · No wage rate" : ""}`}
+            {missingComplianceIds.size > 0 && (() => {
+              // Moved here from the Attendance tab; same target screen as before.
+              const firstMissing = workers.find((w) => missingComplianceIds.has(w.id));
+              const n = missingComplianceIds.size;
+              return firstMissing ? (
+                <Pressable
+                  style={styles.complianceBanner}
+                  accessibilityRole="button"
+                  onPress={() =>
+                    navigation.navigate("WorkerEdit", {
+                      workerId: firstMissing.id,
+                      workerName: firstMissing.name,
+                      workerStatus: firstMissing.status,
+                      deactivatedAt: firstMissing.deactivated_at,
+                    })
+                  }
+                >
+                  <AlertTriangle size={18} color={colors.warning} />
+                  <Text style={styles.complianceBannerText}>
+                    {n} worker{n === 1 ? "" : "s"} {n === 1 ? "needs" : "need"} Form 12 details
+                  </Text>
+                  <ChevronRight size={16} color={colors.warning} />
+                </Pressable>
+              ) : null;
+            })()}
+          </View>
+        }
+        ListEmptyComponent={
+          <EmptyState
+            icon={Users}
+            title={workers.length === 0 ? "No workers yet" : "No workers match this filter"}
+            subtitle={workers.length === 0 ? "Add your first worker to get started." : undefined}
+            ctaLabel={workers.length === 0 ? "Add worker" : undefined}
+            onPressCta={workers.length === 0 ? () => navigation.navigate("NewWorkerScan") : undefined}
+          />
+        }
+        renderItem={({ item, index }) => {
+          const first = index === 0;
+          const last = index === filtered.length - 1;
+          const flags = [
+            missingComplianceIds.has(item.id) ? "Details missing" : null,
+            item.status === "active" && !item.worker_type_id ? "No wage rate" : null,
+          ].filter(Boolean);
+          return (
+            <Pressable
+              style={[styles.row, first && styles.rowFirst, last && styles.rowLast, !first && styles.rowDivider]}
               onPress={() => openWorker(item)}
-              right={<StatusChip status={statusFor(item)} />}
-              showChevron={false}
-            />
-          )}
-        />
-      )}
+              accessibilityRole="button"
+            >
+              <Avatar workerId={item.id} name={item.name} size={40} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.rowSub} numberOfLines={1}>
+                  #{item.numeric_employee_code ?? "no code yet"}
+                  {flags.length ? ` · ${flags.join(" · ")}` : ""}
+                </Text>
+              </View>
+              <StatusChip status={statusFor(item)} />
+              <ChevronRight size={16} color={colors.disabled} />
+            </Pressable>
+          );
+        }}
+      />
+
+      <Pressable
+        style={styles.addFab}
+        onPress={() => navigation.navigate("NewWorkerScan")}
+        accessibilityRole="button"
+        accessibilityLabel="Add worker"
+      >
+        <UserPlus size={20} color={colors.surface} />
+        <Text style={styles.addFabText}>Add worker</Text>
+      </Pressable>
     </View>
   );
 }
@@ -215,8 +262,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     minHeight: 44,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 14,
@@ -226,28 +271,78 @@ const styles = StyleSheet.create({
   },
   complianceBannerText: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.warningTintText },
   container: { flex: 1, backgroundColor: colors.ground },
-  header: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: colors.surface,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm + 6,
-    paddingVertical: spacing.xs + 2,
+  hero: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 40,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: "hidden",
   },
-  addButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primary },
-  subtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
+  heroArt: { position: "absolute", right: spacing.sm, bottom: 0 },
+  heroTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 26, color: colors.surface },
+  heroSubtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.onPrimaryMuted, marginTop: 2 },
+  heroTagline: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 12, lineHeight: 17, color: "#FFE0B2", marginTop: spacing.sm, maxWidth: 210 },
+  searchWrap: { paddingHorizontal: spacing.md, marginTop: -24 },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.xs,
-    backgroundColor: colors.ground,
-    borderRadius: 10,
-    paddingHorizontal: spacing.sm + 4,
-    marginBottom: spacing.sm,
+    gap: 10,
+    height: 48,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    elevation: 4,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
-  searchInput: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 14, color: colors.navy, paddingVertical: 10 },
-  chipsRow: { flexDirection: "row", gap: spacing.xs, flexWrap: "wrap" },
+  searchInput: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 14, color: colors.navy, paddingVertical: 0 },
+  listHeader: { paddingTop: 14, paddingBottom: 12, gap: 12 },
+  chipsRow: { flexDirection: "row", gap: spacing.sm },
+  filterChip: { flexDirection: "row", alignItems: "center", gap: 6, height: 36, paddingLeft: 14, paddingRight: 6, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  filterChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterChipText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.navy },
+  filterChipTextSelected: { color: colors.surface },
+  countBadge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryTint },
+  countBadgeSelected: { backgroundColor: "rgba(255,255,255,0.22)" },
+  countBadgeText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 11, color: colors.primary },
+  countBadgeTextSelected: { color: colors.surface },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 64,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: colors.border,
+  },
+  rowFirst: { borderTopWidth: 1, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+  rowLast: { borderBottomWidth: 1, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
+  rowDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
+  rowText: { flex: 1, minWidth: 0 },
+  rowName: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  rowSub: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 1 },
+  addFab: {
+    position: "absolute",
+    right: spacing.md,
+    bottom: 12,
+    height: 52,
+    paddingHorizontal: 20,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    elevation: 6,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  addFabText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
 });

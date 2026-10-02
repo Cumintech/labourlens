@@ -33,7 +33,7 @@ import DateField, { isoDate } from "../components/DateField";
 import DonutChart from "../components/DonutChart";
 import ErrorState from "../components/ErrorState";
 import { ListSkeleton } from "../components/Skeleton";
-import { Avatar, SegmentedControl } from "../components/ui";
+import { Avatar, BlueHeader, SegmentedControl } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { formatINR } from "../format";
@@ -46,7 +46,7 @@ type PayrollMode = "daily" | "monthly";
 
 const SLICE_COLORS = [
   colors.primary, colors.skyBlue, colors.violet, colors.warning,
-  colors.coral, colors.danger, colors.primaryPressed, "#2B4C7E",
+  colors.coral, colors.danger, "#00897B", "#546E7A",
 ];
 
 const MONTH_NAMES = [
@@ -70,8 +70,8 @@ export default function WagesScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <BlueHeader title="Wages" />
       <View style={styles.header}>
-        <Text style={type.display}>Wages</Text>
         <View style={styles.segmentWrap}>
           <SegmentedControl<Segment>
             options={[
@@ -679,7 +679,7 @@ function RatesView({ navigation }: { navigation: NativeStackNavigationProp<RootS
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ground },
-  header: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  header: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
   segmentWrap: { marginTop: spacing.md },
   viewContainer: { flex: 1, backgroundColor: colors.ground },
 
@@ -785,7 +785,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: "700", color: colors.navy },
   meta: { fontSize: 11.5, color: colors.textSecondary, marginTop: 2 },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: spacing.sm },
-  dotGreen: { backgroundColor: colors.primary },
+  dotGreen: { backgroundColor: colors.present },
   dotAmber: { backgroundColor: colors.warning },
   arrow: { fontSize: 22, color: colors.textSecondary },
 });

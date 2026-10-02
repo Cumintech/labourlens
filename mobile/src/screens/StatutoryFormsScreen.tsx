@@ -7,7 +7,7 @@ import { FormTemplate, Worker, generateAppointmentLetter, generateIdCard, getFor
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
-import { Card } from "../components/ui";
+import { BlueHeader, Card } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { INDIAN_STATE_OPTIONS } from "../indianStates";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -279,9 +279,9 @@ export default function StatutoryFormsScreen({ route }: Props) {
   ];
 
   return (
+    <View style={{ flex: 1, backgroundColor: colors.ground }}>
+    <BlueHeader title="Reports" subtitle="Download any statutory form or report, for any period, for any worker." />
     <KeyboardScreen contentContainerStyle={styles.container}>
-      <Text style={type.display}>Reports</Text>
-      <Text style={styles.subtitle}>Download any statutory form or report, for any period, for any worker.</Text>
 
       <Text style={styles.sectionLabel}>State</Text>
       <SelectField label="" value={state} options={INDIAN_STATE_OPTIONS} onChange={setState} />
@@ -359,6 +359,7 @@ export default function StatutoryFormsScreen({ route }: Props) {
         </Card>
       )}
     </KeyboardScreen>
+    </View>
   );
 }
 

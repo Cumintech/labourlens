@@ -34,7 +34,14 @@ function Gate() {
   const { token } = useAuth();
   useAutoBiometricSync(isLocked ? null : token);
   if (loading) return null;
-  return isLocked ? <AppLockScreen /> : <RootNavigator />;
+  // Signed-in app and lock screen sit on blue header bands -> light status
+  // bar icons; the white Login screen needs dark icons.
+  return (
+    <>
+      {isLocked ? <AppLockScreen /> : <RootNavigator />}
+      <StatusBar style={isLocked || token ? "light" : "dark"} />
+    </>
+  );
 }
 
 // GestureHandlerRootView is required at the app root for
@@ -73,7 +80,6 @@ export default function App() {
               <ErrorBoundary>
                 <Gate />
               </ErrorBoundary>
-              <StatusBar style="auto" />
             </ToastProvider>
           </AppLockProvider>
         </AuthProvider>

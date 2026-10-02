@@ -40,7 +40,7 @@ import DayAttendanceRow from "../components/DayAttendanceRow";
 import ErrorState from "../components/ErrorState";
 import OtHoursModal from "../components/OtHoursModal";
 import { ListSkeleton } from "../components/Skeleton";
-import { Chip, SegmentedControl, useToast } from "../components/ui";
+import { BlueHeader, Chip, SegmentedControl, useToast } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing, type } from "../theme";
@@ -86,9 +86,8 @@ export default function AttendanceScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <BlueHeader title="Attendance" subtitle={owner?.factory_name ?? undefined} />
       <View style={styles.header}>
-        <Text style={type.display}>Attendance</Text>
-        <Text style={styles.subtitle}>{owner?.factory_name ?? ""}</Text>
         <View style={styles.modeWrap}>
           <SegmentedControl<Mode>
             options={[
@@ -991,7 +990,7 @@ function RangeView() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ground },
-  header: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  header: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
   subtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
   modeWrap: {},
   dayContainer: { flex: 1, backgroundColor: colors.ground },

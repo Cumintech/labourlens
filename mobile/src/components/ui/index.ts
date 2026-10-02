@@ -14,3 +14,4 @@ export { default as ExtendedFab } from "./ExtendedFab";
 export { ToastProvider, useToast } from "./Toast";
 export { default as EmptyState } from "./EmptyState";
 export { default as LogoMark } from "./LogoMark";
+export { default as BlueHeader } from "./BlueHeader";

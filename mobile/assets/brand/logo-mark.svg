@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <!-- Rounded square background, brandTeal, radius ~30% of size -->
-  <rect x="0" y="0" width="1024" height="1024" rx="307" ry="307" fill="#17472E"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="307" ry="307" fill="#1565C0"/>
 
   <!-- Worker: head + shoulders silhouette, centered slightly left/up
        to sit inside the magnifier's lens circle -->

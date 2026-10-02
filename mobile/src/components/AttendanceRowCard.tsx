@@ -44,7 +44,7 @@ export default function AttendanceRowCard({
   const [tipOpen, setTipOpen] = useState(false);
 
   const anyPresent = shifts.some((s) => getShiftStatus(s.slot_key) === "present");
-  const edgeColor = isOnLeave ? colors.amber : anyPresent ? colors.teal : colors.neutral;
+  const edgeColor = isOnLeave ? colors.amber : anyPresent ? colors.present : colors.neutral;
   const isMapped = !!worker.device_user_id;
 
   return (
@@ -70,7 +70,7 @@ export default function AttendanceRowCard({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={() => setTipOpen((v) => !v)}
           >
-            <View style={[styles.mapDot, { backgroundColor: isMapped ? colors.teal : colors.amber }]} />
+            <View style={[styles.mapDot, { backgroundColor: isMapped ? colors.present : colors.amber }]} />
           </TouchableOpacity>
           {worker.status !== "active" && (
             <View style={styles.inactiveBadge}>
@@ -203,8 +203,8 @@ const styles = StyleSheet.create({
   seg: { paddingVertical: 5, paddingHorizontal: 8, backgroundColor: colors.white, borderRightWidth: 1, borderRightColor: colors.fieldBg },
   segLast: { borderRightWidth: 0 },
   segText: { fontSize: 10.5, fontWeight: "700" },
-  segPresent: { backgroundColor: colors.tealLight },
-  segTextPresent: { color: colors.tealDark },
+  segPresent: { backgroundColor: colors.presentTint },
+  segTextPresent: { color: colors.present },
   segLeave: { backgroundColor: colors.amberLight },
   segTextLeave: { color: colors.amberDark },
   // Morning/Evening segments while Leave is active for the day -- a

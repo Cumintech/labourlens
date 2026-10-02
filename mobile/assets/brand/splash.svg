@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1284 1284" width="1284" height="1284">
-  <!-- Splash source - primary-green (#17472E) full-bleed background, mark
+  <!-- Splash source - brand-blue (#1565C0) full-bleed background, mark
        + wordmark centered. Needs rasterizing to splash.png - see README.md. -->
-  <rect x="0" y="0" width="1284" height="1284" fill="#17472E"/>
+  <rect x="0" y="0" width="1284" height="1284" fill="#1565C0"/>
   <g transform="translate(442,392) scale(0.39)">
-    <rect x="0" y="0" width="1024" height="1024" rx="307" ry="307" fill="#17472E"/>
+    <rect x="0" y="0" width="1024" height="1024" rx="307" ry="307" fill="#1565C0"/>
     <g transform="translate(432,420)">
       <circle cx="0" cy="-70" r="72" fill="none" stroke="#FFFFFF" stroke-width="34"/>
       <path

@@ -8,7 +8,7 @@ import { Attendance, LeaveEntry, Worker, listAttendance, listLeaveForDate, listW
 import { isoDate } from "../components/DateField";
 import { ListSkeleton } from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
-import { Avatar, Chip, EmptyState, ListRow, StatusChip } from "../components/ui";
+import { Avatar, BlueHeader, Chip, EmptyState, ListRow, StatusChip } from "../components/ui";
 import type { WorkerStatus } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -124,14 +124,16 @@ export default function WorkersScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={type.display}>Workers</Text>
+      <BlueHeader
+        title="Workers"
+        right={
           <Pressable style={styles.addButton} onPress={() => navigation.navigate("NewWorkerScan")} accessibilityRole="button">
             <UserPlus size={16} color={colors.primary} />
             <Text style={styles.addButtonText}>Add worker</Text>
           </Pressable>
-        </View>
+        }
+      />
+      <View style={styles.header}>
         <Text style={styles.subtitle}>{activeCount} active · {inactiveCount} inactive</Text>
         <View style={styles.searchRow}>
           <Search size={16} color={colors.textSecondary} />
@@ -183,16 +185,15 @@ export default function WorkersScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ground },
-  header: { backgroundColor: colors.surface, padding: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  header: { backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
   titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm + 2,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm + 6,
     paddingVertical: spacing.xs + 2,
   },
   addButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primary },

@@ -1,80 +1,77 @@
-// PDF-spec redesign tokens (Attendance_Screen_Redesign.pdf). Key names are
-// kept the same as the prior (ui-v2) palette so no screen needed per-file
-// color edits for this re-skin -- only the hex VALUES changed, remapped to
-// the new spec. "navy" is deliberately repointed to the spec's near-black
-// `text` color (not a distinct navy) -- the spec's "remove ... all navy"
-// instruction is satisfied by no navy hue ever rendering, not by deleting
-// the (still widely referenced) key name.
+// Blue-collar workforce theme (blue-and-white, per the Labour Lens UI
+// mockup). Key names are kept from the earlier palettes so screens keep
+// referencing the same tokens -- only values changed. Brand/interactive
+// colour is blue; status colours (present / absent / leave / warning) stay
+// semantic and are NOT brand blue. "navy" = primary text colour.
 export const colors = {
   // --- Core brand ---
-  primary: "#17472E", // buttons, active tab, links
-  primaryPressed: "#10361F", // pressed/dark state
-  brandTeal: "#17472E", // logo mark -- brand green, not a separate hue
-  primaryTint: "#E8F0EA", // icon chips, active tab pill, primarySoft
-  onPrimaryMuted: "#C9D6CD", // muted text/icons drawn on a primary-bg surface
-  heroDivider: "#2B5A40", // dividers inside the Hero card (on primary bg)
+  primary: "#1565C0", // buttons, active tab, links, header bands
+  primaryPressed: "#0D47A1", // pressed state
+  primaryDark: "#0D47A1", // dark blue: important headings, selected states
+  secondary: "#1976D2", // secondary blue accents
+  brandTeal: "#0D47A1", // logo mark background (dark brand blue)
+  primaryTint: "#EAF3FF", // icon chips, active tab pill, light blue surfaces
+  onPrimaryMuted: "#C9DDF7", // muted text/icons drawn on a primary-bg surface
+  heroDivider: "#3D82D1", // dividers / pills on a primary-bg surface
 
   // --- Surfaces & text ---
-  navy: "#1A1F1B", // primary text (see file comment -- not actually navy)
-  ground: "#F6F7F5", // screen background (bg)
+  navy: "#172B4D", // primary text
+  ground: "#F5F9FF", // screen background (very light blue)
   surface: "#FFFFFF", // cards
-  textSecondary: "#5F6B63", // captions, labels (muted)
-  border: "#E3E6E1", // card borders
-  divider: "#EEF0EC",
+  textSecondary: "#64748B",
+  border: "#DCE6F1",
+  divider: "#E8EFF7",
+  disabled: "#94A3B8",
 
-  // Status colors -- used ONLY for attendance/alert status (text, dots,
-  // selected chips), never decoration.
-  present: "#17472E", // present = positive = brand green
-  presentTint: "#E8F0EA",
-  absent: "#A33A32",
-  absentTint: "#F4E3E1",
-  absentTintText: "#A33A32",
-  leave: "#9A6A1E",
-  leaveTint: "#F3ECE0",
-  evening: "#3F5568", // per-shift accent for Evening, where a shift needs one
-  warning: "#9A6A1E",
-  warningTint: "#FBF6EC", // warnBg
-  warningTintText: "#9A6A1E",
-  warningBorder: "#EADFC6",
-  unmarked: "#8A938C",
-  unmarkedTint: "#EEF0EC",
-  danger: "#A33A32", // destructive text -- same red as absent, one red app-wide
+  // Status colours -- used ONLY for attendance/alert status, never decoration.
+  present: "#15803D", // accessible green (success)
+  presentTint: "#E7F6EC",
+  absent: "#C62828",
+  absentTint: "#FDECEC",
+  absentTintText: "#C62828",
+  leave: "#B45309",
+  leaveTint: "#FFF4E0",
+  evening: "#5E35B1", // per-shift accent for Evening
+  warning: "#B45309",
+  warningTint: "#FFF8E8",
+  warningTintText: "#92400E",
+  warningBorder: "#F6DFAF",
+  unmarked: "#7B8798",
+  unmarkedTint: "#EEF2F7",
+  danger: "#C62828", // destructive text -- same red as absent
 
-  // --- Decorative multi-hue palette only (shift-accent row, wage chart
-  // legend) -- NOT status colors; telling N shifts/wage-slices apart needs
-  // several distinct hues, same reasoning a chart legend would. ---
-  skyBlue: "#3F5568",
-  skyBlueLight: "#E7ECEF",
-  violet: "#6B3F66",
-  violetLight: "#EFE4ED",
-  coral: "#7A5418",
-  coralLight: "#F3ECE0",
+  // --- Decorative multi-hue palette only (shift accents, wage chart legend) ---
+  skyBlue: "#0288D1",
+  skyBlueLight: "#E1F3FC",
+  violet: "#6A3FB5",
+  violetLight: "#EFE9FA",
+  coral: "#C2410C",
+  coralLight: "#FFEDE3",
 
-  // --- Old alias names, repointed to the new palette's closest match so
-  // every screen still referencing them renders in the new design. ---
-  teal: "#17472E",
-  tealLight: "#E8F0EA",
-  tealDark: "#10361F",
-  tealPale: "#E8F0EA",
-  fieldBg: "#F6F7F5",
-  muted: "#5F6B63",
-  amber: "#9A6A1E",
-  amberLight: "#FBF6EC",
-  amberPale: "#F3ECE0",
-  amberDark: "#7A5414",
-  dangerLight: "#F4E3E1",
-  neutral: "#8A938C",
-  neutralLight: "#EEF0EC",
+  // --- Old alias names, repointed to the blue palette ---
+  teal: "#1565C0",
+  tealLight: "#EAF3FF",
+  tealDark: "#0D47A1",
+  tealPale: "#EAF3FF",
+  fieldBg: "#F3F7FC",
+  muted: "#64748B",
+  amber: "#B45309",
+  amberLight: "#FFF8E8",
+  amberPale: "#FFF4E0",
+  amberDark: "#92400E",
+  dangerLight: "#FDECEC",
+  neutral: "#94A3B8",
+  neutralLight: "#EEF2F7",
   white: "#FFFFFF",
 } as const;
 
 // Avatar initials background/text, by hash(workerId) % 5.
 export const avatarPalette = [
-  { bg: "#DCEBE1", text: "#17472E" },
-  { bg: "#DDE5EE", text: "#34506B" },
-  { bg: "#EFE4D3", text: "#7A5418" },
-  { bg: "#E9DFE8", text: "#6B3F66" },
-  { bg: "#DDEAEA", text: "#2F5F60" },
+  { bg: "#E3EEFD", text: "#1565C0" },
+  { bg: "#E4F4EA", text: "#1E7B45" },
+  { bg: "#FFF0D9", text: "#A3560B" },
+  { bg: "#EFE7FB", text: "#6A3FB5" },
+  { bg: "#FDE8E1", text: "#B23C10" },
 ] as const;
 
 export const spacing = {

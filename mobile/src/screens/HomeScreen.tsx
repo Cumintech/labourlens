@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { ChevronRight, Clock, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
+import { AlertTriangle, ChevronRight, Clock, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +17,7 @@ import {
   listWorkers,
 } from "../api/client";
 import { isoDate } from "../components/DateField";
+import WorkerHeroArt from "../components/WorkerHeroArt";
 import { IconButton, LogoMark } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -143,11 +144,17 @@ export default function HomeScreen({ navigation }: Props) {
         contentContainerStyle={{ paddingBottom: spacing.xl * 2 + insets.bottom }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+          <View style={styles.heroArt} pointerEvents="none">
+            <WorkerHeroArt width={104} height={98} />
+          </View>
           <View style={styles.headerTopRow}>
             <View style={styles.brandRow}>
-              <LogoMark size={28} />
-              <Text style={styles.brandText}>Labour Lens</Text>
+              <LogoMark size={30} inverted />
+              <View>
+                <Text style={styles.brandText}>Labour Lens</Text>
+                <Text style={styles.brandTagline}>Manage · Track · Empower</Text>
+              </View>
             </View>
             <IconButton icon={SettingsIcon} color={colors.surface} accessibilityLabel="Open settings" onPress={() => navigation.navigate("Settings")} />
           </View>
@@ -201,13 +208,16 @@ export default function HomeScreen({ navigation }: Props) {
 
         {alerts.length > 0 && (
           <Pressable style={styles.attentionCard} onPress={() => navigation.navigate("NeedsAttention")}>
+            <View style={styles.attentionIcon}>
+              <AlertTriangle size={18} color={colors.warning} />
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.attentionCardTitle}>Needs attention</Text>
               <Text style={styles.attentionCardSubtitle}>
                 {alerts.length} {alerts.length === 1 ? "item needs" : "items need"} attention
               </Text>
             </View>
-            <ChevronRight size={20} color={colors.textSecondary} />
+            <ChevronRight size={20} color={colors.warning} />
           </Pressable>
         )}
 
@@ -257,14 +267,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
+    overflow: "hidden",
     padding: spacing.lg,
     paddingBottom: spacing.xl + spacing.md,
   },
   headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  brandText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  brandText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 18, color: colors.surface },
+  brandTagline: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.onPrimaryMuted },
+  // Sits above the summary card, which overlaps the header bottom by spacing.xl.
+  heroArt: { position: "absolute", right: spacing.sm, bottom: spacing.xl - 2 },
   dateText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.onPrimaryMuted, marginTop: spacing.md },
-  factoryName: { fontFamily: "IBMPlexSans_700Bold", fontSize: 26, color: colors.surface, marginTop: 2 },
+  factoryName: { fontFamily: "IBMPlexSans_700Bold", fontSize: 26, color: colors.surface, marginTop: 2, paddingRight: 100 },
   trialPill: {
     alignSelf: "flex-start",
     backgroundColor: colors.heroDivider,
@@ -280,8 +294,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginHorizontal: spacing.lg,
     marginTop: -spacing.xl,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.12,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
@@ -302,14 +316,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.warningTint,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
     borderRadius: radius.md,
     padding: spacing.md,
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
   },
-  attentionCardTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.surface },
-  attentionCardSubtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.onPrimaryMuted, marginTop: 2 },
+  attentionIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.leaveTint, alignItems: "center", justifyContent: "center" },
+  attentionCardTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.warningTintText },
+  attentionCardSubtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   quickActionsWrap: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
   quickActionsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
   quickActionsLabel: { color: colors.textSecondary },

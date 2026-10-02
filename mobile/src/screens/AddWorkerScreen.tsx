@@ -829,7 +829,7 @@ const styles = StyleSheet.create({
   scanIcon: { marginBottom: spacing.xs },
   scanCardLabel: { fontSize: 12, color: colors.tealDark, fontWeight: "700", textAlign: "center", paddingHorizontal: spacing.xs },
   scanPreview: StyleSheet.absoluteFill,
-  scanDoneText: { position: "absolute", bottom: 6, alignSelf: "center", fontSize: 11, fontWeight: "700", color: colors.white, backgroundColor: "rgba(15,110,86,0.85)", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  scanDoneText: { position: "absolute", bottom: 6, alignSelf: "center", fontSize: 11, fontWeight: "700", color: colors.white, backgroundColor: "rgba(13,71,161,0.85)", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   hint: { fontSize: 12, color: colors.muted, marginTop: spacing.sm, marginBottom: spacing.md, textAlign: "center" },
   sectionTitle: { fontSize: 12, fontWeight: "700", color: colors.teal, marginTop: spacing.sm, marginBottom: spacing.sm, textTransform: "uppercase" },
   sectionLabelAmber: { fontSize: 12, fontWeight: "700", color: colors.amber, marginTop: spacing.sm, marginBottom: spacing.sm, textTransform: "uppercase" },

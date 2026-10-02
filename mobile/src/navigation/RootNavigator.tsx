@@ -115,9 +115,11 @@ export default function RootNavigator() {
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{
-          headerStyle: { backgroundColor: colors.surface },
-          headerTitleStyle: { color: colors.navy, fontFamily: "IBMPlexSans_700Bold", fontSize: 17 },
-          headerTintColor: colors.primary,
+          headerStyle: { backgroundColor: colors.primary },
+          headerTitleStyle: { color: colors.surface, fontFamily: "IBMPlexSans_700Bold", fontSize: 18 },
+          headerTintColor: colors.surface,
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: colors.ground },
         }}
       >
         <Stack.Screen name="Home" component={MainTabs} options={{ headerShown: false }} />

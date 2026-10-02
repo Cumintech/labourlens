@@ -4,7 +4,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Attendance, LeaveEntry, Worker, listAttendance, listLeaveForDate, listWorkers, listWorkersMissingCompliance } from "../api/client";
+import { Attendance, HomeAlert, LeaveEntry, Worker, getHomeAlerts, listAttendance, listLeaveForDate, listWorkers, listWorkersMissingCompliance } from "../api/client";
 import { isoDate } from "../components/DateField";
 import { ListSkeleton } from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
@@ -18,6 +18,8 @@ import { colors, radius, spacing, type } from "../theme";
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
 type Filter = "all" | "missing" | "no_wage" | "inactive";
+
+const WORKER_ALERT_CODES = ["missing_compliance", "underage_workers", "unmapped_devices"];
 
 // The list view Phase 1's tab bar needs to exist at all -- there was no
 // "every worker in one place" screen before this (Dashboard only ever
@@ -35,6 +37,7 @@ export default function WorkersScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [workerAlerts, setWorkerAlerts] = useState<HomeAlert[]>([]);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -49,6 +52,11 @@ export default function WorkersScreen({ navigation }: Props) {
     setTodayAttendance(a);
     setTodayLeave(l);
     setMissingComplianceIds(new Set(missing.map((m) => m.id)));
+    // Worker-related notices from the same feed as Today's "Needs attention"
+    // (read-only; a failure just hides the card).
+    getHomeAlerts(token)
+      .then((r) => setWorkerAlerts(r.alerts.filter((x) => WORKER_ALERT_CODES.includes(x.code) && x.count > 0)))
+      .catch(() => setWorkerAlerts([]));
   }, [token]);
 
   useFocusEffect(
@@ -179,31 +187,22 @@ export default function WorkersScreen({ navigation }: Props) {
               })}
             </ScrollView>
 
-            {missingComplianceIds.size > 0 && (() => {
-              // Moved here from the Attendance tab; same target screen as before.
-              const firstMissing = workers.find((w) => missingComplianceIds.has(w.id));
-              const n = missingComplianceIds.size;
-              return firstMissing ? (
-                <Pressable
-                  style={styles.complianceBanner}
-                  accessibilityRole="button"
-                  onPress={() =>
-                    navigation.navigate("WorkerEdit", {
-                      workerId: firstMissing.id,
-                      workerName: firstMissing.name,
-                      workerStatus: firstMissing.status,
-                      deactivatedAt: firstMissing.deactivated_at,
-                    })
-                  }
-                >
-                  <AlertTriangle size={18} color={colors.warning} />
-                  <Text style={styles.complianceBannerText}>
-                    {n} worker{n === 1 ? "" : "s"} {n === 1 ? "needs" : "need"} Form 12 details
-                  </Text>
-                  <ChevronRight size={16} color={colors.warning} />
-                </Pressable>
-              ) : null;
-            })()}
+            {workerAlerts.length > 0 && (
+              <Pressable
+                style={styles.complianceBanner}
+                accessibilityRole="button"
+                onPress={() => navigation.navigate("NeedsAttention")}
+              >
+                <AlertTriangle size={18} color={colors.warning} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.complianceBannerText}>Needs attention</Text>
+                  {workerAlerts.map((al) => (
+                    <Text key={al.code} style={styles.alertLine}>• {al.message}</Text>
+                  ))}
+                </View>
+                <ChevronRight size={16} color={colors.warning} />
+              </Pressable>
+            )}
           </View>
         }
         ListEmptyComponent={
@@ -269,6 +268,7 @@ const styles = StyleSheet.create({
     borderColor: colors.warningBorder,
     backgroundColor: colors.warningTint,
   },
+  alertLine: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.navy },
   complianceBannerText: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.warningTintText },
   container: { flex: 1, backgroundColor: colors.ground },
   hero: {

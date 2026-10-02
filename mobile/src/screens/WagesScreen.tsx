@@ -46,10 +46,8 @@ type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 type Segment = "payroll" | "rates";
 type PayrollMode = "daily" | "monthly";
 
-const SLICE_COLORS = [
-  colors.primary, colors.skyBlue, colors.violet, colors.warning,
-  colors.coral, colors.danger, "#00897B", "#546E7A",
-];
+// Wage-split chart palette: brand blues alternating with oranges (no red).
+const SLICE_COLORS = ["#1565C0", "#F57C00", "#42A5F5", "#FFB74D", "#0D47A1", "#EF6C00", "#90CAF9", "#FFCC80"];
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",

@@ -69,10 +69,10 @@ export const colors = {
 // Avatar initials background/text, by hash(workerId) % 5.
 export const avatarPalette = [
   { bg: "#E3EEFD", text: "#1565C0" },
-  { bg: "#E4F4EA", text: "#1E7B45" },
-  { bg: "#FFF0D9", text: "#A3560B" },
-  { bg: "#EFE7FB", text: "#6A3FB5" },
-  { bg: "#FDE8E1", text: "#B23C10" },
+  { bg: "#DCEBFA", text: "#0D47A1" },
+  { bg: "#E6F0FB", text: "#1976D2" },
+  { bg: "#E1ECF7", text: "#0B3D91" },
+  { bg: "#EAF3FF", text: "#1E5AA8" },
 ] as const;
 
 export const spacing = {

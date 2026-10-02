@@ -3,7 +3,9 @@ import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ApiError, WorkerType, createWorkerType, deleteWorkerType, listWorkerTypes, updateWorkerType } from "../api/client";
+import { ChevronRight, Plus } from "lucide-react-native";
 import ErrorState from "../components/ErrorState";
+import TradeIcon from "../components/TradeIcon";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
 import { ListSkeleton } from "../components/Skeleton";
@@ -154,30 +156,44 @@ export default function WorkerTypesScreen({}: Props) {
       contentContainerStyle={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
     >
-      <Text style={styles.title}>Worker Types</Text>
-      <Text style={styles.subtitle}>Categories like Skilled, Unskilled, or Helper, each with a default wage rate.</Text>
+      <View style={styles.hero}>
+        <View style={styles.heroIcons} pointerEvents="none">
+          <TradeIcon typeName="Carpenter" size={40} />
+          <TradeIcon typeName="Plumber" size={40} />
+          <TradeIcon typeName="Watchman" size={40} />
+        </View>
+        <Text style={styles.title}>Trades &amp; default rates</Text>
+        <Text style={styles.subtitle}>Group workers by trade, each with a default wage rate.</Text>
+      </View>
 
-      {types.length === 0 ? (
-        <Text style={styles.empty}>No worker types yet -- add one below.</Text>
-      ) : (
-        types.map((type) => (
-          <TouchableOpacity key={type.id} style={styles.typeRow} onPress={() => startEdit(type)}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.typeName}>{type.name}</Text>
-              <Text style={styles.typeRate}>
-                ₹{type.default_rate} / {type.default_rate_type === "daily" ? "day" : "month"}
-              </Text>
-            </View>
-            <Text style={styles.chev}>›</Text>
+      <View style={styles.body}>
+        {types.length === 0 ? (
+          <Text style={styles.empty}>No worker types yet -- add one below.</Text>
+        ) : (
+          <View style={styles.listCard}>
+            {types.map((type, i) => (
+              <TouchableOpacity key={type.id} style={[styles.typeRow, i > 0 && styles.typeRowDivider]} onPress={() => startEdit(type)} accessibilityRole="button">
+                <TradeIcon typeName={type.name} size={44} />
+                <Text style={styles.typeName} numberOfLines={1}>{type.name}</Text>
+                <View style={styles.ratePill}>
+                  <Text style={styles.typeRate}>
+                    ₹{type.default_rate}
+                    <Text style={styles.typeRateUnit}> /{type.default_rate_type === "daily" ? "day" : "month"}</Text>
+                  </Text>
+                </View>
+                <ChevronRight size={16} color={colors.disabled} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {!sheetOpen && (
+          <TouchableOpacity style={styles.button} onPress={startAdd} accessibilityRole="button">
+            <Plus size={18} color={colors.white} />
+            <Text style={styles.buttonText}>Add worker type</Text>
           </TouchableOpacity>
-        ))
-      )}
-
-      {!sheetOpen && (
-        <TouchableOpacity style={styles.button} onPress={startAdd}>
-          <Text style={styles.buttonText}>+ Add worker type</Text>
-        </TouchableOpacity>
-      )}
+        )}
+      </View>
 
       <Modal visible={sheetOpen} transparent animationType="fade" onRequestClose={resetForm}>
         <View style={styles.backdrop}>
@@ -254,14 +270,20 @@ export default function WorkerTypesScreen({}: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: "700", color: colors.navy },
-  subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, marginBottom: spacing.md },
-  empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
-  typeRow: { flexDirection: "row", alignItems: "center", backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.xs, gap: spacing.sm },
-  typeName: { fontSize: 14, fontWeight: "700", color: colors.navy },
-  typeRate: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  chev: { color: colors.muted, fontSize: 18 },
+  container: { backgroundColor: colors.ground, flexGrow: 1, paddingBottom: spacing.xl },
+  hero: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 40, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  heroIcons: { flexDirection: "row", gap: 8, marginBottom: spacing.sm + 4 },
+  title: { fontFamily: "IBMPlexSans_700Bold", fontSize: 22, color: colors.surface },
+  subtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.onPrimaryMuted, marginTop: 4 },
+  body: { paddingHorizontal: spacing.md, marginTop: -22, gap: 12 },
+  empty: { fontSize: 13, color: colors.muted, backgroundColor: colors.surface, borderRadius: 16, padding: spacing.md },
+  listCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, overflow: "hidden", elevation: 3, shadowColor: colors.primaryDark, shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  typeRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 68, paddingHorizontal: 14, paddingVertical: 12 },
+  typeRowDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
+  typeName: { flex: 1, fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  ratePill: { backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  typeRate: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.primaryDark },
+  typeRateUnit: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11, color: colors.textSecondary },
   removeLink: { color: colors.danger, fontSize: 12, fontWeight: "700" },
   sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginBottom: spacing.sm },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
@@ -278,10 +300,10 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
   cancelButton: { flex: 1, paddingVertical: 16, alignItems: "center", borderRadius: radius.sm, backgroundColor: colors.fieldBg },
   cancelText: { color: colors.muted, fontWeight: "700" },
-  saveButton: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, padding: 16, alignItems: "center" },
+  saveButton: { flex: 2, backgroundColor: colors.primary, borderRadius: 12, padding: 16, alignItems: "center" },
   buttonDisabled: { opacity: 0.6 },
   saveText: { color: colors.white, fontSize: 16, fontWeight: "700" },
-  button: { backgroundColor: colors.teal, borderRadius: radius.sm, padding: 16, alignItems: "center", marginTop: spacing.sm },
+  button: { flexDirection: "row", gap: 8, justifyContent: "center", backgroundColor: colors.primary, borderRadius: 12, height: 50, alignItems: "center" },
   buttonText: { color: colors.white, fontSize: 15, fontWeight: "700" },
   removeTypeLink: { alignItems: "center", marginTop: spacing.md },
 });

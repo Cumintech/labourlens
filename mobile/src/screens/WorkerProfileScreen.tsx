@@ -7,6 +7,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, Alert, FlatList, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
+  API_BASE_URL,
   ApiError,
   Attendance,
   AttendanceStatus,
@@ -40,6 +41,7 @@ import OtHoursModal from "../components/OtHoursModal";
 import { ListSkeleton } from "../components/Skeleton";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { Avatar, SegmentedControl } from "../components/ui";
+import TradeIcon from "../components/TradeIcon";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
@@ -96,6 +98,10 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab ?? "overview");
   const [compliance, setCompliance] = useState<WorkerCompliance | null>(null);
   const [complianceLoaded, setComplianceLoaded] = useState(false);
+  // Header details (photo, code, type) -- read-only, best effort.
+  const [headerWorker, setHeaderWorker] = useState<Worker | null>(null);
+  const [headerType, setHeaderType] = useState<string | null>(null);
+  const [photoFailed, setPhotoFailed] = useState(false);
 
   const loadCompliance = useCallback(async () => {
     if (!token) return;
@@ -111,7 +117,16 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       loadCompliance();
-    }, [loadCompliance]),
+      if (token) {
+        Promise.all([getWorker(token, workerId), listWorkerTypes(token)])
+          .then(([w, types]) => {
+            setHeaderWorker(w);
+            setHeaderType(types.find((t) => t.id === w.worker_type_id)?.name ?? null);
+            setPhotoFailed(false);
+          })
+          .catch(() => {});
+      }
+    }, [loadCompliance, token, workerId]),
   );
 
   const completeness = useMemo(() => {
@@ -126,11 +141,33 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       <View style={styles.headerCard}>
         <View style={styles.avatarRing}>
-          <Avatar workerId={workerId} name={workerName} size={60} />
+          {headerWorker?.photo_key && !photoFailed && token ? (
+            <Image
+              source={{
+                uri: `${API_BASE_URL}/workers/${workerId}/photo?v=${encodeURIComponent(headerWorker.photo_key)}`,
+                headers: { Authorization: `Bearer ${token}` },
+              }}
+              style={styles.headerPhoto}
+              onError={() => setPhotoFailed(true)}
+              accessibilityLabel={`Photo of ${workerName}`}
+            />
+          ) : (
+            <Avatar workerId={workerId} name={workerName} size={60} />
+          )}
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.headerName} numberOfLines={1}>{workerName}</Text>
           <View style={styles.headerChips}>
+            {headerWorker?.numeric_employee_code ? (
+              <View style={styles.headerChip}>
+                <Text style={styles.headerChipText}>#{headerWorker.numeric_employee_code}</Text>
+              </View>
+            ) : null}
+            {headerType ? (
+              <View style={styles.headerChip}>
+                <Text style={styles.headerChipText}>{headerType}</Text>
+              </View>
+            ) : null}
             <View style={[styles.headerChip, isActive && styles.headerChipActive]}>
               <Text style={[styles.headerChipText, isActive && styles.headerChipTextActive]}>
                 {isActive ? "Active" : `Deactivated${deactivatedAt ? ` · ${deactivatedAt.slice(0, 10)}` : ""}`}
@@ -719,7 +756,10 @@ function WagesTab({
     <ScrollView style={styles.tabScroll} contentContainerStyle={[styles.tabContent, { paddingBottom: spacing.xl + insets.bottom }]}>
       <View style={styles.rateSectionCard}>
         <View style={styles.rateSectionHead}>
-          <Text style={styles.rateSectionTitle}>Worker type &amp; rate</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+            <TradeIcon typeName={workerTypes.find((t) => t.id === worker.worker_type_id)?.name} size={44} />
+            <Text style={styles.rateSectionTitle}>Worker type &amp; rate</Text>
+          </View>
           <TouchableOpacity onPress={() => navigation.navigate("WageProfile", { workerId, workerName })}>
             <Text style={styles.rateSectionEdit}>{currentRate ? "Edit / history" : "Set rate"}</Text>
           </TouchableOpacity>
@@ -942,6 +982,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
+  headerPhoto: { width: 60, height: 60, borderRadius: 30 },
   avatarRing: { borderRadius: 34, borderWidth: 3, borderColor: "rgba(255,255,255,0.9)" },
   headerName: { fontFamily: "IBMPlexSans_700Bold", fontSize: 24, color: colors.surface },
   headerChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },

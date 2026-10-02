@@ -37,6 +37,7 @@ import {
 import AttendanceRowCard from "../components/AttendanceRowCard";
 import DateField, { isoDate } from "../components/DateField";
 import YearMonthDayPicker from "../components/YearMonthDayPicker";
+import AttendanceArt from "../components/AttendanceArt";
 import DayAttendanceRow from "../components/DayAttendanceRow";
 import ErrorState from "../components/ErrorState";
 import OtHoursModal from "../components/OtHoursModal";
@@ -91,6 +92,8 @@ export default function AttendanceScreen({ navigation }: Props) {
         title="Attendance"
         subtitle={owner?.factory_name ?? undefined}
         right={
+          <View style={styles.headerRight}>
+          <AttendanceArt size={48} />
           <View style={styles.modePill} accessibilityRole="tablist">
             {(["day", "range"] as Mode[]).map((m) => (
               <TouchableOpacity
@@ -103,6 +106,7 @@ export default function AttendanceScreen({ navigation }: Props) {
                 <Text style={[styles.modePillText, mode === m && styles.modePillTextActive]}>{m === "day" ? "Day" : "Range"}</Text>
               </TouchableOpacity>
             ))}
+          </View>
           </View>
         }
       />
@@ -1054,7 +1058,8 @@ function RangeView() {
 
 const styles = StyleSheet.create({
   modePill: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.16)", borderRadius: radius.pill, padding: 3 },
-  modePillOption: { minHeight: 36, paddingHorizontal: 16, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  modePillOption: { minHeight: 36, paddingHorizontal: 12, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   modePillOptionActive: { backgroundColor: colors.surface },
   modePillText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.surface },
   modePillTextActive: { fontFamily: "IBMPlexSans_700Bold", color: colors.primary },

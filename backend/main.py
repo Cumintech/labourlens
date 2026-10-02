@@ -663,6 +663,24 @@ def get_worker(
 MAX_PHOTO_UPLOAD_BYTES = 100 * 1024
 
 
+@app.get("/workers/{worker_id}/photo")
+def get_worker_photo_image(
+    worker_id: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Read-only: returns the worker's stored ID photo (owner-scoped) so the
+    app can show it on the worker profile. 404 when no photo is on file."""
+    worker = _get_owned_worker(worker_id, owner, db)
+    if not worker.photo_key:
+        raise HTTPException(status_code=404, detail="No photo on file")
+    try:
+        data = photo_storage.get_worker_photo(worker.photo_key)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Photo not available")
+    return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+
 @app.post("/workers/{worker_id}/photo", response_model=WorkerOut)
 async def upload_worker_photo(
     worker_id: int,

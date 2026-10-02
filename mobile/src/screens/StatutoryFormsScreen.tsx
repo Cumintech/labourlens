@@ -149,11 +149,17 @@ function rangeForPreset(preset: PeriodPreset, today: Date): { start: string; end
 export default function StatutoryFormsScreen({ route }: Props) {
   const { token, owner } = useAuth();
   const today = useMemo(() => new Date(), []);
-  const lockForm = route?.params?.lockForm ?? false;
+  // Locked only while arriving from a shortcut (e.g. Today -> Wage slips);
+  // the "Change" link or a plain tab tap unlocks so the Report dropdown shows.
+  const [lockForm, setLockForm] = useState(route?.params?.lockForm ?? false);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [state, setState] = useState(owner?.state ?? INDIAN_STATE_OPTIONS[0].value);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const [formCode, setFormCode] = useState<string>(route?.params?.formCode ?? "attendance");
+  useEffect(() => {
+    setLockForm(route?.params?.lockForm ?? false);
+    if (route?.params?.formCode) setFormCode(route.params.formCode);
+  }, [route?.params?.lockForm, route?.params?.formCode]);
   const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
   const [preset, setPreset] = useState<PeriodPreset>("current_month");
   const [customStart, setCustomStart] = useState(dateStr(today.getFullYear(), today.getMonth() + 1, 1));
@@ -281,7 +287,7 @@ export default function StatutoryFormsScreen({ route }: Props) {
 
   const workerOptions = [
     { label: "All workers", value: "all" },
-    ...workers.map((w) => ({
+    ...[...workers].sort((a, b) => a.name.localeCompare(b.name)).map((w) => ({
       label: workerLabel(w),
       value: String(w.id),
     })),
@@ -346,7 +352,10 @@ export default function StatutoryFormsScreen({ route }: Props) {
           {lockForm ? (
             <View style={styles.lockedField}>
               <FileText size={18} color={colors.primary} />
-              <Text style={styles.lockedFieldText}>{formOption.label}</Text>
+              <Text style={[styles.lockedFieldText, { flex: 1 }]}>{formOption.label}</Text>
+              <TouchableOpacity onPress={() => setLockForm(false)} accessibilityRole="button" hitSlop={8}>
+                <Text style={styles.changeLink}>Change</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <SelectField
@@ -492,5 +501,6 @@ const styles = StyleSheet.create({
     padding: 12,
     minHeight: 44,
   },
+  changeLink: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primary },
   lockedFieldText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 16, color: colors.navy },
 });

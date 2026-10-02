@@ -88,6 +88,13 @@ export default function MainTabs() {
       <Tab.Screen
         name="ReportsTab"
         component={StatutoryFormsScreen}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            // A plain tab tap opens Reports unlocked (shortcuts lock it to one form).
+            e.preventDefault();
+            navigation.navigate("ReportsTab", { lockForm: false });
+          },
+        })}
         options={{
           title: "Reports",
           tabBarIcon: ({ color, focused }) => <TabIcon Icon={FileText} color={color} focused={focused} />,

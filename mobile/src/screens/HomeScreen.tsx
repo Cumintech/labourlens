@@ -244,8 +244,8 @@ export default function HomeScreen({ navigation }: Props) {
               <Clock size={16} color={colors.primary} />
             </View>
             <Text style={styles.planText}>{trialStatusText(owner)}</Text>
-            <Pressable style={styles.planButton} onPress={() => navigation.navigate("HelpSupport")} accessibilityRole="button">
-              <Text style={styles.planButtonText}>Contact us</Text>
+            <Pressable style={styles.planButton} onPress={() => navigation.navigate("Plans")} accessibilityRole="button">
+              <Text style={styles.planButtonText}>View plans</Text>
             </Pressable>
           </View>
         )}

@@ -404,6 +404,16 @@ class ComplianceCheckOut(BaseModel):
     items: list[ComplianceItemOut]
 
 
+class UpgradeRequestIn(BaseModel):
+    plan: Literal["starter", "growth", "pro"]
+    cycle: Literal["monthly", "yearly"]
+
+
+class UpgradeRequestOut(BaseModel):
+    id: int
+    status: str
+
+
 class HomeAlertsOut(BaseModel):
     alerts: list[HomeAlertOut]
 

@@ -572,6 +572,18 @@ export function getComplianceCheck(token: string): Promise<ComplianceCheck> {
   });
 }
 
+export function createUpgradeRequest(
+  token: string,
+  plan: string,
+  cycle: string,
+): Promise<{ id: number; status: string }> {
+  return request<{ id: number; status: string }>("/plan/upgrade-request", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ plan, cycle }),
+  });
+}
+
 export type MonthEndStep = { key: string; label: string; complete: boolean; detail: string };
 export type MonthEnd = { year: number; month: number; steps: MonthEndStep[] };
 

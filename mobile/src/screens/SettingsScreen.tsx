@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Building2, Clock, CreditCard, FileText, Fingerprint, HelpCircle, LogOut, Shield, Tag, Trash2 } from "lucide-react-native";
+import { Building2, Clock, Crown, FileText, Fingerprint, HelpCircle, LogOut, Shield, Tag, Trash2 } from "lucide-react-native";
 import React, { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -151,7 +151,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
       <Text style={styles.sectionLabel}>Account</Text>
       <View style={styles.card}>
-        <ListRow icon={CreditCard} title="Plan" subtitle={planText} showChevron={false} />
+        <ListRow icon={Crown} title="Plan & billing" subtitle={planText} onPress={() => navigation.navigate("Plans")} />
         <View style={styles.divider} />
         <ListRow icon={HelpCircle} title="Help & Support" onPress={() => navigation.navigate("HelpSupport")} />
         <View style={styles.divider} />

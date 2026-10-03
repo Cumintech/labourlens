@@ -63,6 +63,8 @@ from schemas import (
     SlotSummary,
     SyncStatusOut,
     TokenOut,
+    UpgradeRequestIn,
+    UpgradeRequestOut,
     WageProfileIn,
     WageProfileOut,
     WagePaymentIn,
@@ -1739,6 +1741,23 @@ def get_compliance_check(
         categories=categories,
         items=items,
     )
+
+
+@app.post("/plan/upgrade-request", response_model=UpgradeRequestOut, status_code=201)
+def create_upgrade_request(
+    body: UpgradeRequestIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Plans screen's "Upgrade" button -- records a lead for sales to
+    follow up manually; no payment gateway yet (Razorpay planned). The
+    mobile app also opens WhatsApp with the same request at the same
+    moment, so this is a backup record, not the only trace of intent."""
+    request = models.UpgradeRequest(owner_id=owner.id, plan=body.plan, cycle=body.cycle)
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    return request
 
 
 @app.get("/month-end/{year}/{month}", response_model=MonthEndOut)

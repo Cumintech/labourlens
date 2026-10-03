@@ -347,6 +347,24 @@ class WagePayment(Base):
     )
 
 
+class UpgradeRequest(Base, TenantScoped):
+    """Plans screen's "Upgrade" button -- a lightweight lead record, not
+    a billing transaction. No payment gateway yet (Razorpay planned);
+    sales follows up manually (also pushed to WhatsApp from the app at
+    the same moment, see POST /plan/upgrade-request)."""
+
+    __tablename__ = "upgrade_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False)
+    plan: Mapped[str] = mapped_column(String, nullable=False)  # "starter" | "growth" | "pro"
+    cycle: Mapped[str] = mapped_column(String, nullable=False)  # "monthly" | "yearly"
+    status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Factory(Base, TenantScoped):
     """Admin-portal-only business/billing overlay on top of Owner --
     every Owner in this app already IS one factory, so rather than a

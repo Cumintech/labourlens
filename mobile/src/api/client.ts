@@ -584,6 +584,43 @@ export function createUpgradeRequest(
   });
 }
 
+export type AskChip =
+  | "absent_month"
+  | "not_marked_today"
+  | "wages_month"
+  | "unpaid_wages"
+  | "missing_form12"
+  | "no_wage_rate"
+  | "under_age"
+  | "not_on_device";
+
+export type AskRow = {
+  worker_id: number;
+  name: string;
+  code: string | null;
+  status: string;
+  deactivated_at: string | null;
+  value: string;
+};
+
+export type AskAction = { label: string; screen: string; params: Record<string, unknown> };
+
+export type AskAnswer = {
+  chip: string;
+  title: string;
+  headline: string;
+  tone: "good" | "warn" | "info";
+  rows: AskRow[];
+  actions: AskAction[];
+  based_on: string;
+};
+
+export function getAskAnswer(token: string, chip: AskChip): Promise<AskAnswer> {
+  return request<AskAnswer>(`/ask/${chip}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export type MonthEndStep = { key: string; label: string; complete: boolean; detail: string };
 export type MonthEnd = { year: number; month: number; steps: MonthEndStep[] };
 

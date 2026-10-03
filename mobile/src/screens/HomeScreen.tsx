@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { ChevronRight, Clock, MapPin, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
+import { ChevronRight, Clock, MapPin, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, Sparkles, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
@@ -149,7 +149,13 @@ export default function HomeScreen({ navigation }: Props) {
                 <Text style={styles.brandTagline}>Manage · Track · Empower</Text>
               </View>
             </View>
-            <IconButton icon={SettingsIcon} color={colors.surface} accessibilityLabel="Open settings" onPress={() => navigation.navigate("Settings")} />
+            <View style={styles.headerActions}>
+              <Pressable style={styles.askPill} onPress={() => navigation.navigate("Ask")} accessibilityRole="button" accessibilityLabel="Ask Labour Lens">
+                <Sparkles size={14} color={colors.surface} />
+                <Text style={styles.askPillText}>Ask</Text>
+              </Pressable>
+              <IconButton icon={SettingsIcon} color={colors.surface} accessibilityLabel="Open settings" onPress={() => navigation.navigate("Settings")} />
+            </View>
           </View>
           <Text style={styles.dateText}>{formatLongDate(today)}</Text>
           <Text style={styles.factoryName}>{owner?.factory_name ?? "Labour Lens"}</Text>
@@ -295,6 +301,17 @@ const styles = StyleSheet.create({
     paddingBottom: 52,
   },
   headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  askPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  askPillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.surface },
   brandRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   brandText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 18, color: colors.surface },
   brandTagline: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.onPrimaryMuted },

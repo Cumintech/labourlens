@@ -15,6 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import admin
+from ask import CHIPS
 import biometric_api
 import forms
 import models
@@ -1758,6 +1759,21 @@ def create_upgrade_request(
     db.commit()
     db.refresh(request)
     return request
+
+
+@app.get("/ask/{chip}")
+def ask_chip(
+    chip: str,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """"Ask Labour Lens" one-tap question chips -- read-only, no AI/LLM
+    yet (see ask.py); each chip function is already shaped to become an
+    AI tool implementation later without changing this endpoint."""
+    fn = CHIPS.get(chip)
+    if fn is None:
+        raise HTTPException(status_code=404, detail="Unknown question")
+    return fn(db, owner.id)
 
 
 @app.get("/month-end/{year}/{month}", response_model=MonthEndOut)

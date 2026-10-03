@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import AddWorkerScreen from "../screens/AddWorkerScreen";
 import BiometricConsentScreen from "../screens/BiometricConsentScreen";
 import BiometricDevicesScreen from "../screens/BiometricDevicesScreen";
+import AskScreen from "../screens/AskScreen";
 import ComplianceCheckScreen from "../screens/ComplianceCheckScreen";
 import PlansScreen from "../screens/PlansScreen";
 import DeviceUserMappingScreen from "../screens/DeviceUserMappingScreen";
@@ -61,6 +62,7 @@ export type RootStackParamList = {
   NeedsAttention: undefined;
   ComplianceCheck: undefined;
   Plans: undefined;
+  Ask: undefined;
   WorkerTypes: undefined;
   ShiftSettings: undefined;
   Profile: undefined;
@@ -144,6 +146,7 @@ export default function RootNavigator() {
         <Stack.Screen name="NeedsAttention" component={NeedsAttentionScreen} options={{ title: "Needs Attention" }} />
         <Stack.Screen name="ComplianceCheck" component={ComplianceCheckScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Plans" component={PlansScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Ask" component={AskScreen} options={{ headerShown: false }} />
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />

@@ -1,10 +1,10 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Download, FileText } from "lucide-react-native";
+import { ChevronRight, Download, FileText } from "lucide-react-native";
 import Svg, { Circle } from "react-native-svg";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { FormTemplate, Worker, generateAppointmentLetter, generateIdCard, getFormDownloadUrl, listFormTemplates, listWorkers, listWorkersMissingCompliance } from "../api/client";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FormTemplate, Worker, generateAppointmentLetter, generateIdCard, getComplianceCheck, getFormDownloadUrl, listFormTemplates, listWorkers } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import KeyboardScreen from "../components/KeyboardScreen";
 import ReportsHeroArt from "../components/ReportsHeroArt";
@@ -146,7 +146,7 @@ function rangeForPreset(preset: PeriodPreset, today: Date): { start: string; end
 // of its options rather than a separate screen), pick a worker if
 // relevant, download or email it. PDF only -- Excel export was removed
 // from every form per explicit request.
-export default function StatutoryFormsScreen({ route }: Props) {
+export default function StatutoryFormsScreen({ navigation, route }: Props) {
   const { token, owner } = useAuth();
   const today = useMemo(() => new Date(), []);
   // Locked only while arriving from a shortcut (e.g. Today -> Wage slips);
@@ -165,7 +165,7 @@ export default function StatutoryFormsScreen({ route }: Props) {
   const [customStart, setCustomStart] = useState(dateStr(today.getFullYear(), today.getMonth() + 1, 1));
   const [customEnd, setCustomEnd] = useState(isoDate(today));
   const [downloading, setDownloading] = useState(false);
-  const [missingCount, setMissingCount] = useState<number | null>(null);
+  const [complianceScore, setComplianceScore] = useState<number | null>(null);
   const insets = useSafeAreaInsets();
 
   useFocusEffect(
@@ -174,10 +174,11 @@ export default function StatutoryFormsScreen({ route }: Props) {
       listWorkers(token)
         .then(setWorkers)
         .catch(() => {});
-      // Read-only: powers the "Compliance ready" ring only.
-      listWorkersMissingCompliance(token)
-        .then((m) => setMissingCount(m.length))
-        .catch(() => setMissingCount(null));
+      // Read-only: powers the compliance ring only -- same score as the
+      // full Compliance Check screen this card links to.
+      getComplianceCheck(token)
+        .then((c) => setComplianceScore(c.score))
+        .catch(() => setComplianceScore(null));
     }, [token]),
   );
 
@@ -306,14 +307,12 @@ export default function StatutoryFormsScreen({ route }: Props) {
 
       <View style={styles.body}>
       {(() => {
-        const active = workers.filter((w) => w.status === "active").length;
-        if (missingCount === null || active === 0) return null;
-        const ready = Math.max(active - missingCount, 0);
-        const pct = Math.round((ready / active) * 100);
+        if (complianceScore === null) return null;
+        const pct = complianceScore;
         const r = 26;
         const c = 2 * Math.PI * r;
         return (
-          <View style={styles.complianceCard}>
+          <Pressable style={styles.complianceCard} onPress={() => navigation.navigate("ComplianceCheck")} accessibilityRole="button">
             <View style={styles.ringWrap}>
               <Svg width={64} height={64} viewBox="0 0 64 64" style={{ transform: [{ rotate: "-90deg" }] }}>
                 <Circle cx={32} cy={32} r={r} stroke={colors.divider} strokeWidth={7} fill="none" />
@@ -321,7 +320,7 @@ export default function StatutoryFormsScreen({ route }: Props) {
                   cx={32}
                   cy={32}
                   r={r}
-                  stroke={pct === 100 ? colors.present : pct >= 70 ? colors.present : colors.leave}
+                  stroke={pct >= 90 ? colors.present : pct >= 70 ? colors.present : colors.leave}
                   strokeWidth={7}
                   fill="none"
                   strokeLinecap="round"
@@ -331,12 +330,11 @@ export default function StatutoryFormsScreen({ route }: Props) {
               <Text style={styles.ringText}>{pct}%</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.complianceTitle}>{pct === 100 ? "Compliance ready" : "Compliance check"}</Text>
-              <Text style={styles.complianceSub}>
-                {ready} of {active} workers have complete Form 12 details
-              </Text>
+              <Text style={styles.complianceTitle}>{pct >= 90 ? "Compliance ready" : "Compliance check"}</Text>
+              <Text style={styles.complianceSub}>{pct} of 100 · tap to see what to fix</Text>
             </View>
-          </View>
+            <ChevronRight size={18} color={colors.textSecondary} />
+          </Pressable>
         );
       })()}
 

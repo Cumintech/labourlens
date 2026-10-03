@@ -1,8 +1,9 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { Clock, MapPin, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
+import { ChevronRight, Clock, MapPin, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Attendance,
@@ -13,6 +14,7 @@ import {
   listLeaveForDate,
   listShiftConfigs,
   listWorkers,
+  getComplianceCheck,
 } from "../api/client";
 import { isoDate } from "../components/DateField";
 import WorkerHeroArt from "../components/WorkerHeroArt";
@@ -50,6 +52,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [leave, setLeave] = useState<LeaveEntry[]>([]);
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [compliance, setCompliance] = useState<{ score: number; toFix: number } | null>(null);
 
   const today = useMemo(() => new Date(), []);
   const todayIso = useMemo(() => isoDate(today), [today]);
@@ -64,6 +67,11 @@ export default function HomeScreen({ navigation }: Props) {
     ]);
     setWorkers(w.filter((x) => x.status === "active"));
     setAttendance(a);
+    // Isolated from the Promise.all above -- a failure here just hides
+    // the compliance card, not the whole Today screen.
+    getComplianceCheck(token)
+      .then((c) => setCompliance({ score: c.score, toFix: c.items.filter((i) => !i.passed).length }))
+      .catch(() => setCompliance(null));
     setLeave(l);
     setShifts(s);
   }, [token, todayIso]);
@@ -194,6 +202,30 @@ export default function HomeScreen({ navigation }: Props) {
           </Pressable>
         </View>
 
+        {compliance && (
+          <Pressable style={styles.complianceCard} onPress={() => navigation.navigate("ComplianceCheck")} accessibilityRole="button">
+            <View style={styles.complianceRingWrap}>
+              <Svg width={36} height={36} viewBox="0 0 36 36" style={{ transform: [{ rotate: "-90deg" }] }}>
+                <Circle cx={18} cy={18} r={15} stroke={colors.divider} strokeWidth={4} fill="none" />
+                <Circle
+                  cx={18}
+                  cy={18}
+                  r={15}
+                  stroke={compliance.score >= 90 ? colors.present : compliance.score >= 70 ? colors.primary : colors.warning}
+                  strokeWidth={4}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray={`${(2 * Math.PI * 15 * compliance.score) / 100} ${2 * Math.PI * 15}`}
+                />
+              </Svg>
+            </View>
+            <Text style={styles.complianceText}>
+              Compliance {compliance.score}/100 · {compliance.toFix} to fix
+            </Text>
+            <ChevronRight size={18} color={colors.textSecondary} />
+          </Pressable>
+        )}
+
         <View style={styles.quickActionsWrap}>
           <View style={styles.quickActionsHeaderRow}>
             <Text style={[type.caption, styles.quickActionsLabel]}>Quick actions</Text>
@@ -300,6 +332,20 @@ const styles = StyleSheet.create({
   shiftTileValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.navy, fontVariant: ["tabular-nums"] },
   markButton: { backgroundColor: colors.action, borderRadius: 12, height: 46, alignItems: "center", justifyContent: "center" },
   markButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
+  complianceCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.sm + 4,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  complianceRingWrap: { width: 36, height: 36 },
+  complianceText: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.navy },
   quickActionsWrap: { paddingHorizontal: spacing.md, marginTop: spacing.lg },
   quickActionsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
   quickActionsLabel: { color: colors.textSecondary },

@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import AddWorkerScreen from "../screens/AddWorkerScreen";
 import BiometricConsentScreen from "../screens/BiometricConsentScreen";
 import BiometricDevicesScreen from "../screens/BiometricDevicesScreen";
+import ComplianceCheckScreen from "../screens/ComplianceCheckScreen";
 import DeviceUserMappingScreen from "../screens/DeviceUserMappingScreen";
 import UnmappedPunchesScreen from "../screens/UnmappedPunchesScreen";
 import ForgotPasswordScreen from "../screens/ForgotPasswordScreen";
@@ -57,6 +58,7 @@ export type RootStackParamList = {
   // Always the current calendar month -- see MonthEndScreen.tsx.
   MonthEnd: undefined;
   NeedsAttention: undefined;
+  ComplianceCheck: undefined;
   WorkerTypes: undefined;
   ShiftSettings: undefined;
   Profile: undefined;
@@ -130,10 +132,15 @@ export default function RootNavigator() {
         <Stack.Screen name="DeviceUserMapping" component={DeviceUserMappingScreen} options={{ title: "Map Device Users" }} />
         <Stack.Screen name="UnmappedPunches" component={UnmappedPunchesScreen} options={{ title: "Unmapped Punches" }} />
         <Stack.Screen name="WorkerProfile" component={WorkerProfileScreen} options={{ title: "Worker" }} />
-        <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ title: "Edit Worker" }} />
-        <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ title: "Wage Rate" }} />
+        {/* headerShown: false -- both screens draw their own full-width blue
+            header band in-body (avatar/progress, hero rate card); the
+            default native header would otherwise double up a second blue
+            bar above it. */}
+        <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ headerShown: false }} />
         <Stack.Screen name="MonthEnd" component={MonthEndScreen} options={{ title: "Month-End Checklist" }} />
         <Stack.Screen name="NeedsAttention" component={NeedsAttentionScreen} options={{ title: "Needs Attention" }} />
+        <Stack.Screen name="ComplianceCheck" component={ComplianceCheckScreen} options={{ headerShown: false }} />
         <Stack.Screen name="WorkerTypes" component={WorkerTypesScreen} options={{ title: "Worker Types" }} />
         <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreen} options={{ title: "Shift Settings" }} />
         <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />

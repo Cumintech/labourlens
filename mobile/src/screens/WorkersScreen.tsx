@@ -15,7 +15,14 @@ import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing, type } from "../theme";
 
-type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
+type Props = {
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+  // Populated when reached via the Compliance Check screen's "Fix"
+  // action for a multi-worker item (see ComplianceCheckScreen's
+  // navigateToAction) -- same nested-tab params pattern as HomeScreen's
+  // goToTab, read once per focus and dismissible from here on.
+  route?: { params?: { filterIds?: number[]; filterLabel?: string } };
+};
 
 type Filter = "all" | "missing" | "no_wage" | "inactive" | "underage" | "unmapped";
 
@@ -43,7 +50,7 @@ const ALERT_ICON: Record<string, typeof ListChecks> = {
 // "every worker in one place" screen before this (Dashboard only ever
 // showed today's attendance rows). Pulled forward from the redesign's
 // Phase 3 spec since the bottom tab bar can't be built without it.
-export default function WorkersScreen({ navigation }: Props) {
+export default function WorkersScreen({ navigation, route }: Props) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -56,6 +63,17 @@ export default function WorkersScreen({ navigation }: Props) {
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [workerAlerts, setWorkerAlerts] = useState<HomeAlert[]>([]);
+  const [externalFilter, setExternalFilter] = useState<{ ids: number[]; label: string } | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const ids = route?.params?.filterIds;
+      if (ids) {
+        setExternalFilter({ ids, label: route?.params?.filterLabel ?? "Filtered" });
+        setFilter("all");
+      }
+    }, [route?.params?.filterIds, route?.params?.filterLabel]),
+  );
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -143,7 +161,10 @@ export default function WorkersScreen({ navigation }: Props) {
 
   const filtered = useMemo(() => {
     let list = workers;
-    if (filter === "missing") list = list.filter((w) => missingComplianceIds.has(w.id));
+    if (externalFilter) {
+      const idSet = new Set(externalFilter.ids);
+      list = list.filter((w) => idSet.has(w.id));
+    } else if (filter === "missing") list = list.filter((w) => missingComplianceIds.has(w.id));
     else if (filter === "no_wage") list = list.filter((w) => w.status === "active" && !w.worker_type_id);
     else if (filter === "inactive") list = list.filter((w) => w.status !== "active");
     else if (filter === "underage") list = underageWorkers;
@@ -158,7 +179,7 @@ export default function WorkersScreen({ navigation }: Props) {
       );
     }
     return list;
-  }, [workers, filter, search, missingComplianceIds, underageWorkers, unmappedWorkers]);
+  }, [workers, filter, search, missingComplianceIds, underageWorkers, unmappedWorkers, externalFilter]);
 
   function openWorker(worker: Worker) {
     navigation.navigate("WorkerProfile", {
@@ -262,14 +283,23 @@ export default function WorkersScreen({ navigation }: Props) {
               </View>
             )}
 
-            {(filter === "underage" || filter === "unmapped") && (
-              <Pressable style={styles.dismissChip} onPress={() => setFilter("all")} accessibilityRole="button">
+            {externalFilter ? (
+              <Pressable style={styles.dismissChip} onPress={() => setExternalFilter(null)} accessibilityRole="button">
                 <Text style={styles.dismissChipText}>
-                  Showing {filtered.length} worker{filtered.length === 1 ? "" : "s"}{" "}
-                  {filter === "underage" ? "under minimum age" : "not mapped to a device"}
+                  Showing {filtered.length} worker{filtered.length === 1 ? "" : "s"} · {externalFilter.label}
                 </Text>
                 <Text style={styles.dismissChipClose}>✕</Text>
               </Pressable>
+            ) : (
+              (filter === "underage" || filter === "unmapped") && (
+                <Pressable style={styles.dismissChip} onPress={() => setFilter("all")} accessibilityRole="button">
+                  <Text style={styles.dismissChipText}>
+                    Showing {filtered.length} worker{filtered.length === 1 ? "" : "s"}{" "}
+                    {filter === "underage" ? "under minimum age" : "not mapped to a device"}
+                  </Text>
+                  <Text style={styles.dismissChipClose}>✕</Text>
+                </Pressable>
+              )
             )}
           </View>
         }

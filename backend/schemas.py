@@ -371,6 +371,39 @@ class HomeAlertOut(BaseModel):
     count: int
 
 
+class ComplianceCategoryOut(BaseModel):
+    key: str
+    label: str
+    score: int
+
+
+class ComplianceActionOut(BaseModel):
+    screen: str
+    params: dict
+
+
+class ComplianceItemOut(BaseModel):
+    key: str
+    label: str
+    detail: str
+    category: str
+    severity: str  # "critical" | "important" | "minor"
+    weight: int
+    passed: bool
+    affected: int
+    total: int
+    worker_ids: list[int]
+    action: ComplianceActionOut | None = None
+
+
+class ComplianceCheckOut(BaseModel):
+    score: int
+    band: str  # "ready" | "good" | "act"
+    checked_at: datetime
+    categories: list[ComplianceCategoryOut]
+    items: list[ComplianceItemOut]
+
+
 class HomeAlertsOut(BaseModel):
     alerts: list[HomeAlertOut]
 

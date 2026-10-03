@@ -542,6 +542,36 @@ export function getHomeAlerts(token: string): Promise<{ alerts: HomeAlert[] }> {
   });
 }
 
+export type ComplianceCategory = { key: string; label: string; score: number };
+export type ComplianceAction = { screen: string; params: Record<string, unknown> };
+export type ComplianceSeverity = "critical" | "important" | "minor";
+export type ComplianceItem = {
+  key: string;
+  label: string;
+  detail: string;
+  category: string;
+  severity: ComplianceSeverity;
+  weight: number;
+  passed: boolean;
+  affected: number;
+  total: number;
+  worker_ids: number[];
+  action: ComplianceAction | null;
+};
+export type ComplianceCheck = {
+  score: number;
+  band: "ready" | "good" | "act";
+  checked_at: string;
+  categories: ComplianceCategory[];
+  items: ComplianceItem[];
+};
+
+export function getComplianceCheck(token: string): Promise<ComplianceCheck> {
+  return request<ComplianceCheck>("/compliance/check", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export type MonthEndStep = { key: string; label: string; complete: boolean; detail: string };
 export type MonthEnd = { year: number; month: number; steps: MonthEndStep[] };
 

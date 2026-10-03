@@ -27,7 +27,7 @@ def upgrade() -> None:
         sa.Column('plan', sa.String(), nullable=False),
         sa.Column('cycle', sa.String(), nullable=False),
         sa.Column('status', sa.String(), nullable=False, server_default='pending'),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=True),
         sa.ForeignKeyConstraint(['owner_id'], ['owners.id']),
         sa.PrimaryKeyConstraint('id'),
     )

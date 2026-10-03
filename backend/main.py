@@ -151,7 +151,18 @@ def _shift_configs_for_owner(db: Session, owner_id: int) -> list[models.ShiftCon
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    # Security/ops audit finding: this used to run unconditionally, so
+    # Alembic wasn't the sole source of schema truth in production --
+    # create_all() silently created a new model's table on boot before
+    # its own migration ran, leaving alembic_version out of sync (hit
+    # this for real with the upgrade_requests table: DuplicateTable on
+    # the next `alembic upgrade head`, fixed only by a manual `stamp`).
+    # Every table in models.py is confirmed covered by an Alembic
+    # create_table (checked by diffing __tablename__ against every
+    # migration's op.create_table calls) -- Alembic alone is sufficient
+    # in production. Kept for local dev/fresh-SQLite convenience only.
+    if ENVIRONMENT != "production":
+        Base.metadata.create_all(bind=engine)
     # Skippable via OCR_WARM_UP=false -- loading EasyOCR's PyTorch models
     # at startup needs real memory headroom a free-tier host (e.g.
     # Render's 512MB web service) doesn't have, and an OOM here takes

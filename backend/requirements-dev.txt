@@ -4,6 +4,12 @@
 -r requirements.txt
 aiosmtpd==1.4.6
 
+# fastapi.testclient.TestClient requires httpx directly (FastAPI itself
+# doesn't pin it) -- every verify_*.py script imports TestClient, so a
+# clean `pip install -r requirements.txt -r requirements-dev.txt` can't
+# run the test suite at all without this.
+httpx==0.28.1
+
 # verify_forms.py (Phase 3 Day 3) -- extracts real text from generated
 # Form 25/25-B/12/15/Wage Slip PDFs to check actual content, not just
 # magic bytes + size, matching verify_reports.py's existing discipline.

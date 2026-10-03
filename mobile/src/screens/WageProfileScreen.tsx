@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ApiError,
   WageProfile,
@@ -52,6 +53,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "WageProfile">;
 export default function WageProfileScreen({ route, navigation }: Props) {
   const { workerId, workerName, fromRegistration } = route.params;
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
   const [history, setHistory] = useState<WageProfile[]>([]);
   const [currentRate, setCurrentRate] = useState<WageProfile | null>(null);
   const [worker, setWorker] = useState<Worker | null>(null);
@@ -366,7 +368,7 @@ export default function WageProfileScreen({ route, navigation }: Props) {
         </View>
       </KeyboardScreen>
 
-      <View style={styles.stickyFooter}>
+      <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + spacing.sm }]}>
         <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
           {saving ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Add rate</Text>}
         </TouchableOpacity>

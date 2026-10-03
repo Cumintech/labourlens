@@ -64,6 +64,7 @@ export default function WorkersScreen({ navigation, route }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [workerAlerts, setWorkerAlerts] = useState<HomeAlert[]>([]);
   const [externalFilter, setExternalFilter] = useState<{ ids: number[]; label: string } | null>(null);
+  const [complianceExpanded, setComplianceExpanded] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -264,22 +265,36 @@ export default function WorkersScreen({ navigation, route }: Props) {
 
             {workerAlerts.length > 0 && (
               <View style={styles.complianceCard}>
-                <Text style={styles.complianceBannerText}>Worker compliance - attention needed</Text>
-                {workerAlerts.map((al) => {
-                  const Icon = ALERT_ICON[al.code] ?? ListChecks;
-                  return (
-                    <Pressable
-                      key={al.code}
-                      style={styles.complianceRow}
-                      accessibilityRole="button"
-                      onPress={() => handleAlertPress(al)}
-                    >
-                      <Icon size={18} color={colors.warningTintText} />
-                      <Text style={styles.alertLine}>{al.message}</Text>
-                      <ChevronRight size={16} color={colors.warning} />
-                    </Pressable>
-                  );
-                })}
+                <Pressable
+                  style={styles.complianceHeaderRow}
+                  accessibilityRole="button"
+                  onPress={() => setComplianceExpanded((v) => !v)}
+                >
+                  <Text style={styles.complianceBannerText}>
+                    Worker compliance - attention needed ({workerAlerts.length})
+                  </Text>
+                  <ChevronRight
+                    size={16}
+                    color={colors.warningTintText}
+                    style={{ transform: [{ rotate: complianceExpanded ? "90deg" : "0deg" }] }}
+                  />
+                </Pressable>
+                {complianceExpanded &&
+                  workerAlerts.map((al) => {
+                    const Icon = ALERT_ICON[al.code] ?? ListChecks;
+                    return (
+                      <Pressable
+                        key={al.code}
+                        style={styles.complianceRow}
+                        accessibilityRole="button"
+                        onPress={() => handleAlertPress(al)}
+                      >
+                        <Icon size={18} color={colors.warningTintText} />
+                        <Text style={styles.alertLine}>{al.message}</Text>
+                        <ChevronRight size={16} color={colors.warning} />
+                      </Pressable>
+                    );
+                  })}
               </View>
             )}
 
@@ -360,11 +375,16 @@ const styles = StyleSheet.create({
     borderColor: colors.warningBorder,
     backgroundColor: colors.warningTint,
     paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 4,
-    gap: 2,
+    paddingBottom: 2,
+    overflow: "hidden",
   },
-  complianceBannerText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.warningTintText, marginBottom: 4 },
+  complianceHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
+  },
+  complianceBannerText: { flex: 1, fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.warningTintText },
   complianceRow: {
     flexDirection: "row",
     alignItems: "center",

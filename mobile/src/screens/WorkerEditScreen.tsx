@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Briefcase, Contact, ShieldCheck, Wallet } from "lucide-react-native";
+import { Briefcase, Contact, ShieldCheck } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -12,7 +12,6 @@ import {
   getBiometricConsent,
   getWorker,
   getWorkerCompliance,
-  recordWagePayment,
   updateWorkerCompliance,
 } from "../api/client";
 import DateField, { addYearsIso, isoDate } from "../components/DateField";
@@ -42,13 +41,6 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [exists, setExists] = useState(false);
-
-  const now = new Date();
-  const [paymentMonth, setPaymentMonth] = useState(String(now.getMonth() + 1));
-  const [paymentYear, setPaymentYear] = useState(String(now.getFullYear()));
-  const [dateOfPayment, setDateOfPayment] = useState("");
-  const [paymentReference, setPaymentReference] = useState("");
-  const [savingPayment, setSavingPayment] = useState(false);
 
   const [fatherOrSpouseName, setFatherOrSpouseName] = useState("");
   const [designation, setDesignation] = useState("");
@@ -148,31 +140,6 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
       Alert.alert("Save failed", message);
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleRecordPayment() {
-    if (!token) return;
-    const month = parseInt(paymentMonth, 10);
-    const year = parseInt(paymentYear, 10);
-    if (!month || !year) {
-      Alert.alert("Missing fields", "Month and year are required.");
-      return;
-    }
-    setSavingPayment(true);
-    try {
-      await recordWagePayment(token, workerId, {
-        month,
-        year,
-        date_of_payment: dateOfPayment.trim() || undefined,
-        payment_reference: paymentReference.trim() || undefined,
-      });
-      Alert.alert("Saved", `Payment recorded for ${month}/${year}.`);
-    } catch (e) {
-      const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
-      Alert.alert("Save failed", message);
-    } finally {
-      setSavingPayment(false);
     }
   }
 
@@ -305,33 +272,10 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
             </>
           )}
         </FieldCard>
-
-        {isActive && (
-          <FieldCard title="Bank & payments" icon={Wallet}>
-            <Text style={styles.cardHelper}>Mark wages as paid for a month.</Text>
-            <View style={styles.gridRow}>
-              <View style={styles.gridCell}>
-                <Field label="Month" value={paymentMonth} onChangeText={setPaymentMonth} placeholder="9" />
-              </View>
-              <View style={styles.gridCell}>
-                <Field label="Year" value={paymentYear} onChangeText={setPaymentYear} placeholder="2026" />
-              </View>
-            </View>
-            <DateField label="Date of payment" value={dateOfPayment} onChange={setDateOfPayment} />
-            <Field label="Bank transaction ID / reference" value={paymentReference} onChangeText={setPaymentReference} />
-            <TouchableOpacity
-              style={[styles.secondaryButton, savingPayment && styles.buttonDisabled]}
-              onPress={handleRecordPayment}
-              disabled={savingPayment}
-            >
-              {savingPayment ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.secondaryButtonText}>Record payment</Text>}
-            </TouchableOpacity>
-          </FieldCard>
-        )}
       </KeyboardScreen>
 
       {isActive && (
-        <View style={styles.stickyFooter}>
+        <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + spacing.sm }]}>
           <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
             {saving ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Save</Text>}
           </TouchableOpacity>
@@ -439,7 +383,6 @@ const styles = StyleSheet.create({
   },
   fieldCardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing.md },
   fieldCardTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
-  cardHelper: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.sm },
   sectionLabelAmber: {
     fontFamily: "IBMPlexSans_700Bold",
     fontSize: 12,
@@ -473,15 +416,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlignVertical: "center",
   },
-  secondaryButton: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderRadius: radius.sm,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.primary },
   stickyFooter: {
     backgroundColor: colors.surface,
     borderTopWidth: 1,

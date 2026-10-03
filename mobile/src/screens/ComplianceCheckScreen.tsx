@@ -145,8 +145,7 @@ export default function ComplianceCheckScreen({ navigation }: Props) {
                 />
               </Svg>
               <View style={styles.ringTextWrap}>
-                <Text style={styles.ringScore}>{data.score}</Text>
-                <Text style={styles.ringOf}>of 100</Text>
+                <Text style={styles.ringScore}>{data.score}%</Text>
               </View>
             </View>
             <View style={{ flex: 1 }}>
@@ -273,8 +272,7 @@ const styles = StyleSheet.create({
   scoreRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.lg },
   ringWrap: { width: 100, height: 100, alignItems: "center", justifyContent: "center" },
   ringTextWrap: { position: "absolute", alignItems: "center" },
-  ringScore: { fontFamily: "IBMPlexSans_700Bold", fontSize: 28, color: colors.surface },
-  ringOf: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.onPrimaryMuted, marginTop: -4 },
+  ringScore: { fontFamily: "IBMPlexSans_700Bold", fontSize: 26, color: colors.surface },
   bandLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 18, color: colors.surface },
   subLabel: { fontFamily: "IBMPlexSans_500Medium", fontSize: 13, color: colors.onPrimaryMuted, marginTop: 4 },
   checkedAt: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.onPrimaryMuted, marginTop: 6 },

@@ -1,16 +1,14 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { AlertTriangle, ChevronRight, Clock, MapPin, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
+import { Clock, MapPin, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Attendance,
-  HomeAlert,
   LeaveEntry,
   ShiftConfig,
   Worker,
-  getHomeAlerts,
   listAttendance,
   listLeaveForDate,
   listShiftConfigs,
@@ -39,10 +37,11 @@ function formatLongDate(d: Date): string {
   return `${WEEKDAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
 }
 
-// "Needs attention" surfaces GET /home/alerts as a single summary card
-// (tap -> NeedsAttentionScreen for the full list) -- the month-end
-// checklist card that used to live here was removed to declutter Home;
-// MonthEndScreen itself is unchanged, just no longer linked from here.
+// Needs-attention / compliance alerts moved to the Workers tab (see
+// WorkersScreen.tsx) -- Home no longer fetches or shows GET /home/alerts.
+// The month-end checklist card that used to live here was removed to
+// declutter Home; MonthEndScreen itself is unchanged, just no longer
+// linked from here.
 export default function HomeScreen({ navigation }: Props) {
   const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
@@ -50,7 +49,6 @@ export default function HomeScreen({ navigation }: Props) {
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [leave, setLeave] = useState<LeaveEntry[]>([]);
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
-  const [alerts, setAlerts] = useState<HomeAlert[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const today = useMemo(() => new Date(), []);
@@ -58,12 +56,6 @@ export default function HomeScreen({ navigation }: Props) {
 
   const load = useCallback(async () => {
     if (!token) return;
-    // Core data (required) and the newer home-alerts/month-end endpoints
-    // (optional -- may 404 against a backend deploy that predates them)
-    // are fetched separately: one failing Promise.all used to reject the
-    // whole batch and leave workers/attendance stuck at their initial
-    // empty state forever, which read as "0 of 0 marked" no matter how
-    // many workers actually existed.
     const [w, a, l, s] = await Promise.all([
       listWorkers(token),
       listAttendance(token, todayIso),
@@ -74,13 +66,6 @@ export default function HomeScreen({ navigation }: Props) {
     setAttendance(a);
     setLeave(l);
     setShifts(s);
-
-    try {
-      const homeAlerts = await getHomeAlerts(token);
-      setAlerts(homeAlerts.alerts);
-    } catch {
-      // older backend deploy without this endpoint -- leave alerts empty
-    }
   }, [token, todayIso]);
 
   // Switches to a sibling tab from a screen that's itself nested inside
@@ -209,21 +194,6 @@ export default function HomeScreen({ navigation }: Props) {
           </Pressable>
         </View>
 
-        {alerts.length > 0 && (
-          <Pressable style={styles.attentionCard} onPress={() => navigation.navigate("NeedsAttention")}>
-            <View style={styles.attentionIcon}>
-              <AlertTriangle size={18} color={colors.warning} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.attentionCardTitle}>Needs attention</Text>
-              <Text style={styles.attentionCardSubtitle}>
-                {alerts.length} {alerts.length === 1 ? "item needs" : "items need"} attention
-              </Text>
-            </View>
-            <ChevronRight size={20} color={colors.warning} />
-          </Pressable>
-        )}
-
         <View style={styles.quickActionsWrap}>
           <View style={styles.quickActionsHeaderRow}>
             <Text style={[type.caption, styles.quickActionsLabel]}>Quick actions</Text>
@@ -330,21 +300,6 @@ const styles = StyleSheet.create({
   shiftTileValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.navy, fontVariant: ["tabular-nums"] },
   markButton: { backgroundColor: colors.action, borderRadius: 12, height: 46, alignItems: "center", justifyContent: "center" },
   markButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
-  attentionCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.warningTint,
-    borderWidth: 1,
-    borderColor: colors.warningBorder,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.lg,
-  },
-  attentionIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.leaveTint, alignItems: "center", justifyContent: "center" },
-  attentionCardTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.warningTintText },
-  attentionCardSubtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   quickActionsWrap: { paddingHorizontal: spacing.md, marginTop: spacing.lg },
   quickActionsHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
   quickActionsLabel: { color: colors.textSecondary },

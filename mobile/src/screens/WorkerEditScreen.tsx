@@ -1,7 +1,9 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useCallback, useState } from "react";
+import { Briefcase, Contact, ShieldCheck, Wallet } from "lucide-react-native";
+import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ApiError,
   BiometricConsent,
@@ -17,6 +19,7 @@ import DateField, { addYearsIso, isoDate } from "../components/DateField";
 import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
 import { ListSkeleton } from "../components/Skeleton";
+import { Avatar } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { colors, radius, spacing } from "../theme";
@@ -35,6 +38,7 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
   const { workerId, workerName, workerStatus, deactivatedAt } = route.params;
   const isActive = workerStatus === "active";
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [exists, setExists] = useState(false);
@@ -103,6 +107,17 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
         .finally(() => setLoading(false));
     }, [load]),
   );
+
+  // Same 5 fields and "x of 5" scheme as WorkerProfileScreen's own
+  // completeness calculation -- kept in sync by hand since each screen
+  // loads compliance independently.
+  const completeness = useMemo(() => {
+    const fields = compliance
+      ? [compliance.father_or_spouse_name, compliance.designation_or_nature_of_work, compliance.epf_uan_no, compliance.esic_no, compliance.date_of_joining]
+      : [];
+    const filled = fields.filter((f) => !!f && f.trim() !== "").length;
+    return { filled, total: 5 };
+  }, [compliance]);
 
   async function handleSave() {
     if (!token) return;
@@ -177,121 +192,164 @@ export default function WorkerEditScreen({ route, navigation }: Props) {
     );
   }
 
+  const showWarningsCard = !!compliance || isActive;
+
   return (
-    <KeyboardScreen contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{workerName}</Text>
-      <Text style={styles.subtitle}>Form 12 details</Text>
-
-      {!isActive && (
-        <View style={styles.deactivatedBanner}>
-          <Text style={styles.deactivatedBannerText}>
-            This worker was deactivated{deactivatedAt ? ` on ${deactivatedAt.slice(0, 10)}` : ""}. Details are
-            read-only.
-          </Text>
-        </View>
-      )}
-
-      {isActive && (
-        <View style={styles.navLinkRow}>
-          <TouchableOpacity
-            style={styles.navLinkButton}
-            onPress={() => navigation.navigate("WageProfile", { workerId, workerName })}
-          >
-            <Text style={styles.navLinkText}>Wage rate</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {isActive && (
-        <View style={styles.fieldWrap}>
-          <Text style={styles.label}>Biometric consent</Text>
-          {biometricConsent ? (
-            <Text style={styles.readOnlyValue}>Captured on {biometricConsent.consented_at.slice(0, 10)}</Text>
-          ) : (
-            <View style={styles.navLinkRow}>
+    <View style={{ flex: 1, backgroundColor: colors.ground }}>
+      <KeyboardScreen contentContainerStyle={styles.container}>
+        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerIdentity}>
+              <Avatar workerId={workerId} name={workerName} size={48} />
+              <View style={{ flexShrink: 1 }}>
+                <Text style={styles.headerName} numberOfLines={1}>{workerName}</Text>
+                <Text style={styles.headerSubtitle}>Form 12 details</Text>
+              </View>
+            </View>
+            {isActive && (
               <TouchableOpacity
-                style={styles.navLinkButton}
-                onPress={() => navigation.navigate("BiometricConsent", { workerId, workerName, returnTo: true })}
+                style={styles.wagePill}
+                onPress={() => navigation.navigate("WageProfile", { workerId, workerName })}
               >
-                <Text style={styles.navLinkText}>Capture consent</Text>
+                <Text style={styles.wagePillText}>Wage rate</Text>
               </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
-
-      {compliance && (
-        <View style={styles.badgeRow}>
-          <View style={[styles.badge, compliance.category === "young_person" ? styles.badgeAmber : styles.badgeTeal]}>
-            <Text style={styles.badgeText}>{compliance.category === "young_person" ? "Young person" : "Adult"}</Text>
+            )}
           </View>
-          {compliance.under_minimum_age_warning && (
-            <Text style={styles.warningText}>
-              This worker appears to be under the legal minimum working age (14) -- please verify the date of
-              birth.
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round((completeness.filled / completeness.total) * 100)}%` as `${number}%` }]} />
+          </View>
+          <Text style={styles.progressLabel}>{completeness.filled} of {completeness.total} key fields filled</Text>
+        </View>
+
+        {!isActive && (
+          <View style={styles.deactivatedBanner}>
+            <Text style={styles.deactivatedBannerText}>
+              This worker was deactivated{deactivatedAt ? ` on ${deactivatedAt.slice(0, 10)}` : ""}. Details are
+              read-only.
             </Text>
-          )}
-        </View>
-      )}
+          </View>
+        )}
 
-      {compliance?.worker_code && (
-        <View style={styles.fieldWrap}>
-          <Text style={styles.label}>Working ID / Token no.</Text>
-          <Text style={styles.readOnlyValue}>{compliance.worker_code}</Text>
-        </View>
-      )}
-      <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} disabled={!isActive} />
-      <Field label="Designation / nature of work" value={designation} onChangeText={setDesignation} disabled={!isActive} />
-      <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} disabled={!isActive} />
-      <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} disabled={!isActive} />
-      <DateField
-        label="Date of entry into service"
-        value={dateOfJoining}
-        onChange={setDateOfJoining}
-        disabled={!isActive}
-        minDate={workerDob ? addYearsIso(workerDob, MINIMUM_WORKING_AGE) : undefined}
-        maxDate={isoDate(new Date())}
-      />
-      <DateField label="Date made permanent" value={dateMadePermanent} onChange={setDateMadePermanent} disabled={!isActive} />
-      <Field label="Period of suspension, if any" value={suspensionPeriod} onChangeText={setSuspensionPeriod} disabled={!isActive} />
+        {showWarningsCard && (
+          <View style={styles.warningsCard}>
+            {compliance && (
+              <View style={styles.badgeRow}>
+                <View style={[styles.badge, compliance.category === "young_person" ? styles.badgeAmber : styles.badgeTeal]}>
+                  <Text style={styles.badgeText}>{compliance.category === "young_person" ? "Young person" : "Adult"}</Text>
+                </View>
+              </View>
+            )}
+            {compliance?.under_minimum_age_warning && (
+              <Text style={styles.warningText}>
+                This worker appears to be under the legal minimum working age ({MINIMUM_WORKING_AGE}) -- please verify the date of
+                birth.
+              </Text>
+            )}
+            {isActive && (
+              <View style={styles.consentRow}>
+                <Text style={styles.consentLabel}>Biometric consent</Text>
+                {biometricConsent ? (
+                  <Text style={styles.consentCaptured}>Captured on {biometricConsent.consented_at.slice(0, 10)}</Text>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.consentButton}
+                    onPress={() => navigation.navigate("BiometricConsent", { workerId, workerName, returnTo: true })}
+                  >
+                    <Text style={styles.consentButtonText}>Capture consent</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
-      {compliance?.category === "young_person" && (
-        <>
-          <Text style={styles.sectionLabelAmber}>Young person -- certificate of fitness</Text>
-          <Field label="Fitness certificate no." value={fitnessCertNo} onChangeText={setFitnessCertNo} disabled={!isActive} />
-          <DateField label="Valid till" value={fitnessCertValidTill} onChange={setFitnessCertValidTill} disabled={!isActive} />
-        </>
-      )}
-
-      {isActive && (
-        <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Save</Text>}
-        </TouchableOpacity>
-      )}
-
-      {isActive && (
-        <>
-          <Text style={styles.sectionLabel}>Mark wages as paid</Text>
-          <View style={styles.paymentRow}>
-            <View style={{ flex: 1 }}>
-              <Field label="Month" value={paymentMonth} onChangeText={setPaymentMonth} placeholder="9" />
+        <FieldCard title="Identity" icon={Contact}>
+          {compliance?.worker_code && (
+            <View style={styles.fieldWrap}>
+              <Text style={styles.label}>Working ID / Token no.</Text>
+              <Text style={styles.readOnlyValue}>{compliance.worker_code}</Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Field label="Year" value={paymentYear} onChangeText={setPaymentYear} placeholder="2026" />
+          )}
+          <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} disabled={!isActive} />
+        </FieldCard>
+
+        <FieldCard title="Work" icon={Briefcase}>
+          <Field label="Designation / nature of work" value={designation} onChangeText={setDesignation} disabled={!isActive} />
+          <DateField
+            label="Date of entry into service"
+            value={dateOfJoining}
+            onChange={setDateOfJoining}
+            disabled={!isActive}
+            minDate={workerDob ? addYearsIso(workerDob, MINIMUM_WORKING_AGE) : undefined}
+            maxDate={isoDate(new Date())}
+          />
+          <DateField label="Date made permanent" value={dateMadePermanent} onChange={setDateMadePermanent} disabled={!isActive} />
+          <Field label="Period of suspension, if any" value={suspensionPeriod} onChangeText={setSuspensionPeriod} disabled={!isActive} />
+        </FieldCard>
+
+        <FieldCard title="Statutory" icon={ShieldCheck}>
+          <View style={styles.gridRow}>
+            <View style={styles.gridCell}>
+              <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} disabled={!isActive} />
+            </View>
+            <View style={styles.gridCell}>
+              <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} disabled={!isActive} />
             </View>
           </View>
-          <DateField label="Date of payment" value={dateOfPayment} onChange={setDateOfPayment} />
-          <Field label="Bank transaction ID / reference" value={paymentReference} onChangeText={setPaymentReference} />
-          <TouchableOpacity
-            style={[styles.button, savingPayment && styles.buttonDisabled]}
-            onPress={handleRecordPayment}
-            disabled={savingPayment}
-          >
-            {savingPayment ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Record payment</Text>}
+
+          {compliance?.category === "young_person" && (
+            <>
+              <Text style={styles.sectionLabelAmber}>Young person -- certificate of fitness</Text>
+              <Field label="Fitness certificate no." value={fitnessCertNo} onChangeText={setFitnessCertNo} disabled={!isActive} />
+              <DateField label="Valid till" value={fitnessCertValidTill} onChange={setFitnessCertValidTill} disabled={!isActive} />
+            </>
+          )}
+        </FieldCard>
+
+        {isActive && (
+          <FieldCard title="Bank & payments" icon={Wallet}>
+            <Text style={styles.cardHelper}>Mark wages as paid for a month.</Text>
+            <View style={styles.gridRow}>
+              <View style={styles.gridCell}>
+                <Field label="Month" value={paymentMonth} onChangeText={setPaymentMonth} placeholder="9" />
+              </View>
+              <View style={styles.gridCell}>
+                <Field label="Year" value={paymentYear} onChangeText={setPaymentYear} placeholder="2026" />
+              </View>
+            </View>
+            <DateField label="Date of payment" value={dateOfPayment} onChange={setDateOfPayment} />
+            <Field label="Bank transaction ID / reference" value={paymentReference} onChangeText={setPaymentReference} />
+            <TouchableOpacity
+              style={[styles.secondaryButton, savingPayment && styles.buttonDisabled]}
+              onPress={handleRecordPayment}
+              disabled={savingPayment}
+            >
+              {savingPayment ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.secondaryButtonText}>Record payment</Text>}
+            </TouchableOpacity>
+          </FieldCard>
+        )}
+      </KeyboardScreen>
+
+      {isActive && (
+        <View style={styles.stickyFooter}>
+          <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
+            {saving ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Save</Text>}
           </TouchableOpacity>
-        </>
+        </View>
       )}
-    </KeyboardScreen>
+    </View>
+  );
+}
+
+function FieldCard({ title, icon: Icon, children }: { title: string; icon: typeof Briefcase; children: React.ReactNode }) {
+  return (
+    <View style={styles.fieldCard}>
+      <View style={styles.fieldCardTitleRow}>
+        <Icon size={16} color={colors.primary} />
+        <Text style={styles.fieldCardTitle}>{title}</Text>
+      </View>
+      {children}
+    </View>
   );
 }
 
@@ -316,7 +374,7 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.muted}
+        placeholderTextColor={colors.textSecondary}
         editable={!disabled}
       />
     </View>
@@ -324,60 +382,121 @@ function Field({
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
-  subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
+  container: { paddingBottom: 110 },
+  header: {
+    backgroundColor: colors.primary,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  headerTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  headerIdentity: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexShrink: 1 },
+  headerName: { fontFamily: "IBMPlexSans_700Bold", fontSize: 18, color: colors.surface },
+  headerSubtitle: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.onPrimaryMuted, marginTop: 1 },
+  wagePill: { backgroundColor: "rgba(255,255,255,0.18)", borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 8 },
+  wagePillText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.surface },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.heroDivider, marginTop: spacing.md, overflow: "hidden" },
+  progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.surface },
+  progressLabel: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.onPrimaryMuted, marginTop: 6 },
   deactivatedBanner: {
     backgroundColor: colors.dangerLight,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     padding: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  deactivatedBannerText: { fontSize: 13, color: colors.danger, fontWeight: "600" },
-  navLinkRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
-  navLinkButton: { flex: 1, backgroundColor: colors.tealLight, borderRadius: radius.sm, paddingVertical: 10, alignItems: "center" },
-  navLinkText: { color: colors.tealDark, fontSize: 13, fontWeight: "700" },
-  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginTop: spacing.lg, marginBottom: spacing.sm },
-  paymentRow: { flexDirection: "row", gap: spacing.sm },
-  badgeRow: { marginBottom: spacing.md },
-  badge: { alignSelf: "flex-start", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, marginBottom: spacing.xs },
-  badgeTeal: { backgroundColor: colors.tealLight },
-  badgeAmber: { backgroundColor: colors.amberPale },
-  badgeText: { fontSize: 12, fontWeight: "700", color: colors.navy },
-  warningText: { fontSize: 12, color: colors.danger, backgroundColor: colors.dangerLight, padding: spacing.sm, borderRadius: radius.sm },
-  sectionLabelAmber: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.amber,
+    marginHorizontal: spacing.md,
     marginTop: spacing.md,
+  },
+  deactivatedBannerText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.danger },
+  warningsCard: {
+    backgroundColor: colors.warningTint,
+    borderWidth: 1,
+    borderColor: colors.warningBorder,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  badgeRow: { flexDirection: "row" },
+  badge: { alignSelf: "flex-start", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeTeal: { backgroundColor: colors.primaryTint },
+  badgeAmber: { backgroundColor: colors.warningBorder },
+  badgeText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.navy },
+  warningText: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.warningTintText },
+  consentRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  consentLabel: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.navy },
+  consentCaptured: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary },
+  consentButton: { backgroundColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 8 },
+  consentButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.surface },
+  fieldCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  fieldCardTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing.md },
+  fieldCardTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
+  cardHelper: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.sm },
+  sectionLabelAmber: {
+    fontFamily: "IBMPlexSans_700Bold",
+    fontSize: 12,
+    color: colors.warning,
+    marginTop: spacing.sm,
     marginBottom: spacing.sm,
     textTransform: "uppercase",
   },
+  gridRow: { flexDirection: "row", gap: spacing.sm },
+  gridCell: { flex: 1 },
   fieldWrap: { marginBottom: spacing.md },
-  label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
+  label: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   input: {
     borderWidth: 0,
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.ground,
     borderRadius: radius.sm,
     padding: 12,
-    fontSize: 16,
+    minHeight: 48,
+    fontFamily: "IBMPlexSans_600SemiBold",
+    fontSize: 15,
     color: colors.navy,
   },
   inputDisabled: { opacity: 0.6 },
   readOnlyValue: {
-    backgroundColor: colors.fieldBg,
+    backgroundColor: colors.ground,
     borderRadius: radius.sm,
     padding: 12,
-    fontSize: 16,
-    color: colors.muted,
+    minHeight: 48,
+    fontFamily: "IBMPlexSans_600SemiBold",
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlignVertical: "center",
+  },
+  secondaryButton: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.primary },
+  stickyFooter: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   button: {
-    backgroundColor: colors.teal,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
-    padding: 16,
+    height: 50,
     alignItems: "center",
-    marginTop: spacing.md,
+    justifyContent: "center",
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
+  buttonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
 });

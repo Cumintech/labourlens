@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Info } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -29,8 +30,10 @@ import ErrorState from "../components/ErrorState";
 import KeyboardScreen from "../components/KeyboardScreen";
 import { ListSkeleton } from "../components/Skeleton";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
+import { BlueHeader } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import { formatINR } from "../format";
 import { colors, radius, spacing } from "../theme";
 import { autofillFromWorkerType } from "../workerTypeAutofill";
 
@@ -235,86 +238,158 @@ export default function WageProfileScreen({ route, navigation }: Props) {
     );
   }
 
+  // Display-only ordering -- newest first, and excludes the current rate
+  // (shown separately in the hero card above) so it isn't shown twice.
+  const olderHistory = [...history]
+    .filter((h) => h.id !== currentRate?.id)
+    .sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1));
+
   return (
-    <KeyboardScreen
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.teal]} tintColor={colors.teal} />}
-    >
-      <View style={styles.titleRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{workerName}</Text>
-          <Text style={styles.subtitle}>
-            {fromRegistration ? "Set a wage rate to finish registration" : "Wage rate history"}
-          </Text>
+    <View style={{ flex: 1, backgroundColor: colors.ground }}>
+      <KeyboardScreen
+        contentContainerStyle={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+      >
+        <BlueHeader
+          title={workerName}
+          subtitle="Wage rate"
+          right={
+            fromRegistration ? (
+              <TouchableOpacity onPress={() => navigation.navigate("Home")}>
+                <Text style={styles.skipLink}>Skip for now →</Text>
+              </TouchableOpacity>
+            ) : undefined
+          }
+        />
+
+        <View style={styles.heroCard}>
+          {currentRate ? (
+            <>
+              <View style={styles.heroTopRow}>
+                <Text style={styles.heroAmount}>
+                  ₹{formatINR(currentRate.basic)}
+                  <Text style={styles.heroUnit}>/{currentRate.rate_type === "daily" ? "day" : "month"}</Text>
+                </Text>
+                <View style={styles.effectiveChip}>
+                  <Text style={styles.effectiveChipText}>From {currentRate.effective_from}</Text>
+                </View>
+              </View>
+              <View style={styles.heroStatRow}>
+                <HeroStat label="Basic" value={`₹${formatINR(currentRate.basic)}`} />
+                <HeroStat label="DA" value={`₹${formatINR(currentRate.da)}`} />
+                <HeroStat label="HRA" value={`₹${formatINR(currentRate.hra)}`} />
+              </View>
+              <View style={styles.pillRow}>
+                <StatutoryPill label="PF" value={`${currentRate.pf_rate}%`} />
+                <StatutoryPill label="ESI" value={`${currentRate.esi_rate}%`} />
+                <StatutoryPill label="LWF" value={`₹${formatINR(currentRate.lwf_amount)}`} />
+              </View>
+            </>
+          ) : (
+            <Text style={styles.empty}>No wage rate set yet.</Text>
+          )}
         </View>
-        {fromRegistration && (
-          <TouchableOpacity onPress={() => navigation.navigate("Home")}>
-            <Text style={styles.skipLink}>Skip for now →</Text>
-          </TouchableOpacity>
-        )}
-      </View>
 
-      {history.length === 0 ? (
-        <Text style={styles.empty}>No wage rate set yet.</Text>
-      ) : (
-        history.map((h) => (
-          <View key={h.id} style={styles.historyRow}>
-            <Text style={styles.historyEffective}>From {h.effective_from}</Text>
-            <Text style={styles.historyDetail}>
-              Basic ₹{h.basic}/{h.rate_type === "daily" ? "day" : "month"} · DA ₹{h.da} · HRA ₹{h.hra}
-            </Text>
-            <Text style={styles.historyDetail}>
-              PF {h.pf_rate}% · ESI {h.esi_rate}% · LWF ₹{h.lwf_amount}
-            </Text>
+        {olderHistory.length > 0 && (
+          <View style={styles.historyCard}>
+            <Text style={styles.sectionLabel}>Rate history</Text>
+            {olderHistory.map((h, i) => (
+              <View key={h.id} style={styles.timelineRow}>
+                <View style={styles.timelineDotCol}>
+                  <View style={styles.timelineDot} />
+                  {i < olderHistory.length - 1 && <View style={styles.timelineLine} />}
+                </View>
+                <View style={{ flex: 1, paddingBottom: spacing.md }}>
+                  <Text style={styles.historyEffective}>From {h.effective_from}</Text>
+                  <Text style={styles.historyDetail}>
+                    ₹{formatINR(h.basic)}/{h.rate_type === "daily" ? "day" : "month"} · DA ₹{formatINR(h.da)} · HRA ₹{formatINR(h.hra)}
+                  </Text>
+                  <Text style={styles.historyDetail}>
+                    PF {h.pf_rate}% · ESI {h.esi_rate}% · LWF ₹{formatINR(h.lwf_amount)}
+                  </Text>
+                </View>
+              </View>
+            ))}
           </View>
-        ))
-      )}
+        )}
 
-      <Text style={styles.sectionLabel}>Add a new rate</Text>
-      <Text style={styles.helper}>
-        This adds a new version effective from the date below -- it never changes past rates, so wage slips
-        already issued for earlier months stay correct.
-      </Text>
+        <View style={styles.addRateCard}>
+          <Text style={styles.sectionLabel}>Add a new rate</Text>
+          <View style={styles.explainerRow}>
+            <Info size={14} color={colors.textSecondary} />
+            <Text style={styles.explainerText}>Adds a new version from the date below; past rates stay unchanged.</Text>
+          </View>
 
-      <WorkerTypeSelect
-        label="Worker Type"
-        token={token ?? ""}
-        workerTypes={workerTypes}
-        value={selectedWorkerTypeId}
-        onChange={handleSelectWorkerType}
-        onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
-        noneLabel="No type -- set a custom rate below"
-        disabled={assigningType}
-      />
-      <Text style={styles.helper}>Selecting a type fills in its default rate and PF % below -- both stay editable.</Text>
+          <WorkerTypeSelect
+            label="Worker Type"
+            token={token ?? ""}
+            workerTypes={workerTypes}
+            value={selectedWorkerTypeId}
+            onChange={handleSelectWorkerType}
+            onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
+            noneLabel="No type -- set a custom rate below"
+            disabled={assigningType}
+          />
 
-      <View style={styles.toggleRow}>
-        {(["daily", "monthly"] as const).map((option) => (
-          <TouchableOpacity
-            key={option}
-            style={[styles.toggleOption, rateType === option && styles.toggleOptionSelected]}
-            onPress={() => setRateType(option)}
-          >
-            <Text style={[styles.toggleText, rateType === option && styles.toggleTextSelected]}>
-              {option === "daily" ? "Daily rate" : "Monthly rate"}
-            </Text>
-          </TouchableOpacity>
-        ))}
+          <View style={styles.segmentRow}>
+            {(["daily", "monthly"] as const).map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={[styles.segmentOption, rateType === option && styles.segmentOptionSelected]}
+                onPress={() => setRateType(option)}
+              >
+                <Text style={[styles.segmentText, rateType === option && styles.segmentTextSelected]}>
+                  {option === "daily" ? "Daily" : "Monthly"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.gridRow}>
+            <Field label="Basic wage" value={basic} onChangeText={setBasic} prefix="₹" />
+            <Field label="DA" value={da} onChangeText={setDa} prefix="₹" />
+          </View>
+          <View style={styles.gridRow}>
+            <Field label="HRA" value={hra} onChangeText={setHra} prefix="₹" />
+            <Field label="Other allowances" value={otherAllowances} onChangeText={setOtherAllowances} prefix="₹" />
+          </View>
+          <View style={styles.gridRow}>
+            <Field label="PF rate" value={pfRate} onChangeText={setPfRate} suffix="%" />
+            <Field label="ESI rate" value={esiRate} onChangeText={setEsiRate} suffix="%" />
+          </View>
+          <View style={styles.gridRow}>
+            <Field label="LWF (flat/month)" value={lwfAmount} onChangeText={setLwfAmount} prefix="₹" />
+            <View style={styles.gridCell}>
+              <DateField label="Effective from" value={effectiveFrom} onChange={setEffectiveFrom} />
+            </View>
+          </View>
+        </View>
+      </KeyboardScreen>
+
+      <View style={styles.stickyFooter}>
+        <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
+          {saving ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.buttonText}>Add rate</Text>}
+        </TouchableOpacity>
       </View>
+    </View>
+  );
+}
 
-      <Field label="Basic wage" value={basic} onChangeText={setBasic} keyboardType="numeric" />
-      <Field label="HRA" value={hra} onChangeText={setHra} keyboardType="numeric" />
-      <Field label="DA" value={da} onChangeText={setDa} keyboardType="numeric" />
-      <Field label="Other allowances" value={otherAllowances} onChangeText={setOtherAllowances} keyboardType="numeric" />
-      <Field label="PF rate (%)" value={pfRate} onChangeText={setPfRate} keyboardType="numeric" />
-      <Field label="ESI rate (%)" value={esiRate} onChangeText={setEsiRate} keyboardType="numeric" />
-      <Field label="LWF amount (flat, per month)" value={lwfAmount} onChangeText={setLwfAmount} keyboardType="numeric" />
-      <DateField label="Effective from" value={effectiveFrom} onChange={setEffectiveFrom} />
+function HeroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.heroStat}>
+      <Text style={styles.heroStatValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.heroStatLabel}>{label}</Text>
+    </View>
+  );
+}
 
-      <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-        {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Add rate</Text>}
-      </TouchableOpacity>
-    </KeyboardScreen>
+function StatutoryPill({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statutoryPill}>
+      <Text style={styles.statutoryPillLabel}>{label}</Text>
+      <Text style={styles.statutoryPillValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -322,64 +397,142 @@ function Field({
   label,
   value,
   onChangeText,
-  placeholder,
-  keyboardType,
+  prefix,
+  suffix,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
-  placeholder?: string;
-  keyboardType?: "default" | "numeric";
+  prefix?: string;
+  suffix?: string;
 }) {
   return (
-    <View style={styles.fieldWrap}>
+    <View style={styles.gridCell}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.muted}
-        keyboardType={keyboardType}
-      />
+      <View style={styles.inputRow}>
+        {!!prefix && <Text style={styles.inputAffix}>{prefix}</Text>}
+        <TextInput
+          style={styles.input}
+          value={value}
+          onChangeText={onChangeText}
+          placeholderTextColor={colors.textSecondary}
+          keyboardType="numeric"
+        />
+        {!!suffix && <Text style={styles.inputAffix}>{suffix}</Text>}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: spacing.lg, backgroundColor: colors.white, flexGrow: 1 },
-  titleRow: { flexDirection: "row", alignItems: "flex-start" },
-  skipLink: { color: colors.teal, fontSize: 13, fontWeight: "700", marginTop: spacing.xs },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 4, color: colors.navy },
-  subtitle: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
-  empty: { fontSize: 13, color: colors.muted, marginBottom: spacing.md },
-  historyRow: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: spacing.sm + 2, marginBottom: spacing.xs },
-  historyEffective: { fontSize: 13, fontWeight: "700", color: colors.navy },
-  historyDetail: { fontSize: 11, color: colors.muted, marginTop: 2 },
-  sectionLabel: { fontSize: 13, fontWeight: "700", color: colors.navy, marginTop: spacing.lg, marginBottom: spacing.xs },
-  helper: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
-  toggleRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
-  toggleOption: { flex: 1, backgroundColor: colors.fieldBg, borderRadius: radius.sm, paddingVertical: 12, alignItems: "center" },
-  toggleOptionSelected: { backgroundColor: colors.teal },
-  toggleText: { fontSize: 13, fontWeight: "600", color: colors.navy },
-  toggleTextSelected: { color: colors.white },
-  fieldWrap: { marginBottom: spacing.md },
-  label: { fontSize: 12, fontWeight: "600", color: colors.muted, marginBottom: spacing.xs },
-  input: {
-    borderWidth: 0,
-    backgroundColor: colors.fieldBg,
-    borderRadius: radius.sm,
-    padding: 12,
-    fontSize: 16,
-    color: colors.navy,
+  container: { paddingBottom: 110 },
+  skipLink: { color: colors.surface, fontSize: 13, fontWeight: "700" },
+  empty: { fontSize: 13, color: colors.textSecondary },
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: -28,
+    gap: spacing.sm,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  button: {
-    backgroundColor: colors.teal,
-    borderRadius: radius.sm,
-    padding: 16,
-    alignItems: "center",
+  heroTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  heroAmount: { fontFamily: "IBMPlexSans_700Bold", fontSize: 28, color: colors.navy },
+  heroUnit: { fontFamily: "IBMPlexSans_500Medium", fontSize: 14, color: colors.textSecondary },
+  effectiveChip: { backgroundColor: colors.primaryTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  effectiveChipText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11, color: colors.primary },
+  heroStatRow: { flexDirection: "row", gap: spacing.sm },
+  heroStat: { flex: 1, backgroundColor: colors.ground, borderRadius: radius.md, paddingVertical: spacing.sm, alignItems: "center" },
+  heroStatValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy },
+  heroStatLabel: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  pillRow: { flexDirection: "row", gap: spacing.sm },
+  statutoryPill: {
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: colors.warningTint,
+    borderRadius: radius.pill,
+    paddingVertical: 6,
+  },
+  statutoryPillLabel: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11, color: colors.warningTintText },
+  statutoryPillValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 11, color: colors.warningTintText },
+  historyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
     marginTop: spacing.md,
   },
+  sectionLabel: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy, marginBottom: spacing.sm },
+  timelineRow: { flexDirection: "row", gap: spacing.sm },
+  timelineDotCol: { alignItems: "center", width: 14 },
+  timelineDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary, marginTop: 4 },
+  timelineLine: { flex: 1, width: 2, backgroundColor: colors.divider, marginTop: 2 },
+  historyEffective: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.navy },
+  historyDetail: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  addRateCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  explainerRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginBottom: spacing.md },
+  explainerText: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary },
+  segmentRow: {
+    flexDirection: "row",
+    backgroundColor: colors.ground,
+    borderRadius: radius.pill,
+    padding: 3,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+    alignSelf: "flex-start",
+  },
+  segmentOption: { paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.pill },
+  segmentOptionSelected: { backgroundColor: colors.primary },
+  segmentText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.navy },
+  segmentTextSelected: { color: colors.surface },
+  gridRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
+  gridCell: { flex: 1 },
+  label: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.ground,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    minHeight: 48,
+    gap: 4,
+  },
+  inputAffix: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 14, color: colors.textSecondary },
+  input: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 15, color: colors.navy, paddingVertical: 12 },
+  stickyFooter: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  button: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.sm,
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: colors.white, fontSize: 16, fontWeight: "700" },
+  buttonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
 });

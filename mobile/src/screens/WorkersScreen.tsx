@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { AlertTriangle, ChevronRight, Search, UserPlus, Users } from "lucide-react-native";
+import { ChevronRight, Fingerprint, ListChecks, Search, ShieldAlert, UserPlus, Users } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -17,9 +17,27 @@ import { colors, radius, spacing, type } from "../theme";
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
-type Filter = "all" | "missing" | "no_wage" | "inactive";
+type Filter = "all" | "missing" | "no_wage" | "inactive" | "underage" | "unmapped";
 
 const WORKER_ALERT_CODES = ["missing_compliance", "underage_workers", "unmapped_devices"];
+
+// Matches the backend's MINIMUM_WORKING_AGE (main.py) and WorkerProfileScreen's own age helper.
+const MINIMUM_WORKING_AGE = 14;
+function ageFromDob(dob: string | null): number | null {
+  if (!dob) return null;
+  const d = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  const monthDiff = today.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < d.getDate())) age -= 1;
+  return age;
+}
+
+const ALERT_ICON: Record<string, typeof ListChecks> = {
+  missing_compliance: ListChecks,
+  unmapped_devices: Fingerprint,
+  underage_workers: ShieldAlert,
+};
 
 // The list view Phase 1's tab bar needs to exist at all -- there was no
 // "every worker in one place" screen before this (Dashboard only ever
@@ -89,11 +107,47 @@ export default function WorkersScreen({ navigation }: Props) {
   const noWageCount = workers.filter((w) => w.status === "active" && !w.worker_type_id).length;
   const missingCount = workers.filter((w) => missingComplianceIds.has(w.id)).length;
 
+  const underageWorkers = useMemo(
+    () => workers.filter((w) => w.status === "active" && w.dob && (ageFromDob(w.dob) as number) < MINIMUM_WORKING_AGE),
+    [workers],
+  );
+  const unmappedWorkers = useMemo(
+    () => workers.filter((w) => w.status === "active" && !w.device_user_id),
+    [workers],
+  );
+
+  function workersForAlertCode(code: string): Worker[] {
+    if (code === "missing_compliance") return workers.filter((w) => missingComplianceIds.has(w.id));
+    if (code === "underage_workers") return underageWorkers;
+    if (code === "unmapped_devices") return unmappedWorkers;
+    return [];
+  }
+
+  function handleAlertPress(alert: HomeAlert) {
+    const matches = workersForAlertCode(alert.code);
+    if (matches.length === 1) {
+      const w = matches[0];
+      if (alert.code === "unmapped_devices") {
+        navigation.navigate("BiometricDevices");
+      } else {
+        navigation.navigate("WorkerEdit", { workerId: w.id, workerName: w.name, workerStatus: w.status, deactivatedAt: w.deactivated_at });
+      }
+      return;
+    }
+    if (matches.length > 1) {
+      if (alert.code === "missing_compliance") setFilter("missing");
+      else if (alert.code === "underage_workers") setFilter("underage");
+      else if (alert.code === "unmapped_devices") setFilter("unmapped");
+    }
+  }
+
   const filtered = useMemo(() => {
     let list = workers;
     if (filter === "missing") list = list.filter((w) => missingComplianceIds.has(w.id));
     else if (filter === "no_wage") list = list.filter((w) => w.status === "active" && !w.worker_type_id);
     else if (filter === "inactive") list = list.filter((w) => w.status !== "active");
+    else if (filter === "underage") list = underageWorkers;
+    else if (filter === "unmapped") list = unmappedWorkers;
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -104,7 +158,7 @@ export default function WorkersScreen({ navigation }: Props) {
       );
     }
     return list;
-  }, [workers, filter, search, missingComplianceIds]);
+  }, [workers, filter, search, missingComplianceIds, underageWorkers, unmappedWorkers]);
 
   function openWorker(worker: Worker) {
     navigation.navigate("WorkerProfile", {
@@ -188,19 +242,33 @@ export default function WorkersScreen({ navigation }: Props) {
             </ScrollView>
 
             {workerAlerts.length > 0 && (
-              <Pressable
-                style={styles.complianceBanner}
-                accessibilityRole="button"
-                onPress={() => navigation.navigate("NeedsAttention")}
-              >
-                <AlertTriangle size={18} color={colors.warning} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.complianceBannerText}>Needs attention</Text>
-                  {workerAlerts.map((al) => (
-                    <Text key={al.code} style={styles.alertLine}>• {al.message}</Text>
-                  ))}
-                </View>
-                <ChevronRight size={16} color={colors.warning} />
+              <View style={styles.complianceCard}>
+                <Text style={styles.complianceBannerText}>Worker compliance - attention needed</Text>
+                {workerAlerts.map((al) => {
+                  const Icon = ALERT_ICON[al.code] ?? ListChecks;
+                  return (
+                    <Pressable
+                      key={al.code}
+                      style={styles.complianceRow}
+                      accessibilityRole="button"
+                      onPress={() => handleAlertPress(al)}
+                    >
+                      <Icon size={18} color={colors.warningTintText} />
+                      <Text style={styles.alertLine}>{al.message}</Text>
+                      <ChevronRight size={16} color={colors.warning} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {(filter === "underage" || filter === "unmapped") && (
+              <Pressable style={styles.dismissChip} onPress={() => setFilter("all")} accessibilityRole="button">
+                <Text style={styles.dismissChipText}>
+                  Showing {filtered.length} worker{filtered.length === 1 ? "" : "s"}{" "}
+                  {filter === "underage" ? "under minimum age" : "not mapped to a device"}
+                </Text>
+                <Text style={styles.dismissChipClose}>✕</Text>
               </Pressable>
             )}
           </View>
@@ -256,20 +324,39 @@ export default function WorkersScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  complianceBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  complianceCard: {
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.warningBorder,
     backgroundColor: colors.warningTint,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
+    gap: 2,
   },
-  alertLine: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.navy },
-  complianceBannerText: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.warningTintText },
+  complianceBannerText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.warningTintText, marginBottom: 4 },
+  complianceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 44,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.warningBorder,
+  },
+  alertLine: { flex: 1, fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.navy },
+  dismissChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primaryTint,
+  },
+  dismissChipText: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 12, color: colors.primary },
+  dismissChipClose: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primary },
   container: { flex: 1, backgroundColor: colors.ground },
   hero: {
     backgroundColor: colors.primary,

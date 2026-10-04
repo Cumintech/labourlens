@@ -1,6 +1,9 @@
 import React from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ChevronRight, MessageCircle } from "lucide-react-native";
+import { useAuth } from "../context/AuthContext";
+import { openWhatsApp } from "../support";
 import { colors, radius, spacing } from "../theme";
 
 const FAQS: { q: string; a: string }[] = [
@@ -28,9 +31,26 @@ const FAQS: { q: string; a: string }[] = [
 
 export default function HelpSupportScreen() {
   const insets = useSafeAreaInsets();
+  const { owner } = useAuth();
   return (
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.xl + insets.bottom }]}>
       <Text style={styles.title}>Help & Support</Text>
+
+      <Pressable
+        style={({ pressed }) => [styles.waCard, pressed && { opacity: 0.85 }]}
+        onPress={() => openWhatsApp(`Hi, I need help with Labour Lens (Factory: ${owner?.factory_name ?? "-"})`)}
+        accessibilityRole="button"
+        accessibilityLabel="Chat with us on WhatsApp"
+      >
+        <View style={styles.waTile}>
+          <MessageCircle size={24} color={colors.white} />
+        </View>
+        <View style={styles.waBody}>
+          <Text style={styles.waTitle}>Chat with us on WhatsApp</Text>
+          <Text style={styles.waSub}>Usually replies within a few hours</Text>
+        </View>
+        <ChevronRight size={20} color={colors.muted} />
+      </Pressable>
 
       {FAQS.map((item) => (
         <View key={item.q} style={styles.card}>
@@ -51,6 +71,21 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { padding: spacing.lg, paddingBottom: spacing.xl },
   title: { fontSize: 22, fontWeight: "700", color: colors.navy, marginBottom: spacing.md },
+  waCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.whatsapp,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  waTile: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.whatsapp, alignItems: "center", justifyContent: "center" },
+  waBody: { flex: 1 },
+  waTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.navy },
+  waSub: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   card: { backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: spacing.sm + 4, marginBottom: spacing.sm },
   question: { fontSize: 13, fontWeight: "700", color: colors.navy },
   answer: { fontSize: 12, color: colors.muted, marginTop: 4, lineHeight: 18 },

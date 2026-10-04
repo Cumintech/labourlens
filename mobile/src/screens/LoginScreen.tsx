@@ -9,6 +9,7 @@ import SelectField from "../components/SelectField";
 import { INDIAN_STATE_OPTIONS } from "../indianStates";
 import { INDUSTRY_OPTIONS } from "../industries";
 import { AuthStackParamList } from "../navigation/RootNavigator";
+import { openWhatsApp } from "../support";
 import { colors, radius, spacing } from "../theme";
 import { isValidEmail, isValidIndianMobile, isValidUsername, normalizeIndianMobile } from "../validators";
 
@@ -263,6 +264,14 @@ export default function LoginScreen({ navigation }: Props) {
           <Text style={styles.buttonText}>{mode === "login" ? "Log In" : "Create Account"}</Text>
         )}
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.helpLink}
+        onPress={() => openWhatsApp("Hi, I need help logging in to Labour Lens")}
+        accessibilityRole="link"
+      >
+        <Text style={styles.helpLinkText}>Need help? WhatsApp us</Text>
+      </TouchableOpacity>
     </KeyboardScreen>
   );
 }
@@ -310,6 +319,8 @@ const styles = StyleSheet.create({
   consentText: { flex: 1, fontSize: 12, color: colors.muted, lineHeight: 17 },
   consentLink: { color: colors.teal, fontWeight: "700" },
   forgotLink: { color: colors.teal, fontSize: 13, fontWeight: "700", textAlign: "right", marginTop: spacing.sm },
+  helpLink: { alignItems: "center", marginTop: spacing.lg, padding: spacing.xs },
+  helpLinkText: { color: colors.teal, fontSize: 13, fontWeight: "700" },
   error: { color: colors.danger, marginTop: spacing.md, textAlign: "center" },
   button: {
     backgroundColor: colors.teal,

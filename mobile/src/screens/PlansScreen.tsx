@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { ArrowLeft, Check, FileText, Lock, MapPin } from "lucide-react-native";
 import React, { useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createUpgradeRequest } from "../api/client";
@@ -11,11 +11,11 @@ import { RootStackParamList } from "../navigation/RootNavigator";
 import { formatINR } from "../format";
 import { PLANS, yearlyPerMonth, yearlyTotal } from "../plans";
 import { trialStatusText } from "../planStatus";
+import { openWhatsApp } from "../support";
 import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Plans">;
 
-const SALES_WHATSAPP = process.env.EXPO_PUBLIC_SALES_WHATSAPP ?? "";
 
 // Simple shield + check + crown mark, inline (no separate asset) --
 // matches the other hero-art components' hand-drawn SVG style.
@@ -57,7 +57,7 @@ export default function PlansScreen({ navigation }: Props) {
         }
       }
       const text = `Hi, I'd like the Labour Lens ${plan.name} plan (${cycle}) for ${owner?.factory_name ?? "my factory"}.`;
-      await Linking.openURL(`https://wa.me/${SALES_WHATSAPP}?text=${encodeURIComponent(text)}`);
+      await openWhatsApp(text);
     } finally {
       setSubmitting(false);
     }
@@ -156,7 +156,7 @@ export default function PlansScreen({ navigation }: Props) {
 
         <Pressable
           style={styles.whatsappLink}
-          onPress={() => Linking.openURL(`https://wa.me/${SALES_WHATSAPP}`)}
+          onPress={() => openWhatsApp("Hi, I have a question about Labour Lens plans.")}
           accessibilityRole="button"
         >
           <Text style={styles.whatsappLinkText}>Questions? Talk to us on WhatsApp</Text>

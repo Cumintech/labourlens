@@ -40,6 +40,7 @@ export const colors = {
   unmarked: "#7B8798",
   unmarkedTint: "#EEF2F7",
   danger: "#C62828", // destructive text -- same red as absent
+  whatsapp: "#25D366", // WhatsApp brand green -- icon tile only, never text
 
   // --- Decorative multi-hue palette only (shift accents, wage chart legend) ---
   skyBlue: "#0288D1",

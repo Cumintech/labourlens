@@ -33,14 +33,16 @@ import {
   listWorkerLeaveRange,
   listWorkerTypes,
   markAttendance,
+  updateWorkerEmployment,
   uploadWorkerPhoto,
 } from "../api/client";
 import DayAttendanceRow from "../components/DayAttendanceRow";
+import EmploymentFields from "../components/EmploymentFields";
 import ErrorState from "../components/ErrorState";
 import OtHoursModal from "../components/OtHoursModal";
 import { ListSkeleton } from "../components/Skeleton";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
-import { Avatar, SegmentedControl } from "../components/ui";
+import { Avatar, EmploymentChip, SegmentedControl } from "../components/ui";
 import TradeIcon from "../components/TradeIcon";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -168,6 +170,8 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
                 <Text style={styles.headerChipText}>{headerType}</Text>
               </View>
             ) : null}
+            {headerWorker && <EmploymentChip w={headerWorker} />}
+            {headerWorker?.employment_type === "permanent" && headerWorker.is_ism && <EmploymentChip w={headerWorker} ismTagOnly />}
             <View style={[styles.headerChip, isActive && styles.headerChipActive]}>
               <Text style={[styles.headerChipText, isActive && styles.headerChipTextActive]}>
                 {isActive ? "Active" : `Deactivated${deactivatedAt ? ` · ${deactivatedAt.slice(0, 10)}` : ""}`}
@@ -252,12 +256,18 @@ function OverviewTab({
   navigation: Props["navigation"];
 }) {
   const isActive = workerStatus === "active";
-  const { token } = useAuth();
+  const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
   const [worker, setWorker] = useState<Worker | null>(null);
   const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [editingEmployment, setEditingEmployment] = useState(false);
+  const [empType, setEmpType] = useState<"permanent" | "temporary">("permanent");
+  const [empHomeState, setEmpHomeState] = useState("");
+  const [empIsIsm, setEmpIsIsm] = useState(false);
+  const [empTouched, setEmpTouched] = useState(true); // editing an existing worker: don't silently re-auto-suggest on open
+  const [savingEmployment, setSavingEmployment] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -296,6 +306,33 @@ function OverviewTab({
     );
   }
 
+  function openEmploymentEdit() {
+    if (!worker) return;
+    setEmpType(worker.employment_type ?? "permanent");
+    setEmpHomeState(worker.home_state ?? "");
+    setEmpIsIsm(worker.is_ism);
+    setEmpTouched(true); // keep the worker's current value as-is until they explicitly flip it
+    setEditingEmployment(true);
+  }
+
+  async function saveEmploymentEdit() {
+    if (!token) return;
+    setSavingEmployment(true);
+    try {
+      const updated = await updateWorkerEmployment(token, workerId, {
+        employment_type: empType,
+        is_ism: empIsIsm,
+        home_state: empHomeState.trim() || null,
+      });
+      setWorker(updated);
+      setEditingEmployment(false);
+    } catch {
+      Alert.alert("Could not save", "Please try again.");
+    } finally {
+      setSavingEmployment(false);
+    }
+  }
+
   if (loading) return <ListSkeleton rows={2} variant="simple" />;
   if (loadError || !worker) {
     return <ErrorState onRetry={() => { setLoading(true); load().then(() => setLoadError(false)).catch(() => setLoadError(true)).finally(() => setLoading(false)); }} />;
@@ -314,6 +351,44 @@ function OverviewTab({
         <InfoRow icon={Hash} label="Employee code" value={worker.numeric_employee_code ? `#${worker.numeric_employee_code}` : "Not assigned yet"} />
         <InfoRow icon={Fingerprint} label="Device ID" value={worker.device_user_id ?? "Not mapped"} warn={!worker.device_user_id} />
       </View>
+
+      {editingEmployment ? (
+        <View style={{ marginTop: spacing.md }}>
+          <EmploymentFields
+            employmentType={empType}
+            onEmploymentTypeChange={setEmpType}
+            homeState={empHomeState}
+            onHomeStateChange={setEmpHomeState}
+            isIsmValue={empIsIsm}
+            onIsIsmChange={setEmpIsIsm}
+            touched={empTouched}
+            onTouchedChange={setEmpTouched}
+            factoryState={owner?.state}
+          />
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.editButton} onPress={() => setEditingEmployment(false)} disabled={savingEmployment}>
+              <Text style={styles.editButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.deactivateButton} onPress={saveEmploymentEdit} disabled={savingEmployment}>
+              {savingEmployment ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={[styles.editButtonText, { color: colors.primary }]}>Save</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={[styles.infoCard, { marginTop: spacing.md }]}>
+          <View style={styles.employmentSummaryRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.complianceTitle}>Employment</Text>
+              <Text style={styles.complianceSubtitle}>{worker.home_state ? `Home state: ${worker.home_state}` : "Home state not set"}</Text>
+            </View>
+            <EmploymentChip w={worker} />
+            {worker.employment_type === "permanent" && worker.is_ism && <EmploymentChip w={worker} ismTagOnly />}
+            <TouchableOpacity onPress={openEmploymentEdit} accessibilityLabel="Edit employment classification" style={{ marginLeft: spacing.sm }}>
+              <Pencil size={16} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <View style={styles.actionRow}>
         <TouchableOpacity
@@ -1028,6 +1103,7 @@ const styles = StyleSheet.create({
   infoValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 14, color: colors.navy, maxWidth: "55%" },
   infoWarnPill: { backgroundColor: colors.leaveTint, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 3, maxWidth: "55%" },
   infoValueWarn: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.warningTintText },
+  employmentSummaryRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, padding: 14 },
   actionRow: { flexDirection: "row", gap: 10, marginTop: spacing.md },
   editButton: { flex: 1, flexDirection: "row", gap: 6, height: 48, borderWidth: 1.5, borderColor: colors.primary, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   editButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 13, color: colors.primary },

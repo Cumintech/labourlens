@@ -2,7 +2,7 @@ import { Check, Clock, Fingerprint, MoreVertical, UserX } from "lucide-react-nat
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AttendanceStatus, ShiftConfig, Worker } from "../api/client";
-import { Avatar } from "./ui";
+import { Avatar, EmploymentChip } from "./ui";
 import { colors, radius, spacing } from "../theme";
 
 type Props = {
@@ -94,9 +94,12 @@ export default function AttendanceRowCard({
         </View>
 
         {worker.status === "active" ? (
-          <View style={[styles.pill, pill.style]}>
-            <Text style={[styles.pillText, pill.textStyle]}>{pill.text}</Text>
-          </View>
+          <>
+            <EmploymentChip w={worker} />
+            <View style={[styles.pill, pill.style]}>
+              <Text style={[styles.pillText, pill.textStyle]}>{pill.text}</Text>
+            </View>
+          </>
         ) : (
           <View style={styles.inactiveBadge}>
             <Text style={styles.inactiveBadgeText}>Deactivated</Text>

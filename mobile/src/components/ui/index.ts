@@ -6,6 +6,7 @@ export { default as IconButton } from "./IconButton";
 export { default as Chip } from "./Chip";
 export { default as StatusChip } from "./StatusChip";
 export type { WorkerStatus } from "./StatusChip";
+export { default as EmploymentChip } from "./EmploymentChip";
 export { default as StatTile } from "./StatTile";
 export { default as SegmentedControl } from "./SegmentedControl";
 export { default as ListRow } from "./ListRow";

@@ -24,6 +24,15 @@ import { RootStackParamList } from "../navigation/RootNavigator";
 import { trialStatusText } from "../planStatus";
 import { colors, radius, spacing, type } from "../theme";
 
+type EmploymentFilter = "all" | "permanent" | "contractor" | "ism";
+
+function matchesEmploymentFilter(w: Worker, filter: EmploymentFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "permanent") return w.employment_type === "permanent";
+  if (filter === "contractor") return w.employment_type === "temporary" && !w.is_ism;
+  return w.is_ism; // "ism" -- permanent or temporary, per the model's own is_ism independence
+}
+
 // Rendered as the "Today" tab's content inside MainTabs -- navigation
 // here is the composite prop React Navigation hands a screen nested
 // inside a tab that itself sits inside the root stack; typing it as a
@@ -53,6 +62,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [shifts, setShifts] = useState<ShiftConfig[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [compliance, setCompliance] = useState<{ score: number; toFix: number } | null>(null);
+  const [employmentFilter, setEmploymentFilter] = useState<EmploymentFilter>("all");
 
   const today = useMemo(() => new Date(), []);
   const todayIso = useMemo(() => isoDate(today), [today]);
@@ -100,12 +110,43 @@ export default function HomeScreen({ navigation }: Props) {
     setRefreshing(false);
   }
 
+  // Employment counts for the filter chips and the Workforce card --
+  // these overlap by design (a permanent worker can also be ISM), so
+  // they're computed independently rather than as one partition.
+  const employmentCounts = useMemo(() => {
+    let permanent = 0;
+    let contractor = 0;
+    let ism = 0;
+    let permNonIsm = 0;
+    let permIsm = 0;
+    let tempIsm = 0;
+    let notSet = 0;
+    for (const w of workers) {
+      if (!w.employment_type) notSet++;
+      if (w.employment_type === "permanent") {
+        permanent++;
+        if (w.is_ism) permIsm++;
+        else permNonIsm++;
+      } else if (w.employment_type === "temporary") {
+        if (w.is_ism) tempIsm++;
+        else contractor++;
+      }
+      if (w.is_ism) ism++;
+    }
+    return { permanent, contractor, ism, permNonIsm, permIsm, tempIsm, notSet };
+  }, [workers]);
+
+  const filteredWorkers = useMemo(
+    () => (employmentFilter === "all" ? workers : workers.filter((w) => matchesEmploymentFilter(w, employmentFilter))),
+    [workers, employmentFilter],
+  );
+
   const stats = useMemo(() => {
     let present = 0;
     let absent = 0;
     let onLeave = 0;
     let notMarked = 0;
-    for (const w of workers) {
+    for (const w of filteredWorkers) {
       if (leave.some((l) => l.worker_id === w.id)) {
         onLeave++;
         continue;
@@ -115,17 +156,19 @@ export default function HomeScreen({ navigation }: Props) {
       else if (rows.some((r) => r.status === "absent")) absent++;
       else notMarked++;
     }
-    return { present, absent, onLeave, notMarked, total: workers.length };
-  }, [workers, attendance, leave]);
+    return { present, absent, onLeave, notMarked, total: filteredWorkers.length };
+  }, [filteredWorkers, attendance, leave]);
 
   const shiftTiles = useMemo(
     () =>
       shifts.map((shift) => ({
         label: shift.label,
-        present: attendance.filter((a) => a.slot === shift.slot_key && a.status === "present").length,
-        total: workers.length,
+        present: attendance.filter(
+          (a) => a.slot === shift.slot_key && a.status === "present" && filteredWorkers.some((w) => w.id === a.worker_id),
+        ).length,
+        total: filteredWorkers.length,
       })),
-    [shifts, attendance, workers],
+    [shifts, attendance, filteredWorkers],
   );
 
   const markedCount = stats.present + stats.absent + stats.onLeave;
@@ -173,6 +216,30 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.cardMeta}>{markedCount} of {stats.total} marked</Text>
           </View>
 
+          <View style={styles.filterRow}>
+            {([
+              { key: "all", label: "All", count: workers.length },
+              { key: "permanent", label: "Permanent", count: employmentCounts.permanent },
+              { key: "contractor", label: "Contractor", count: employmentCounts.contractor },
+              { key: "ism", label: "ISM", count: employmentCounts.ism },
+            ] as const).map((chip) => {
+              const selected = employmentFilter === chip.key;
+              return (
+                <Pressable
+                  key={chip.key}
+                  style={[styles.filterChip, selected && styles.filterChipSelected]}
+                  onPress={() => setEmploymentFilter(chip.key)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                >
+                  <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]} numberOfLines={1}>
+                    {chip.label} ({chip.count})
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
           {stats.total > 0 && (
             <View style={styles.stackedBar}>
               {stats.present > 0 && <View style={[styles.barSegment, { flex: stats.present, backgroundColor: colors.present }]} />}
@@ -207,6 +274,42 @@ export default function HomeScreen({ navigation }: Props) {
             </Text>
           </Pressable>
         </View>
+
+        {workers.length > 0 && (
+          <View style={styles.workforceCard}>
+            <View style={styles.cardTitleRow}>
+              <Text style={styles.cardTitle}>Workforce</Text>
+            </View>
+            <View style={styles.workforceHeaderRow}>
+              <Text style={styles.workforceHeaderLabel}>Permanent</Text>
+              <Text style={[styles.workforceHeaderLabel, { textAlign: "right" }]}>Temporary</Text>
+            </View>
+            <View style={styles.stackedBar}>
+              {employmentCounts.permNonIsm > 0 && <View style={[styles.barSegment, { flex: employmentCounts.permNonIsm, backgroundColor: colors.primary }]} />}
+              {employmentCounts.permIsm > 0 && <View style={[styles.barSegment, { flex: employmentCounts.permIsm, backgroundColor: colors.violet, opacity: 0.55 }]} />}
+              {employmentCounts.contractor > 0 && <View style={[styles.barSegment, { flex: employmentCounts.contractor, backgroundColor: colors.skyBlue }]} />}
+              {employmentCounts.tempIsm > 0 && <View style={[styles.barSegment, { flex: employmentCounts.tempIsm, backgroundColor: colors.violet }]} />}
+            </View>
+
+            <Pressable style={styles.workforceRow} onPress={() => setEmploymentFilter("permanent")} accessibilityRole="button">
+              <Text style={styles.workforceRowLabel}>Permanent</Text>
+              <Text style={styles.workforceRowValue}>{employmentCounts.permNonIsm} local · {employmentCounts.permIsm} inter-state</Text>
+            </Pressable>
+            <Pressable style={styles.workforceRow} onPress={() => setEmploymentFilter("contractor")} accessibilityRole="button">
+              <Text style={styles.workforceRowLabel}>Contractor</Text>
+              <Text style={styles.workforceRowValue}>{employmentCounts.contractor}</Text>
+            </Pressable>
+            <Pressable style={styles.workforceRow} onPress={() => setEmploymentFilter("ism")} accessibilityRole="button">
+              <Text style={styles.workforceRowLabel}>Inter-state migrant</Text>
+              <Text style={styles.workforceRowValue}>{employmentCounts.tempIsm} temporary · {employmentCounts.permIsm} permanent</Text>
+            </Pressable>
+
+            <Text style={styles.workforceFootnote}>Permanent + ISM workers count under both Permanent and Inter-state migrant.</Text>
+            {employmentCounts.notSet > 0 && (
+              <Text style={styles.workforceFootnote}>{employmentCounts.notSet} worker{employmentCounts.notSet === 1 ? "" : "s"} not classified yet -- included in All only.</Text>
+            )}
+          </View>
+        )}
 
         {compliance && (
           <Pressable style={styles.complianceCard} onPress={() => navigation.navigate("ComplianceCheck")} accessibilityRole="button">
@@ -337,6 +440,11 @@ const styles = StyleSheet.create({
   cardTitleRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
   cardTitle: { fontFamily: "IBMPlexSans_700Bold", fontSize: 16, color: colors.navy },
   cardMeta: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.textSecondary },
+  filterRow: { flexDirection: "row", gap: spacing.xs, flexWrap: "wrap" },
+  filterChip: { flex: 1, minWidth: 70, borderRadius: radius.pill, paddingVertical: 7, alignItems: "center", backgroundColor: colors.ground, borderWidth: 1, borderColor: colors.border },
+  filterChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterChipText: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11.5, color: colors.navy },
+  filterChipTextSelected: { color: colors.surface },
   stackedBar: { flexDirection: "row", height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: colors.divider },
   barSegment: { height: 6 },
   statRow: { flexDirection: "row" },
@@ -349,6 +457,22 @@ const styles = StyleSheet.create({
   shiftTileValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12, color: colors.navy, fontVariant: ["tabular-nums"] },
   markButton: { backgroundColor: colors.action, borderRadius: 12, height: 46, alignItems: "center", justifyContent: "center" },
   markButtonText: { fontFamily: "IBMPlexSans_700Bold", fontSize: 15, color: colors.surface },
+  workforceCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  workforceHeaderRow: { flexDirection: "row", justifyContent: "space-between" },
+  workforceHeaderLabel: { flex: 1, fontFamily: "IBMPlexSans_600SemiBold", fontSize: 11, color: colors.textSecondary },
+  workforceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.divider },
+  workforceRowLabel: { fontFamily: "IBMPlexSans_600SemiBold", fontSize: 13, color: colors.navy },
+  workforceRowValue: { fontFamily: "IBMPlexSans_700Bold", fontSize: 12.5, color: colors.textSecondary },
+  workforceFootnote: { fontFamily: "IBMPlexSans_500Medium", fontSize: 11, color: colors.textSecondary, lineHeight: 15 },
   complianceCard: {
     flexDirection: "row",
     alignItems: "center",

@@ -131,6 +131,14 @@ class Worker(Base, TenantScoped):
     bank_account_number: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     bank_ifsc: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
 
+    # Employment classification. "permanent" | "temporary" | None (not
+    # set yet). is_ism (inter-state migrant) is independent of
+    # employment_type -- a permanent worker can also be ISM. Not PII,
+    # plain columns (same reasoning as Owner.state/industry).
+    employment_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_ism: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
+    home_state: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # "active" | "deactivated"
     status: Mapped[str] = mapped_column(String, default="active", nullable=False)
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

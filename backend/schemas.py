@@ -252,6 +252,9 @@ class WorkerCreateIn(BaseModel):
     native_district: str | None = None
     bank_account_number: str | None = None
     bank_ifsc: str | None = None
+    employment_type: Literal["permanent", "temporary"] | None = None
+    is_ism: bool = False
+    home_state: str | None = None
 
     @field_validator("aadhaar_number")
     @classmethod
@@ -262,6 +265,12 @@ class WorkerCreateIn(BaseModel):
     @classmethod
     def _validate_mobile(cls, v: str | None) -> str | None:
         return _validate_mobile_optional(v)
+
+
+class WorkerEmploymentIn(BaseModel):
+    employment_type: Literal["permanent", "temporary"] | None = None
+    is_ism: bool = False
+    home_state: str | None = None
 
 
 class WorkerOut(BaseModel):
@@ -287,6 +296,9 @@ class WorkerOut(BaseModel):
     # client has no use for and shouldn't be able to guess/construct
     # URLs from); presence is what "ID Card: Generated" reads off of.
     photo_key: str | None = None
+    employment_type: str | None = None
+    is_ism: bool = False
+    home_state: str | None = None
     created_at: datetime
     # From WorkerCompliance, not a Worker column -- None means either no
     # compliance record yet, or one exists but this field was never

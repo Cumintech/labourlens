@@ -3,7 +3,7 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Camera, Images } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
@@ -34,7 +34,9 @@ import {
   uploadWorkerPhoto,
 } from "../api/client";
 import DateField, { addYearsIso, isoDate } from "../components/DateField";
+import EmploymentFields from "../components/EmploymentFields";
 import SelectField from "../components/SelectField";
+import { ALL_INDIAN_STATE_OPTIONS } from "../indianStates";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -104,7 +106,7 @@ function estimateCategory(dob: string): { category: "adult" | "young_person"; un
 // wage setup) -- flagged in the implementation summary since it drops
 // the dedicated DPDP consent screen from the registration flow.
 export default function AddWorkerScreen({ navigation }: Props) {
-  const { token } = useAuth();
+  const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<Step>(1);
 
@@ -129,7 +131,11 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [currentAddress, setCurrentAddress] = useState("");
   const [mobile, setMobile] = useState("");
 
-  // --- Step 2: Compliance (Form 12) ---
+  // --- Step 2: Employment + Compliance (Form 12) ---
+  const [employmentType, setEmploymentType] = useState<"permanent" | "temporary">("permanent");
+  const [homeState, setHomeState] = useState("");
+  const [isIsmValue, setIsIsmValue] = useState(false);
+  const [ismTouched, setIsmTouched] = useState(false);
   const [fatherOrSpouseName, setFatherOrSpouseName] = useState("");
   const [designation, setDesignation] = useState("");
   const [epfUanNo, setEpfUanNo] = useState("");
@@ -171,6 +177,16 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [generatingLetter, setGeneratingLetter] = useState(false);
 
   const [saving, setSaving] = useState(false);
+
+  // Prefill home state by matching a state name inside the scanned/typed
+  // current address -- once only, never overriding a state the owner
+  // already picked (manually or from an earlier match).
+  useEffect(() => {
+    if (homeState || !currentAddress.trim()) return;
+    const match = ALL_INDIAN_STATE_OPTIONS.find((s) => currentAddress.toLowerCase().includes(s.value.toLowerCase()));
+    if (match) setHomeState(match.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentAddress]);
 
   const estimate = useMemo(() => estimateCategory(dob), [dob]);
   const aadhaarValid = isValidAadhaar(aadhaarNumber);
@@ -294,6 +310,9 @@ export default function AddWorkerScreen({ navigation }: Props) {
         gender: gender.trim() || undefined,
         mobile: mobile.trim() || undefined,
         current_address: currentAddress.trim() || undefined,
+        employment_type: employmentType,
+        is_ism: isIsmValue,
+        home_state: homeState.trim() || undefined,
       });
 
       const complianceFilled = [fatherOrSpouseName, designation, epfUanNo, esicNo, dateOfJoining, fitnessCertNo, fitnessCertValidTill].some(
@@ -572,6 +591,17 @@ export default function AddWorkerScreen({ navigation }: Props) {
 
         {step === 2 && (
           <>
+            <EmploymentFields
+              employmentType={employmentType}
+              onEmploymentTypeChange={setEmploymentType}
+              homeState={homeState}
+              onHomeStateChange={setHomeState}
+              isIsmValue={isIsmValue}
+              onIsIsmChange={setIsIsmValue}
+              touched={ismTouched}
+              onTouchedChange={setIsmTouched}
+              factoryState={owner?.state}
+            />
             <View style={styles.helpBox}>
               <Text style={styles.helpBoxText}>
                 These details feed the statutory Form 12 register. Optional here -- the Dashboard reminds you later if

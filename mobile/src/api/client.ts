@@ -247,6 +247,12 @@ export type Worker = {
   // URL; its only client-side use is "is this non-null" for the ID Card
   // status row. null means no photo uploaded yet.
   photo_key: string | null;
+  // Employment classification -- is_ism (inter-state migrant) is
+  // independent of employment_type, so a "permanent" worker can also
+  // be ISM. null employment_type means not set yet.
+  employment_type: "permanent" | "temporary" | null;
+  is_ism: boolean;
+  home_state: string | null;
   created_at: string;
   // From the worker's compliance record, not a Worker column -- null
   // means no joining date on file yet (in which case attendance/leave
@@ -302,6 +308,18 @@ export function assignWorkerType(token: string, workerId: number, workerTypeId: 
   });
 }
 
+export function updateWorkerEmployment(
+  token: string,
+  workerId: number,
+  input: { employment_type: "permanent" | "temporary" | null; is_ism: boolean; home_state: string | null },
+): Promise<Worker> {
+  return request<Worker>(`/workers/${workerId}/employment`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+}
+
 export type WorkerCreateInput = {
   name: string;
   mobile?: string;
@@ -312,6 +330,9 @@ export type WorkerCreateInput = {
   current_district?: string;
   native_address?: string;
   native_district?: string;
+  employment_type?: "permanent" | "temporary" | null;
+  is_ism?: boolean;
+  home_state?: string | null;
 };
 
 // Multipart upload -- not JSON, so this bypasses the request() helper

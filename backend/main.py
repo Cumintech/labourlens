@@ -75,6 +75,7 @@ from schemas import (
     WorkerComplianceOut,
     WorkerCreateIn,
     WorkerOut,
+    WorkerEmploymentIn,
     WorkerTypeAssignIn,
     WorkerTypeIn,
     WorkerTypeOut,
@@ -555,6 +556,9 @@ def create_worker(
         native_district=body.native_district,
         bank_account_number=body.bank_account_number,
         bank_ifsc=body.bank_ifsc,
+        employment_type=body.employment_type,
+        is_ism=body.is_ism,
+        home_state=body.home_state,
     )
     db.add(worker)
     db.commit()
@@ -1149,6 +1153,26 @@ def assign_worker_type(
                 )
             )
     worker.worker_type_id = body.worker_type_id
+    db.commit()
+    db.refresh(worker)
+    return worker
+
+
+@app.put("/workers/{worker_id}/employment", response_model=WorkerOut)
+def update_worker_employment(
+    worker_id: int,
+    body: WorkerEmploymentIn,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """Updates employment classification (permanent/temporary, inter-state
+    migrant status, home state) after creation -- e.g. from the Worker
+    Profile's Employment section. is_ism is independent of
+    employment_type, so both can be set/cleared in any combination."""
+    worker = _get_owned_worker(worker_id, owner, db)
+    worker.employment_type = body.employment_type
+    worker.is_ism = body.is_ism
+    worker.home_state = body.home_state
     db.commit()
     db.refresh(worker)
     return worker

@@ -9,7 +9,7 @@ import { isoDate } from "../components/DateField";
 import { ListSkeleton } from "../components/Skeleton";
 import ErrorState from "../components/ErrorState";
 import WorkerHeroArt from "../components/WorkerHeroArt";
-import { Avatar, BlueHeader, Chip, EmptyState, ListRow, StatusChip } from "../components/ui";
+import { Avatar, BlueHeader, Chip, EmploymentChip, EmptyState, ListRow, StatusChip } from "../components/ui";
 import type { WorkerStatus } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -348,6 +348,7 @@ export default function WorkersScreen({ navigation, route }: Props) {
                   {flags.length ? ` · ${flags.join(" · ")}` : ""}
                 </Text>
               </View>
+              <EmploymentChip w={item} />
               <StatusChip status={statusFor(item)} />
               <ChevronRight size={16} color={colors.disabled} />
             </Pressable>

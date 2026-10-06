@@ -18,7 +18,10 @@ jobs:
           OCR_WARM_UP: "false"
           ENVIRONMENT: development
           PHOTO_STORAGE_ALLOW_LOCAL_FALLBACK: "true"
-        run: python run_verify_suite.py
+        run: |
+          export ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+          export JWT_SECRET=ci-throwaway-secret-not-used-anywhere-else
+          python run_verify_suite.py
   mobile:
     runs-on: ubuntu-latest
     steps:

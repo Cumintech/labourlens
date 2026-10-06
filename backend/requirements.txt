@@ -67,3 +67,4 @@ freetype-py==2.5.1
 # pip install once a physical ZKTeco unit is available to test against,
 # then set BIOMETRIC_CONNECTOR=zkteco.
 # pyzk==0.9
+sentry-sdk[fastapi]==2.71.0

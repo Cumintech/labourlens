@@ -200,6 +200,13 @@ async def lifespan(app: FastAPI):
 # config to get this fix; local dev sets ENVIRONMENT=development in .env.
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
 _docs_enabled = ENVIRONMENT != "production"
+# Crash reporting: no-op until SENTRY_DSN is set on Render. Request bodies
+# and PII are never attached (send_default_pii=False).
+if os.environ.get("SENTRY_DSN"):
+    import sentry_sdk
+
+    sentry_sdk.init(dsn=os.environ["SENTRY_DSN"], send_default_pii=False, traces_sample_rate=0)
+
 app = FastAPI(
     title="Labour Lens API",
     lifespan=lifespan,

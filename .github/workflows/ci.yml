@@ -1,0 +1,30 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [master]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements.txt
+      - name: Verify suite
+        working-directory: backend
+        env:
+          OCR_WARM_UP: "false"
+          ENVIRONMENT: development
+          PHOTO_STORAGE_ALLOW_LOCAL_FALLBACK: "true"
+        run: python run_verify_suite.py
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - working-directory: mobile
+        run: npm ci && npx tsc --noEmit

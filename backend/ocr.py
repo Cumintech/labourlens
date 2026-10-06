@@ -319,17 +319,7 @@ def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = No
     back_lines = _extract_text_lines(back_image_bytes) if back_image_bytes else []
     all_lines = front_lines + back_lines
 
-    # CRITICAL fix (security audit, 2026-09): this used to print
-    # unconditionally -- front_lines/back_lines are the raw OCR'd text
-    # off an Aadhaar card, including the full 12-digit number, name,
-    # DOB, and address. On Render, stdout goes straight into retained,
-    # searchable log aggregation, so every scan was writing plaintext
-    # Aadhaar data to logs regardless of the EncryptedString protection
-    # on the column it's about to be stored in. Gated behind an
-    # explicit opt-in flag, default OFF, so this diagnostic capability
-    # still exists for local debugging but can never fire in production
-    # by accident -- never set OCR_DEBUG_LOG on Render.
-    if os.environ.get("OCR_DEBUG_LOG", "false").lower() == "true":
+    # Raw OCR text (Aadhaar, name, address) must never be printed or logged.
 
     joined = " ".join(all_lines)
     fields: dict = {}

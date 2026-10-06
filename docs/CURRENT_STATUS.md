@@ -16,7 +16,7 @@
 - Resolve DECISION-NEEDED / OPEN items below before any real factory.
 
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
-1. OCR debug print of Aadhaar/name — fixed in this branch (backend/ocr.py:333-334 removed)
+1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)
 3. MAX_WORKERS_PER_OWNER=50 — DECISION-NEEDED (backend/main.py:87,539)
 4. Labour Portal sync sends full Aadhaar — DECISION-NEEDED (backend/sync_worker.py; wired at main.py:1978)

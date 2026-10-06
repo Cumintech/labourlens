@@ -43,13 +43,11 @@ export function stripToDigits(value: string, maxLength: number): string {
   return value.replace(/\D/g, "").slice(0, maxLength);
 }
 
-// Relaxed to a plain 12-digit check (no UIDAI first-digit/Verhoeff
-// checksum enforcement) -- the stricter rule was blocking real data
-// entry during pilot testing with placeholder numbers. Mirrored exactly
-// in backend/schemas.py.
+// UIDAI rule: 12 digits, first digit 2-9, valid Verhoeff checksum.
+// Mirrored exactly in backend/schemas.py.
 export function isValidAadhaar(value: string): boolean {
   const digits = value.replace(/\D/g, "");
-  return /^\d{12}$/.test(digits);
+  return /^[2-9]\d{11}$/.test(digits) && verhoeffValid(digits);
 }
 
 // Reduces a pasted +91XXXXXXXXXX or 0XXXXXXXXXX down to the bare 10

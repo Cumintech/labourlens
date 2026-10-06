@@ -330,8 +330,6 @@ def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = No
     # still exists for local debugging but can never fire in production
     # by accident -- never set OCR_DEBUG_LOG on Render.
     if os.environ.get("OCR_DEBUG_LOG", "false").lower() == "true":
-        print(f"[ocr-debug] front_lines={front_lines!r}")
-        print(f"[ocr-debug] back_lines={back_lines!r}")
 
     joined = " ".join(all_lines)
     fields: dict = {}

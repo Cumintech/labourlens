@@ -84,7 +84,7 @@ from schemas import (
 
 ATTENDANCE_STATUSES = ("present", "absent", "leave")
 
-MAX_WORKERS_PER_OWNER = 50
+MAX_WORKERS_PER_OWNER = 200
 
 # EPF's statutory employee contribution rate under Indian law -- the
 # sensible default for a wage profile auto-created from a worker type

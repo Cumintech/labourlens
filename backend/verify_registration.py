@@ -2,7 +2,7 @@
 via FastAPI's TestClient -- not mocks. Covers: OCR extraction from a real
 image, worker creation with encrypted PII (checked at the raw-DB level,
 same rigor as Day 1's auth verification), multi-tenant scoping, and the
-50-worker-per-owner limit.
+200-worker-per-owner limit.
 
     DATABASE_URL=sqlite:///./scratch.db JWT_SECRET=x ENCRYPTION_KEY=<fernet key> python verify_registration.py
 """
@@ -130,17 +130,17 @@ assert list_resp_a.status_code == 200
 assert len(list_resp_a.json()) == 1
 print("multi-tenant scoping confirmed: Owner B cannot see or fetch Owner A's worker")
 
-# --- 50-worker-per-owner limit ---
-for i in range(49):  # 1 already created above, need 49 more to hit 50
+# --- 200-worker-per-owner limit ---
+for i in range(199):  # 1 already created above, need 199 more to hit 200
     resp = client.post(
         "/workers",
         headers=headers_a,
-        json={"name": f"Bulk Worker {i}", "aadhaar_number": _valid_aadhaar(f"20000000{i:03d}")},
+        json={"name": f"Bulk Worker {i}", "aadhaar_number": _valid_aadhaar(f"2000000{i:04d}")},
     )
     assert resp.status_code == 201, f"worker {i}: {resp.text}"
 
 count_resp = client.get("/workers", headers=headers_a)
-assert len(count_resp.json()) == 50, f"expected exactly 50 workers, got {len(count_resp.json())}"
+assert len(count_resp.json()) == 200, f"expected exactly 200 workers, got {len(count_resp.json())}"
 
 over_limit_resp = client.post(
     "/workers",
@@ -148,6 +148,6 @@ over_limit_resp = client.post(
     json={"name": "One Too Many", "aadhaar_number": "999999999999"},
 )
 assert over_limit_resp.status_code == 422, over_limit_resp.text
-print("50-worker-per-owner limit confirmed: 51st worker rejected with 422")
+print("200-worker-per-owner limit confirmed: 201st worker rejected with 422")
 
 print("\nALL ASSERTIONS PASSED")

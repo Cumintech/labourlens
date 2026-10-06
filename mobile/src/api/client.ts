@@ -7,6 +7,7 @@
 // EXPO_PUBLIC_API_URL=http://192.168.1.23:8010 -- see mobile/README.md.
 
 import { File } from "expo-file-system";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8010";
@@ -462,7 +463,75 @@ export type Attendance = {
   source_detail: string | null;
 };
 
-export function markAttendance(
+type QueuedMark = {
+  workerId: number;
+  date: string;
+  slot: AttendanceSlot;
+  status: AttendanceStatus;
+  overtimeHours: number;
+};
+
+const MARK_QUEUE_KEY = "attendance_offline_queue_v1";
+
+async function readMarkQueue(): Promise<QueuedMark[]> {
+  try {
+    return JSON.parse((await AsyncStorage.getItem(MARK_QUEUE_KEY)) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+// Last write wins per worker/date/slot, so a re-marked shift never
+// replays a stale earlier mark.
+async function enqueueMark(mark: QueuedMark): Promise<void> {
+  const queue = (await readMarkQueue()).filter(
+    (q) => !(q.workerId === mark.workerId && q.date === mark.date && q.slot === mark.slot),
+  );
+  queue.push(mark);
+  await AsyncStorage.setItem(MARK_QUEUE_KEY, JSON.stringify(queue));
+}
+
+// Replays marks saved while offline. Stops at the first network
+// failure (still offline); drops a mark the server rejects with a
+// 4xx (it can never succeed); keeps everything on 401/5xx. Returns
+// how many marks are still waiting.
+export async function flushAttendanceQueue(token: string): Promise<number> {
+  const queue = await readMarkQueue();
+  const remaining: QueuedMark[] = [];
+  let stopped = false;
+  for (const m of queue) {
+    if (stopped) {
+      remaining.push(m);
+      continue;
+    }
+    try {
+      await sendAttendance(token, m);
+    } catch (err) {
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 401) continue;
+      remaining.push(m);
+      if (!(err instanceof ApiError)) stopped = true;
+    }
+  }
+  await AsyncStorage.setItem(MARK_QUEUE_KEY, JSON.stringify(remaining));
+  return remaining.length;
+}
+
+export async function pendingAttendanceCount(): Promise<number> {
+  return (await readMarkQueue()).length;
+}
+
+function sendAttendance(token: string, m: QueuedMark): Promise<Attendance> {
+  return request<Attendance>("/attendance", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ worker_id: m.workerId, date: m.date, slot: m.slot, status: m.status, overtime_hours: m.overtimeHours }),
+  });
+}
+
+// Marking works with no signal: a network failure (not a server
+// rejection) saves the mark on the phone and returns an optimistic row
+// with source "pending", replayed by flushAttendanceQueue later.
+export async function markAttendance(
   token: string,
   workerId: number,
   date: string,
@@ -470,11 +539,24 @@ export function markAttendance(
   status: AttendanceStatus,
   overtimeHours: number = 0,
 ): Promise<Attendance> {
-  return request<Attendance>("/attendance", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ worker_id: workerId, date, slot, status, overtime_hours: overtimeHours }),
-  });
+  const mark = { workerId, date, slot, status, overtimeHours };
+  try {
+    return await sendAttendance(token, mark);
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    await enqueueMark(mark);
+    return {
+      id: -1,
+      worker_id: workerId,
+      date,
+      slot,
+      status,
+      overtime_hours: overtimeHours,
+      marked_at: new Date().toISOString(),
+      source: "pending",
+      source_detail: null,
+    };
+  }
 }
 
 export type ShiftConfig = {

@@ -33,6 +33,7 @@ import {
   listWorkers,
   listWorkersMissingCompliance,
   markAttendance,
+  flushAttendanceQueue,
 } from "../api/client";
 import AttendanceRowCard from "../components/AttendanceRowCard";
 import DateField, { isoDate } from "../components/DateField";
@@ -149,6 +150,8 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
 
   const load = useCallback(async () => {
     if (!token) return;
+    // Replay marks saved offline before reading, so the fetch reflects them.
+    await flushAttendanceQueue(token).catch(() => {});
     const [w, a, d, s, missing, l] = await Promise.all([
       listWorkers(token),
       listAttendance(token, selectedDate),
@@ -226,6 +229,10 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
     try {
       const updated = await markAttendance(token, worker.id, selectedDate, slot, status, current?.overtime_hours ?? 0);
       setAttendance((prev) => [...prev.filter((a) => !(a.worker_id === worker.id && a.slot === slot)), updated]);
+      if (updated.source === "pending") {
+        showToast("No signal -- saved on this phone, will sync when online");
+        return;
+      }
       // Present and on-leave are mutually exclusive for the same day --
       // marking a shift present while on leave doesn't make sense.
       if (status === "present") {

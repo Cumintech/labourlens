@@ -15,3 +15,4 @@ httpx==0.28.1
 # magic bytes + size, matching verify_reports.py's existing discipline.
 # Pure-Python, no system binary (same reasoning as reportlab/openpyxl).
 pypdf==5.1.0
+httpx==0.28.1

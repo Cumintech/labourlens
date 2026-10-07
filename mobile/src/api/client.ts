@@ -69,10 +69,10 @@ export type FormTemplate = {
 };
 
 export async function generateAppointmentLetter(token: string, workerId: number): Promise<Uint8Array> {
-  const res = await fetch(`${API_BASE_URL}/workers/${workerId}/appointment-letter`, {
+  const res = await apiFetch(`${API_BASE_URL}/workers/${workerId}/appointment-letter`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, LONG_TIMEOUT_MS);
   if (!res.ok) {
     await throwForErrorResponse(res, "Appointment letter generation failed");
   }
@@ -80,7 +80,7 @@ export async function generateAppointmentLetter(token: string, workerId: number)
 }
 
 export async function deleteAccount(token: string): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/owners/me`, {
+  const res = await apiFetch(`${API_BASE_URL}/owners/me`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -131,16 +131,56 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
   unauthorizedHandler = handler;
 }
 
+// FastAPI 422s send `detail` as an array of {loc, msg, ...}; other errors
+// send a string or a single {msg} object. Always returns a readable string.
+function formatErrorDetail(detail: unknown, fallback: string): string {
+  if (detail == null || detail === "") return fallback;
+  if (typeof detail === "string") return detail;
+  const one = (d: any): string => {
+    if (d && typeof d === "object" && typeof d.msg === "string") {
+      const loc = Array.isArray(d.loc) ? d.loc.filter((x: unknown) => x !== "body" && x !== "query") : [];
+      const field = loc.length ? String(loc[loc.length - 1]) : "";
+      return field ? `${field}: ${d.msg}` : d.msg;
+    }
+    return String(d);
+  };
+  if (Array.isArray(detail)) return detail.map(one).join("; ") || fallback;
+  return one(detail);
+}
+
 async function throwForErrorResponse(res: Response, fallbackPrefix: string): Promise<never> {
   const body = await res.json().catch(() => ({}));
   if (res.status === 401) {
     unauthorizedHandler?.();
   }
-  throw new ApiError(res.status, body.detail ?? `${fallbackPrefix}: ${res.status}`);
+  throw new ApiError(res.status, formatErrorDetail(body?.detail, `${fallbackPrefix}: ${res.status}`));
+}
+
+const DEFAULT_TIMEOUT_MS = 15_000;
+const LONG_TIMEOUT_MS = 60_000; // OCR, photo upload, PDF generation
+
+// status 0 = no response (timeout). Treated like a network failure by the
+// offline attendance queue.
+const TIMEOUT_STATUS = 0;
+
+// The single place every API call goes through, so no request can hang forever.
+async function apiFetch(url: string, init: RequestInit = {}, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new ApiError(TIMEOUT_STATUS, "Request timed out. Check your connection and try again.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await apiFetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -294,7 +334,7 @@ export function updateWorkerType(
 }
 
 export async function deleteWorkerType(token: string, id: number): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/worker-types/${id}`, {
+  const res = await apiFetch(`${API_BASE_URL}/worker-types/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -357,11 +397,11 @@ export async function scanAadhaar(
     } as any);
   }
 
-  const res = await fetch(`${API_BASE_URL}/workers/ocr`, {
+  const res = await apiFetch(`${API_BASE_URL}/workers/ocr`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
-  });
+  }, LONG_TIMEOUT_MS);
   if (!res.ok) {
     await throwForErrorResponse(res, "OCR failed");
   }
@@ -390,11 +430,11 @@ export async function uploadWorkerPhoto(token: string, workerId: number, uri: st
   } else {
     formData.append("photo", new File(uri), "photo.jpg");
   }
-  const res = await fetch(`${API_BASE_URL}/workers/${workerId}/photo`, {
+  const res = await apiFetch(`${API_BASE_URL}/workers/${workerId}/photo`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
-  });
+  }, LONG_TIMEOUT_MS);
   if (!res.ok) {
     await throwForErrorResponse(res, "Photo upload failed");
   }
@@ -408,10 +448,10 @@ export async function uploadWorkerPhoto(token: string, workerId: number, uri: st
 // off to Sharing the same way StatutoryFormsScreen does for every other
 // generated PDF.
 export async function generateIdCard(token: string, workerId: number): Promise<Uint8Array> {
-  const res = await fetch(`${API_BASE_URL}/workers/${workerId}/id-card`, {
+  const res = await apiFetch(`${API_BASE_URL}/workers/${workerId}/id-card`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, LONG_TIMEOUT_MS);
   if (!res.ok) {
     await throwForErrorResponse(res, "ID card generation failed");
   }
@@ -473,47 +513,123 @@ type QueuedMark = {
 
 const MARK_QUEUE_KEY = "attendance_offline_queue_v1";
 
+// Every queue read-modify-write runs through this promise chain, so a
+// mark enqueued mid-flush (or two bulk-mark enqueues at once) can never
+// overwrite each other's AsyncStorage write.
+let queueLock: Promise<unknown> = Promise.resolve();
+function withQueueLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = queueLock.then(fn, fn);
+  queueLock = run.catch(() => {});
+  return run;
+}
+
+const queueListeners = new Set<() => void>();
+function notifyQueueChanged() {
+  queueListeners.forEach((l) => l());
+}
+// Lets the "N pending sync" banner react to queue changes.
+export function subscribeAttendanceQueue(listener: () => void): () => void {
+  queueListeners.add(listener);
+  return () => {
+    queueListeners.delete(listener);
+  };
+}
+
 async function readMarkQueue(): Promise<QueuedMark[]> {
   try {
-    return JSON.parse((await AsyncStorage.getItem(MARK_QUEUE_KEY)) ?? "[]");
+    const parsed = JSON.parse((await AsyncStorage.getItem(MARK_QUEUE_KEY)) ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 }
 
-// Last write wins per worker/date/slot, so a re-marked shift never
-// replays a stale earlier mark.
-async function enqueueMark(mark: QueuedMark): Promise<void> {
-  const queue = (await readMarkQueue()).filter(
-    (q) => !(q.workerId === mark.workerId && q.date === mark.date && q.slot === mark.slot),
-  );
-  queue.push(mark);
+async function writeMarkQueue(queue: QueuedMark[]): Promise<void> {
   await AsyncStorage.setItem(MARK_QUEUE_KEY, JSON.stringify(queue));
+  notifyQueueChanged();
 }
 
-// Replays marks saved while offline. Stops at the first network
-// failure (still offline); drops a mark the server rejects with a
-// 4xx (it can never succeed); keeps everything on 401/5xx. Returns
-// how many marks are still waiting.
-export async function flushAttendanceQueue(token: string): Promise<number> {
-  const queue = await readMarkQueue();
-  const remaining: QueuedMark[] = [];
-  let stopped = false;
-  for (const m of queue) {
-    if (stopped) {
-      remaining.push(m);
-      continue;
-    }
+function sameMark(a: QueuedMark, b: QueuedMark): boolean {
+  return (
+    a.workerId === b.workerId &&
+    a.date === b.date &&
+    a.slot === b.slot &&
+    a.status === b.status &&
+    a.overtimeHours === b.overtimeHours
+  );
+}
+
+// Last write wins per worker/date/slot, so a re-marked shift never
+// replays a stale earlier mark.
+function enqueueMark(mark: QueuedMark): Promise<void> {
+  return withQueueLock(async () => {
+    const queue = (await readMarkQueue()).filter(
+      (q) => !(q.workerId === mark.workerId && q.date === mark.date && q.slot === mark.slot),
+    );
+    queue.push(mark);
+    await writeMarkQueue(queue);
+  });
+}
+
+// Called on logout / account delete so one owner's pending marks are
+// never replayed under the next account's token.
+export function clearAttendanceQueue(): Promise<void> {
+  return withQueueLock(async () => {
+    await AsyncStorage.removeItem(MARK_QUEUE_KEY);
+    notifyQueueChanged();
+  });
+}
+
+// Fires after a flush actually sent marks, so screens can reload.
+const syncedListeners = new Set<() => void>();
+export function subscribeAttendanceSynced(listener: () => void): () => void {
+  syncedListeners.add(listener);
+  return () => {
+    syncedListeners.delete(listener);
+  };
+}
+
+let flushInFlight: Promise<number> | null = null;
+
+// Replays marks saved while offline. Keeps a mark for retry on network
+// failure/timeout, 401, 408, 429 and 5xx; drops it only on any other 4xx
+// (it can never succeed). Stops at the first network failure (still
+// offline) or 429 (rate limited). Returns how many marks are still
+// waiting. Concurrent calls share one run.
+export function flushAttendanceQueue(token: string): Promise<number> {
+  if (flushInFlight) return flushInFlight;
+  flushInFlight = doFlush(token).finally(() => {
+    flushInFlight = null;
+  });
+  return flushInFlight;
+}
+
+async function doFlush(token: string): Promise<number> {
+  const snapshot = await withQueueLock(readMarkQueue);
+  const done: QueuedMark[] = []; // sent, or permanently rejected -> remove
+  let sent = 0;
+  for (const m of snapshot) {
     try {
       await sendAttendance(token, m);
+      done.push(m);
+      sent += 1;
     } catch (err) {
-      if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 401) continue;
-      remaining.push(m);
-      if (!(err instanceof ApiError)) stopped = true;
+      if (!(err instanceof ApiError) || err.status === TIMEOUT_STATUS || err.status === 429) break;
+      if (err.status === 401) break; // every remaining mark would fail the same way
+      const retryable = err.status === 408 || err.status >= 500;
+      if (!retryable && err.status >= 400 && err.status < 500) done.push(m);
     }
   }
-  await AsyncStorage.setItem(MARK_QUEUE_KEY, JSON.stringify(remaining));
-  return remaining.length;
+  // Re-read under the lock and remove only what was handled, so marks
+  // enqueued (or re-marked) while this flush ran are kept.
+  const left = await withQueueLock(async () => {
+    const current = await readMarkQueue();
+    const remaining = current.filter((q) => !done.some((d) => sameMark(d, q)));
+    if (remaining.length !== current.length) await writeMarkQueue(remaining);
+    return remaining.length;
+  });
+  if (sent > 0) syncedListeners.forEach((l) => l());
+  return left;
 }
 
 export async function pendingAttendanceCount(): Promise<number> {
@@ -543,7 +659,9 @@ export async function markAttendance(
   try {
     return await sendAttendance(token, mark);
   } catch (err) {
-    if (err instanceof ApiError) throw err;
+    // A real server response is a failure to show; no response (network
+    // down or timeout, status 0) means save it for later.
+    if (err instanceof ApiError && err.status !== TIMEOUT_STATUS) throw err;
     await enqueueMark(mark);
     return {
       id: -1,
@@ -607,7 +725,7 @@ export function updateShiftConfig(
 }
 
 export async function deleteShiftConfig(token: string, id: number): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/shift-configs/${id}`, {
+  const res = await apiFetch(`${API_BASE_URL}/shift-configs/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -931,7 +1049,7 @@ export function listWorkerAttendanceMonth(token: string, workerId: number, month
 }
 
 export async function deleteLeaveEntry(token: string, leaveId: number): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/leave/${leaveId}`, {
+  const res = await apiFetch(`${API_BASE_URL}/leave/${leaveId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -1178,7 +1296,7 @@ export function createDeviceMapping(
 }
 
 export async function deleteDeviceMapping(token: string, mappingId: number): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/biometric/device-mappings/${mappingId}`, {
+  const res = await apiFetch(`${API_BASE_URL}/biometric/device-mappings/${mappingId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });

@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Platform } from "react-native";
-import { Owner, login as apiLogin, signup as apiSignup, setUnauthorizedHandler } from "../api/client";
+import { Owner, clearAttendanceQueue, login as apiLogin, signup as apiSignup, setUnauthorizedHandler } from "../api/client";
 
 const TOKEN_KEY = "labourlens_token";
 const OWNER_KEY = "labourlens_owner";
@@ -52,15 +52,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const [storedToken, storedOwner] = await Promise.all([
-        Store.getItemAsync(TOKEN_KEY),
-        Store.getItemAsync(OWNER_KEY),
-      ]);
-      if (storedToken && storedOwner) {
-        setToken(storedToken);
-        setOwner(JSON.parse(storedOwner));
+      // A failed keystore read or a corrupt stored owner must never block
+      // startup: drop the bad session and continue logged-out.
+      try {
+        const [storedToken, storedOwner] = await Promise.all([
+          Store.getItemAsync(TOKEN_KEY),
+          Store.getItemAsync(OWNER_KEY),
+        ]);
+        if (storedToken && storedOwner) {
+          const parsed = JSON.parse(storedOwner);
+          setToken(storedToken);
+          setOwner(parsed);
+        }
+      } catch {
+        await Promise.all([
+          Store.deleteItemAsync(TOKEN_KEY).catch(() => {}),
+          Store.deleteItemAsync(OWNER_KEY).catch(() => {}),
+        ]);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, []);
 
@@ -108,6 +119,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
+    // Pending offline marks belong to this owner -- never replay them
+    // under the next account's token.
+    await clearAttendanceQueue().catch(() => {});
     await Promise.all([Store.deleteItemAsync(TOKEN_KEY), Store.deleteItemAsync(OWNER_KEY)]);
     setToken(null);
     setOwner(null);

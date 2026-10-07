@@ -1,7 +1,7 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import { ChevronRight, Clock, MapPin, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, Sparkles, UserPlus, Users } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,7 +15,9 @@ import {
   listShiftConfigs,
   listWorkers,
   getComplianceCheck,
+  subscribeAttendanceSynced,
 } from "../api/client";
+import PendingSyncBanner from "../components/PendingSyncBanner";
 import { isoDate } from "../components/DateField";
 import WorkerHeroArt from "../components/WorkerHeroArt";
 import { IconButton, LogoMark } from "../components/ui";
@@ -95,6 +97,9 @@ export default function HomeScreen({ navigation }: Props) {
     }, [load]),
   );
 
+  // Refresh Today's numbers once queued offline marks have uploaded.
+  useEffect(() => subscribeAttendanceSynced(() => { load().catch(() => {}); }), [load]);
+
   async function handleRefresh() {
     setRefreshing(true);
     await load().catch(() => {});
@@ -171,6 +176,7 @@ export default function HomeScreen({ navigation }: Props) {
           )}
         </View>
 
+        <PendingSyncBanner />
         <View style={styles.attendanceCard}>
           <View style={styles.cardTitleRow}>
             <Text style={styles.cardTitle}>Today</Text>

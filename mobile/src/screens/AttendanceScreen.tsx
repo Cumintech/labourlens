@@ -34,7 +34,9 @@ import {
   listWorkersMissingCompliance,
   markAttendance,
   flushAttendanceQueue,
+  subscribeAttendanceSynced,
 } from "../api/client";
+import PendingSyncBanner from "../components/PendingSyncBanner";
 import AttendanceRowCard from "../components/AttendanceRowCard";
 import DateField, { isoDate } from "../components/DateField";
 import YearMonthDayPicker from "../components/YearMonthDayPicker";
@@ -150,7 +152,8 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
 
   const load = useCallback(async () => {
     if (!token) return;
-    // Replay marks saved offline before reading, so the fetch reflects them.
+    // Replay marks saved offline before reading, so the fetch reflects them
+    // (the app-root useAttendanceQueueSync also does this on foreground).
     await flushAttendanceQueue(token).catch(() => {});
     const [w, a, d, s, missing, l] = await Promise.all([
       listWorkers(token),
@@ -183,6 +186,9 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
         .finally(() => setLoading(false));
     }, [load]),
   );
+
+  // Reload once marks queued offline (and synced by the app-root hook) land.
+  useEffect(() => subscribeAttendanceSynced(() => { load().catch(() => {}); }), [load]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -553,6 +559,7 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
         onSelect={(d) => { setPickerOpen(false); setSelectedDate(isoDate(d)); }}
         onClose={() => setPickerOpen(false)}
       />
+      <PendingSyncBanner />
       <FlatList
         style={{ flex: 1 }}
         data={filtered}

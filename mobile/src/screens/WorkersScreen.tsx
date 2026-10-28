@@ -24,7 +24,7 @@ type Props = {
   route?: { params?: { filterIds?: number[]; filterLabel?: string } };
 };
 
-type Filter = "all" | "missing" | "no_wage" | "inactive" | "underage" | "unmapped";
+type Filter = "all" | "permanent" | "temporary" | "contract" | "missing" | "no_wage" | "inactive" | "underage" | "unmapped";
 
 const WORKER_ALERT_CODES = ["missing_compliance", "underage_workers", "unmapped_devices"];
 
@@ -168,6 +168,7 @@ export default function WorkersScreen({ navigation, route }: Props) {
     } else if (filter === "missing") list = list.filter((w) => missingComplianceIds.has(w.id));
     else if (filter === "no_wage") list = list.filter((w) => w.status === "active" && !w.worker_type_id);
     else if (filter === "inactive") list = list.filter((w) => w.status !== "active");
+    else if (filter === "permanent" || filter === "temporary" || filter === "contract") list = list.filter((w) => w.employment_type === filter);
     else if (filter === "underage") list = underageWorkers;
     else if (filter === "unmapped") list = unmappedWorkers;
     const q = search.trim().toLowerCase();
@@ -241,9 +242,9 @@ export default function WorkersScreen({ navigation, route }: Props) {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
               {([
                 ["all", "All", workers.length],
-                ["missing", "Details missing", missingCount],
-                ["no_wage", "No wage rate", noWageCount],
-                ["inactive", "Inactive", inactiveCount],
+                ["permanent", "Permanent", workers.filter((w) => w.employment_type === "permanent").length],
+                ["temporary", "Temporary", workers.filter((w) => w.employment_type === "temporary").length],
+                ["contract", "Contractor", workers.filter((w) => w.employment_type === "contract").length],
               ] as [Filter, string, number][]).map(([key, label, count]) => {
                 const selected = filter === key;
                 return (
@@ -261,9 +262,12 @@ export default function WorkersScreen({ navigation, route }: Props) {
                   </Pressable>
                 );
               })}
+              <Pressable style={styles.filterChip} onPress={() => navigation.navigate("WorkerTypeReport")} accessibilityRole="button">
+                <Text style={styles.filterChipText}>Worker type report</Text>
+              </Pressable>
             </ScrollView>
 
-            {workerAlerts.length > 0 && (
+            {(workerAlerts.length > 0 || missingCount + noWageCount + inactiveCount > 0) && (
               <View style={styles.complianceCard}>
                 <Pressable
                   style={styles.complianceHeaderRow}
@@ -271,7 +275,7 @@ export default function WorkersScreen({ navigation, route }: Props) {
                   onPress={() => setComplianceExpanded((v) => !v)}
                 >
                   <Text style={styles.complianceBannerText}>
-                    Worker compliance - attention needed ({workerAlerts.length})
+                    Worker compliance - attention needed
                   </Text>
                   <ChevronRight
                     size={16}
@@ -279,6 +283,20 @@ export default function WorkersScreen({ navigation, route }: Props) {
                     style={{ transform: [{ rotate: complianceExpanded ? "90deg" : "0deg" }] }}
                   />
                 </Pressable>
+                {complianceExpanded &&
+                  ([
+                    ["missing", "Details missing", missingCount],
+                    ["no_wage", "No wage rate", noWageCount],
+                    ["inactive", "Inactive workers", inactiveCount],
+                  ] as [Filter, string, number][])
+                    .filter(([, , n]) => n > 0)
+                    .map(([key, label, n]) => (
+                      <Pressable key={key} style={styles.complianceRow} accessibilityRole="button" onPress={() => setFilter(key)}>
+                        <ListChecks size={18} color={colors.warningTintText} />
+                        <Text style={styles.alertLine}>{n} {label.toLowerCase()}</Text>
+                        <ChevronRight size={16} color={colors.warning} />
+                      </Pressable>
+                    ))}
                 {complianceExpanded &&
                   workerAlerts.map((al) => {
                     const Icon = ALERT_ICON[al.code] ?? ListChecks;
@@ -306,11 +324,11 @@ export default function WorkersScreen({ navigation, route }: Props) {
                 <Text style={styles.dismissChipClose}>✕</Text>
               </Pressable>
             ) : (
-              (filter === "underage" || filter === "unmapped") && (
+              (filter === "underage" || filter === "unmapped" || filter === "missing" || filter === "no_wage" || filter === "inactive") && (
                 <Pressable style={styles.dismissChip} onPress={() => setFilter("all")} accessibilityRole="button">
                   <Text style={styles.dismissChipText}>
                     Showing {filtered.length} worker{filtered.length === 1 ? "" : "s"}{" "}
-                    {filter === "underage" ? "under minimum age" : "not mapped to a device"}
+                    {{ underage: "under minimum age", unmapped: "not mapped to a device", missing: "with details missing", no_wage: "with no wage rate", inactive: "inactive" }[filter as string]}
                   </Text>
                   <Text style={styles.dismissChipClose}>✕</Text>
                 </Pressable>

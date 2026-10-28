@@ -39,6 +39,8 @@ import {
 import DateField, { addYearsIso, isoDate } from "../components/DateField";
 import EmploymentFields from "../components/EmploymentFields";
 import SelectField from "../components/SelectField";
+import JoiningDateField from "../components/JoiningDateField";
+import { complianceProgress } from "../employment";
 import { ALL_INDIAN_STATE_OPTIONS } from "../indianStates";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
@@ -143,7 +145,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [designation, setDesignation] = useState("");
   const [epfUanNo, setEpfUanNo] = useState("");
   const [esicNo, setEsicNo] = useState("");
-  const [dateOfJoining, setDateOfJoining] = useState("");
+  const [dateOfJoining, setDateOfJoining] = useState(isoDate(new Date()));
   const [fitnessCertNo, setFitnessCertNo] = useState("");
   const [fitnessCertValidTill, setFitnessCertValidTill] = useState("");
 
@@ -477,6 +479,14 @@ export default function AddWorkerScreen({ navigation }: Props) {
   }
 
   const step1Continueable = detailsRevealed && identityValid;
+  const progress = complianceProgress(employmentType, {
+    father: fatherOrSpouseName,
+    nature: designation,
+    joined: dateOfJoining,
+    epf: epfUanNo,
+    esic: esicNo,
+  });
+  const step2Blocked = step === 2 && !progress.complete;
 
   return (
     <KeyboardAvoidingView
@@ -607,28 +617,29 @@ export default function AddWorkerScreen({ navigation }: Props) {
             />
             <View style={styles.helpBox}>
               <Text style={styles.helpBoxText}>
-                These details feed the statutory Form 12 register. Optional here -- the Dashboard reminds you later if
-                any active worker is still missing them.
+                These details feed the statutory Form 12 register. {progress.filled} of {progress.total} filled
+                {progress.complete ? " -- all set." : " -- fill the rest to continue."}
+                {employmentType === "temporary" ? " (Temporary workers: EPF/ESIC not required.)" : ""}
               </Text>
             </View>
-            <Text style={styles.sectionLabelAmber}>Salary type</Text>
-            <View style={styles.segToggle}>
-              {(["daily", "weekly", "monthly"] as const).map((option) => (
-                <TouchableOpacity key={option} style={[styles.segOption, rateType === option && styles.segOptionActive]} onPress={() => setRateType(option)}>
-                  <Text style={[styles.segText, rateType === option && styles.segTextActive]}>{option[0].toUpperCase() + option.slice(1)}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <SelectField
+              label="Salary type"
+              value={rateType}
+              options={[
+                { label: "Daily", value: "daily" },
+                { label: "Weekly", value: "weekly" },
+                { label: "Monthly", value: "monthly" },
+              ]}
+              onChange={(v) => setRateType(v as WageRateType)}
+            />
             <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} />
             <Field label="Nature of work" value={designation} onChangeText={setDesignation} />
             <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} />
             <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} />
-            <DateField
-              label="Date of entry into service"
+            <JoiningDateField
               value={dateOfJoining}
               onChange={setDateOfJoining}
               minDate={dob ? addYearsIso(dob, MINIMUM_WORKING_AGE) : undefined}
-              maxDate={isoDate(new Date())}
             />
             {estimate?.category === "young_person" && (
               <>
@@ -789,9 +800,9 @@ export default function AddWorkerScreen({ navigation }: Props) {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || saving) && styles.buttonDisabled]}
+            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || step2Blocked || saving) && styles.buttonDisabled]}
             onPress={goContinue}
-            disabled={(step === 1 && !step1Continueable) || saving}
+            disabled={(step === 1 && !step1Continueable) || step2Blocked || saving}
           >
             {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.nextBtnText}>Continue</Text>}
           </TouchableOpacity>

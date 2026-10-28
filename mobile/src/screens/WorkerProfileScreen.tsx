@@ -48,6 +48,7 @@ import TradeIcon from "../components/TradeIcon";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
+import { complianceProgress } from "../employment";
 import { formatINR } from "../format";
 import { colors, radius, spacing, type } from "../theme";
 
@@ -132,13 +133,17 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
     }, [loadCompliance, token, workerId]),
   );
 
-  const completeness = useMemo(() => {
-    const fields = compliance
-      ? [compliance.father_or_spouse_name, compliance.designation_or_nature_of_work, compliance.epf_uan_no, compliance.esic_no, compliance.date_of_joining]
-      : [];
-    const filled = fields.filter((f) => !!f && f.trim() !== "").length;
-    return { filled, total: 5, complete: filled === 5 };
-  }, [compliance]);
+  const completeness = useMemo(
+    () =>
+      complianceProgress(headerWorker?.employment_type ?? null, {
+        father: compliance?.father_or_spouse_name,
+        nature: compliance?.designation_or_nature_of_work,
+        joined: compliance?.date_of_joining,
+        epf: compliance?.epf_uan_no,
+        esic: compliance?.esic_no,
+      }),
+    [compliance, headerWorker],
+  );
 
   return (
     <View style={styles.container}>

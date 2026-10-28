@@ -8,6 +8,9 @@
 - Done: contract worker type, weekly salary type, LOP proration (backend/forms.py compute_wage), Android save-to-folder for PDFs (mobile/src/pdfShare.ts), Reports regrouped, Add Worker scroll/keyboard fix, OCR 12-digit fallback. Test: backend/verify_wage_lop.py.
 - Open: min-wage comparison, photo/logo ID layout (#6, needs clarification), NFH rules, device re-test of scroll + Downloads save.
 
+## Test-report 2 (2026-10-28, PR fix/test-report-2)
+- Salary type dropdown; joining-date chips default today; Add Worker gates Continue on 5/5 (3/3 temporary) via complianceProgress; Save/Share choice for PDFs; Workers filters All/Permanent/Temporary/Contractor + Worker type report (pie charts, also on Today); details-missing/no-wage/inactive moved into compliance card.
+
 ## Done (recent, from git log)
 - Worker employment classification (Permanent/Contractor/ISM) — 3257715
 - Click-to-WhatsApp support; gated create_all() to dev; test runner — 74d6088, 7af2618

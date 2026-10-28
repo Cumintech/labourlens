@@ -251,11 +251,7 @@ export default function HomeScreen({ navigation }: Props) {
             <QuickAction icon={FileText} label="Wage slips" onPress={() => goToTab("ReportsTab", { formCode: "wageslip", lockForm: true })} />
             <QuickAction icon={Fingerprint} label="Biometric" onPress={() => navigation.navigate("BiometricDevices")} />
             <QuickAction icon={Clock} label="Shifts" onPress={() => navigation.navigate("ShiftSettings")} />
-            <QuickAction
-              icon={Users}
-              label={`ISM contractors (${ismContractorIds.length})`}
-              onPress={() => goToTab("WorkersTab", { filterIds: ismContractorIds, filterLabel: "ISM contractors" })}
-            />
+            <QuickAction icon={Users} label="Worker type report" onPress={() => navigation.navigate("WorkerTypeReport")} />
           </View>
         </View>
 

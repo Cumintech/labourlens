@@ -29,9 +29,16 @@ export async function sharePdfBytes(bytes: Uint8Array, filenamePrefix: string): 
     URL.revokeObjectURL(url);
     return;
   }
-  if (Platform.OS === "android") {
-    // Save straight to a folder the user picks (e.g. Downloads) instead of
-    // the share sheet, which pushed files to WhatsApp. Cancel -> share sheet.
+  // Let the user choose: save to the device, or share (WhatsApp etc.).
+  const choice = await new Promise<"save" | "share" | null>((resolve) => {
+    Alert.alert("Download or share", "What would you like to do with this file?", [
+      { text: "Save to device", onPress: () => resolve("save") },
+      { text: "Share / WhatsApp", onPress: () => resolve("share") },
+      { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
+    ], { cancelable: true, onDismiss: () => resolve(null) });
+  });
+  if (choice === null) return;
+  if (choice === "save" && Platform.OS === "android") {
     try {
       const dir = await Directory.pickDirectoryAsync();
       const saved = dir.createFile(`${filenamePrefix}_${Date.now()}`, "application/pdf");
@@ -39,7 +46,7 @@ export async function sharePdfBytes(bytes: Uint8Array, filenamePrefix: string): 
       Alert.alert("Saved", `${saved.name || filenamePrefix} saved to ${dir.name || "the selected folder"}.`);
       return;
     } catch {
-      // cancelled or folder not writable -- fall through to share sheet
+      // cancelled or folder not writable -- fall through to the share sheet
     }
   }
   const destination = new File(Paths.cache, `${filenamePrefix}_${Date.now()}.pdf`);

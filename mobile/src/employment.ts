@@ -42,3 +42,16 @@ export function suggestIsm(homeState: string | null | undefined, factoryState: s
   if (!homeState || !factoryState) return false;
   return homeState.trim().toLowerCase() !== factoryState.trim().toLowerCase();
 }
+
+// Form 12 completeness shown on the worker profile and enforced when
+// adding a worker. Temporary workers are not covered by EPF/ESIC, so
+// those two numbers aren't required for them (3 of 3 instead of 5 of 5).
+export function complianceProgress(
+  employmentType: EmploymentType,
+  f: { father: string | null | undefined; nature: string | null | undefined; joined: string | null | undefined; epf: string | null | undefined; esic: string | null | undefined },
+): { filled: number; total: number; complete: boolean } {
+  const fields = [f.father, f.nature, f.joined];
+  if (employmentType !== "temporary") fields.push(f.epf, f.esic);
+  const filled = fields.filter((v) => !!v && v.trim() !== "").length;
+  return { filled, total: fields.length, complete: filled === fields.length };
+}

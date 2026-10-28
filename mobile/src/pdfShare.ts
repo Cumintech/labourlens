@@ -1,4 +1,4 @@
-import { File, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { Alert, Platform } from "react-native";
 
@@ -28,6 +28,19 @@ export async function sharePdfBytes(bytes: Uint8Array, filenamePrefix: string): 
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     return;
+  }
+  if (Platform.OS === "android") {
+    // Save straight to a folder the user picks (e.g. Downloads) instead of
+    // the share sheet, which pushed files to WhatsApp. Cancel -> share sheet.
+    try {
+      const dir = await Directory.pickDirectoryAsync();
+      const saved = dir.createFile(`${filenamePrefix}_${Date.now()}`, "application/pdf");
+      saved.write(bytes);
+      Alert.alert("Saved", `${saved.name || filenamePrefix} saved to ${dir.name || "the selected folder"}.`);
+      return;
+    } catch {
+      // cancelled or folder not writable -- fall through to share sheet
+    }
   }
   const destination = new File(Paths.cache, `${filenamePrefix}_${Date.now()}.pdf`);
   destination.create({ overwrite: true });

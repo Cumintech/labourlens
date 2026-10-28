@@ -25,6 +25,7 @@ import {
   getWageProfileHistory,
   getWorker,
   listWorkerTypes,
+  rateUnit,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import ErrorState from "../components/ErrorState";
@@ -270,7 +271,7 @@ export default function WageProfileScreen({ route, navigation }: Props) {
               <View style={styles.heroTopRow}>
                 <Text style={styles.heroAmount}>
                   ₹{formatINR(currentRate.basic)}
-                  <Text style={styles.heroUnit}>/{currentRate.rate_type === "daily" ? "day" : "month"}</Text>
+                  <Text style={styles.heroUnit}>/{rateUnit(currentRate.rate_type)}</Text>
                 </Text>
                 <View style={styles.effectiveChip}>
                   <Text style={styles.effectiveChipText}>From {currentRate.effective_from}</Text>
@@ -304,7 +305,7 @@ export default function WageProfileScreen({ route, navigation }: Props) {
                 <View style={{ flex: 1, paddingBottom: spacing.md }}>
                   <Text style={styles.historyEffective}>From {h.effective_from}</Text>
                   <Text style={styles.historyDetail}>
-                    ₹{formatINR(h.basic)}/{h.rate_type === "daily" ? "day" : "month"} · DA ₹{formatINR(h.da)} · HRA ₹{formatINR(h.hra)}
+                    ₹{formatINR(h.basic)}/{rateUnit(h.rate_type)} · DA ₹{formatINR(h.da)} · HRA ₹{formatINR(h.hra)}
                   </Text>
                   <Text style={styles.historyDetail}>
                     PF {h.pf_rate}% · ESI {h.esi_rate}% · LWF ₹{formatINR(h.lwf_amount)}
@@ -334,14 +335,14 @@ export default function WageProfileScreen({ route, navigation }: Props) {
           />
 
           <View style={styles.segmentRow}>
-            {(["daily", "monthly"] as const).map((option) => (
+            {(["daily", "weekly", "monthly"] as const).map((option) => (
               <TouchableOpacity
                 key={option}
                 style={[styles.segmentOption, rateType === option && styles.segmentOptionSelected]}
                 onPress={() => setRateType(option)}
               >
                 <Text style={[styles.segmentText, rateType === option && styles.segmentTextSelected]}>
-                  {option === "daily" ? "Daily" : "Monthly"}
+                  {option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : "Monthly"}
                 </Text>
               </TouchableOpacity>
             ))}

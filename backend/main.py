@@ -1299,6 +1299,14 @@ def upsert_wage_payment(
     return payment
 
 
+# Placeholder until per-state/industry minimum wages are supplied.
+MINIMUM_DAILY_WAGE = 500.0
+
+
+def _daily_equivalent(rate_type: str, basic: float) -> float:
+    return basic / 7 if rate_type == "weekly" else basic / 30 if rate_type == "monthly" else basic
+
+
 def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:
     """The same figures Form 15/Wage Slip print, as JSON -- shared by the
     per-worker wage-computation endpoint and the factory-wide summary so
@@ -1326,6 +1334,9 @@ def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:
         paid=wage["payment"] is not None and wage["payment"].date_of_payment is not None,
         rate_amount=wage["rate"].basic,
         rate_type=wage["rate"].rate_type,
+        min_daily_wage=MINIMUM_DAILY_WAGE,
+        daily_equivalent_rate=round(_daily_equivalent(wage["rate"].rate_type, wage["rate"].basic), 2),
+        meets_min_wage=_daily_equivalent(wage["rate"].rate_type, wage["rate"].basic) >= MINIMUM_DAILY_WAGE,
         basic_wage=wage["basic_wage"],
         da=wage["rate"].da,
         hra=wage["rate"].hra,

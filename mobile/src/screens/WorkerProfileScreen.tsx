@@ -35,6 +35,7 @@ import {
   markAttendance,
   updateWorkerEmployment,
   uploadWorkerPhoto,
+  rateUnit,
 } from "../api/client";
 import DayAttendanceRow from "../components/DayAttendanceRow";
 import EmploymentFields from "../components/EmploymentFields";
@@ -263,7 +264,7 @@ function OverviewTab({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [editingEmployment, setEditingEmployment] = useState(false);
-  const [empType, setEmpType] = useState<"permanent" | "temporary">("permanent");
+  const [empType, setEmpType] = useState<"permanent" | "temporary" | "contract">("permanent");
   const [empHomeState, setEmpHomeState] = useState("");
   const [empIsIsm, setEmpIsIsm] = useState(false);
   const [empTouched, setEmpTouched] = useState(true); // editing an existing worker: don't silently re-auto-suggest on open
@@ -854,7 +855,7 @@ function WagesTab({
         {currentRate ? (
           <View style={styles.rateCard}>
             <Text style={styles.rateValue}>
-              ₹{currentRate.basic} / {currentRate.rate_type === "daily" ? "day" : "month"}
+              ₹{currentRate.basic} / {rateUnit(currentRate.rate_type)}
             </Text>
             <Text style={styles.rateDetail}>Effective from {currentRate.effective_from}</Text>
           </View>

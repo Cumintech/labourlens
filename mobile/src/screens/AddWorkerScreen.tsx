@@ -22,6 +22,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import {
   ApiError,
+  WageRateType,
+  MIN_DAILY_WAGE,
+  dailyEquivalent,
   WorkerType,
   assignWorkerType,
   createWageProfile,
@@ -132,7 +135,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [mobile, setMobile] = useState("");
 
   // --- Step 2: Employment + Compliance (Form 12) ---
-  const [employmentType, setEmploymentType] = useState<"permanent" | "temporary">("permanent");
+  const [employmentType, setEmploymentType] = useState<"permanent" | "temporary" | "contract">("permanent");
   const [homeState, setHomeState] = useState("");
   const [isIsmValue, setIsIsmValue] = useState(false);
   const [ismTouched, setIsmTouched] = useState(false);
@@ -149,7 +152,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
   const [selectedWorkerTypeId, setSelectedWorkerTypeId] = useState<number | null>(null);
   const [typeAutoFilled, setTypeAutoFilled] = useState(false);
-  const [rateType, setRateType] = useState<"daily" | "monthly">("daily");
+  const [rateType, setRateType] = useState<WageRateType>("daily");
   const [basic, setBasic] = useState("");
   const [pfRate, setPfRate] = useState("");
   const [esiRate, setEsiRate] = useState("");
@@ -350,8 +353,8 @@ export default function AddWorkerScreen({ navigation }: Props) {
               hra: parseFloat(hra) || 0,
               da: parseFloat(da) || 0,
               other_allowances: parseFloat(otherAllowances) || 0,
-              pf_rate: parseFloat(pfRate) || 0,
-              esi_rate: parseFloat(esiRate) || 0,
+              pf_rate: employmentType === "temporary" ? 0 : parseFloat(pfRate) || 0,
+              esi_rate: employmentType === "temporary" ? 0 : parseFloat(esiRate) || 0,
               lwf_amount: parseFloat(lwfAmount) || 0,
               effective_from: isoDate(new Date()),
             });
@@ -478,7 +481,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior="padding"
       keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
     >
       <View style={styles.header}>
@@ -497,7 +500,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" nestedScrollEnabled>
         {step === 1 && (
           <>
             <View style={styles.segToggle}>
@@ -608,8 +611,16 @@ export default function AddWorkerScreen({ navigation }: Props) {
                 any active worker is still missing them.
               </Text>
             </View>
+            <Text style={styles.sectionLabelAmber}>Salary type</Text>
+            <View style={styles.segToggle}>
+              {(["daily", "weekly", "monthly"] as const).map((option) => (
+                <TouchableOpacity key={option} style={[styles.segOption, rateType === option && styles.segOptionActive]} onPress={() => setRateType(option)}>
+                  <Text style={[styles.segText, rateType === option && styles.segTextActive]}>{option[0].toUpperCase() + option.slice(1)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} />
-            <Field label="Designation / nature of work" value={designation} onChangeText={setDesignation} />
+            <Field label="Nature of work" value={designation} onChangeText={setDesignation} />
             <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} />
             <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} />
             <DateField
@@ -652,12 +663,15 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   noneLabel="No type -- set a custom rate below"
                 />
                 <View style={styles.toggleRow}>
-                  {(["daily", "monthly"] as const).map((option) => (
+                  {(["daily", "weekly", "monthly"] as const).map((option) => (
                     <TouchableOpacity key={option} style={[styles.toggleOption, rateType === option && styles.toggleOptionSelected]} onPress={() => setRateType(option)}>
-                      <Text style={[styles.toggleText, rateType === option && styles.toggleTextSelected]}>{option === "daily" ? "Daily rate" : "Monthly rate"}</Text>
+                      <Text style={[styles.toggleText, rateType === option && styles.toggleTextSelected]}>{option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : "Monthly"}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
+                {basic.trim() !== "" && dailyEquivalent(rateType, parseFloat(basic) || 0) < MIN_DAILY_WAGE && (
+                  <Text style={styles.minWageWarn}>Below minimum wage of ₹{MIN_DAILY_WAGE}/day (daily equivalent ₹{Math.round(dailyEquivalent(rateType, parseFloat(basic) || 0))}).</Text>
+                )}
                 <Field
                   label="Basic wage"
                   value={basic}
@@ -705,14 +719,14 @@ export default function AddWorkerScreen({ navigation }: Props) {
             </Text>
 
             {!rawPhotoUri && !photoUploaded && (
-              <View style={styles.scanRow}>
-                <TouchableOpacity style={styles.scanCard} onPress={() => pickPhoto("camera")}>
-                  <Camera size={28} color={colors.teal} style={styles.scanIcon} />
+              <View>
+                <TouchableOpacity style={styles.photoFrame} onPress={() => pickPhoto("camera")}>
+                  <Camera size={36} color={colors.teal} />
                   <Text style={styles.scanCardLabel}>Take Photo</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.scanCard} onPress={() => pickPhoto("gallery")}>
-                  <Images size={28} color={colors.teal} style={styles.scanIcon} />
-                  <Text style={styles.scanCardLabel}>Choose from Gallery</Text>
+                <TouchableOpacity style={styles.galleryLink} onPress={() => pickPhoto("gallery")}>
+                  <Images size={16} color={colors.teal} />
+                  <Text style={styles.galleryLinkText}>Choose from Gallery</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -837,7 +851,7 @@ const styles = StyleSheet.create({
   stepLabelDone: { color: colors.tealPale },
   stepLabelCurrent: { color: colors.white, fontWeight: "700" },
   body: { flex: 1 },
-  bodyContent: { padding: spacing.lg, paddingBottom: spacing.xl },
+  bodyContent: { padding: spacing.lg, paddingBottom: 120 },
   segToggle: { flexDirection: "row", backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 4, marginBottom: spacing.md },
   segOption: { flex: 1, paddingVertical: spacing.sm + 2, alignItems: "center", borderRadius: radius.sm - 2 },
   segOptionActive: { backgroundColor: colors.teal },
@@ -895,6 +909,22 @@ const styles = StyleSheet.create({
   nextBtn: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
   nextBtnText: { color: colors.white, fontSize: 15, fontWeight: "700" },
   buttonDisabled: { opacity: 0.5 },
+  minWageWarn: { fontSize: 12, fontWeight: "700", color: colors.warningTintText, backgroundColor: colors.warningTint, padding: spacing.sm, borderRadius: radius.sm, marginBottom: spacing.sm },
+  photoFrame: {
+    width: 160,
+    height: 200,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: colors.teal,
+    backgroundColor: colors.fieldBg,
+  },
+  galleryLink: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: spacing.md },
+  galleryLinkText: { fontSize: 14, fontWeight: "700", color: colors.teal },
   photoPreview: {
     width: 160,
     height: 200,

@@ -4,6 +4,10 @@
 - Branch `chore/home-ism-quicklink`: Home screen restored to the pre-classification Today card; Workforce card and filter chips removed; "ISM contractors (N)" quick link added (opens Workers filtered).
 - Still in Expo Go testing; real EAS build not started.
 
+## Test-report fixes (2026-10-28, uncommitted, branch not created)
+- Done: contract worker type, weekly salary type, LOP proration (backend/forms.py compute_wage), Android save-to-folder for PDFs (mobile/src/pdfShare.ts), Reports regrouped, Add Worker scroll/keyboard fix, OCR 12-digit fallback. Test: backend/verify_wage_lop.py.
+- Open: min-wage comparison, photo/logo ID layout (#6, needs clarification), NFH rules, device re-test of scroll + Downloads save.
+
 ## Done (recent, from git log)
 - Worker employment classification (Permanent/Contractor/ISM) — 3257715
 - Click-to-WhatsApp support; gated create_all() to dev; test runner — 74d6088, 7af2618

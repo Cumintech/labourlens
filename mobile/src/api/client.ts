@@ -291,7 +291,7 @@ export type Worker = {
   // Employment classification -- is_ism (inter-state migrant) is
   // independent of employment_type, so a "permanent" worker can also
   // be ISM. null employment_type means not set yet.
-  employment_type: "permanent" | "temporary" | null;
+  employment_type: "permanent" | "temporary" | "contract" | null;
   is_ism: boolean;
   home_state: string | null;
   created_at: string;
@@ -352,7 +352,7 @@ export function assignWorkerType(token: string, workerId: number, workerTypeId: 
 export function updateWorkerEmployment(
   token: string,
   workerId: number,
-  input: { employment_type: "permanent" | "temporary" | null; is_ism: boolean; home_state: string | null },
+  input: { employment_type: "permanent" | "temporary" | "contract" | null; is_ism: boolean; home_state: string | null },
 ): Promise<Worker> {
   return request<Worker>(`/workers/${workerId}/employment`, {
     method: "PUT",
@@ -371,7 +371,7 @@ export type WorkerCreateInput = {
   current_district?: string;
   native_address?: string;
   native_district?: string;
-  employment_type?: "permanent" | "temporary" | null;
+  employment_type?: "permanent" | "temporary" | "contract" | null;
   is_ism?: boolean;
   home_state?: string | null;
 };
@@ -940,7 +940,8 @@ export function listWorkersMissingCompliance(token: string): Promise<Worker[]> {
   });
 }
 
-export type WageRateType = "daily" | "monthly";
+export type WageRateType = "daily" | "weekly" | "monthly";
+export const rateUnit = (t: string) => (t === "daily" ? "day" : t === "weekly" ? "week" : "month");
 
 export type WageProfileInput = {
   rate_type: WageRateType;
@@ -1083,7 +1084,12 @@ export function recordWagePayment(token: string, workerId: number, input: WagePa
   });
 }
 
+export const MIN_DAILY_WAGE = 500; // placeholder until real state/industry rates are supplied
+export const dailyEquivalent = (type: string, basic: number) => (type === "weekly" ? basic / 7 : type === "monthly" ? basic / 30 : basic);
 export type WorkerWage = {
+  meets_min_wage?: boolean | null;
+  daily_equivalent_rate?: number;
+  min_daily_wage?: number;
   worker_id: number;
   worker_name: string;
   numeric_employee_code: string | null;

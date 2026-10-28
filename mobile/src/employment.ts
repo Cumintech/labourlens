@@ -5,7 +5,7 @@
 // employment_type: a permanent worker can also be ISM.
 import { colors } from "./theme";
 
-export type EmploymentType = "permanent" | "temporary" | null;
+export type EmploymentType = "permanent" | "temporary" | "contract" | null;
 export type EmploymentWorker = { employment_type: EmploymentType; is_ism: boolean };
 export type EmploymentGroup = "perm" | "con" | "ism" | null;
 
@@ -15,7 +15,8 @@ export type EmploymentGroup = "perm" | "con" | "ism" | null;
 export function employmentLabel(w: EmploymentWorker): string {
   if (!w.employment_type) return "Not set";
   if (w.employment_type === "permanent") return "Permanent";
-  return w.is_ism ? "ISM" : "Contractor";
+  if (w.is_ism) return "ISM";
+  return w.employment_type === "contract" ? "Contract" : "Temporary";
 }
 
 export function isIsm(w: EmploymentWorker): boolean {

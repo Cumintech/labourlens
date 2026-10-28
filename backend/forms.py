@@ -576,16 +576,30 @@ def compute_wage(db: Session, owner_id: int, worker_id: int, month: int, year: i
     rows = _monthly_attendance_rows(db, worker_id, start_date, end_date, shifts)
     summary = _summarize_month(rows)
 
+    days_in_month = (end_date - start_date).days + 1
+    # Daily wagers are paid per day worked. Weekly/monthly rates are
+    # prorated over the calendar month, minus Loss of Pay days (absent
+    # and not covered by paid leave; NFH/paid-leave days stay paid).
+    # LOP here = days explicitly marked absent and not covered by paid
+    # leave. Unmarked days and weekly offs are NOT deducted -- otherwise an
+    # owner who hasn't marked attendance would see a zero salary.
+    lop_days = sum(1 for r in rows if r["absent_marked"] and not r["paid_leave"])
+    paid_days = max(days_in_month - lop_days, 0)
     if rate.rate_type == "daily":
         basic_wage = rate.basic * summary["days_worked"]
         hourly_rate = rate.basic / STANDARD_DAILY_HOURS
+    elif rate.rate_type == "weekly":
+        basic_wage = rate.basic / 7 * paid_days
+        hourly_rate = (rate.basic / 7) / STANDARD_DAILY_HOURS
     else:
-        days_in_month = (end_date - start_date).days + 1
-        basic_wage = rate.basic
+        basic_wage = rate.basic * paid_days / days_in_month
         hourly_rate = (rate.basic / days_in_month) / STANDARD_DAILY_HOURS
 
     ot_wages = summary["ot_hours"] * hourly_rate * OT_MULTIPLIER
     leave_wages = _leave_wages_for_period(db, worker_id, start_date, end_date)
+    if rate.rate_type != "daily":
+        # Paid-leave days are already inside the prorated basic above.
+        leave_wages = 0.0
     gross = basic_wage + rate.da + rate.hra + rate.other_allowances + ot_wages + leave_wages
 
     # PF wage base is Basic+DA (not Basic alone, not Gross); ESI wage
@@ -645,7 +659,7 @@ def compute_daily_wage(db: Session, worker_id: int, target_date: date) -> dict:
         return {"present": False, "has_rate": True, "daily_cost": 0.0}
 
     days_in_month = calendar.monthrange(target_date.year, target_date.month)[1]
-    daily_rate = rate.basic if rate.rate_type == "daily" else rate.basic / days_in_month
+    daily_rate = rate.basic if rate.rate_type == "daily" else (rate.basic / 7 if rate.rate_type == "weekly" else rate.basic / days_in_month)
     hourly_rate = daily_rate / STANDARD_DAILY_HOURS
     ot_hours = sum(r.overtime_hours or 0 for r in present_today)
     ot_wages = ot_hours * hourly_rate * OT_MULTIPLIER
@@ -1703,7 +1717,7 @@ def build_appointment_letter(db: Session, owner: models.Owner, worker: models.Wo
         .first()
     )
     if wage:
-        rate_unit = "day" if wage.rate_type == "daily" else "month"
+        rate_unit = {"daily": "day", "weekly": "week"}.get(wage.rate_type, "month")
         wage_line = f"Rs. {wage.basic:.2f} per {rate_unit}"
     else:
         wage_line = "-"

@@ -29,6 +29,7 @@ import {
   listWorkerTypes,
   listWorkers,
   recordWagePayment,
+  rateUnit,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import DonutChart from "../components/DonutChart";
@@ -545,6 +546,13 @@ function PayrollView() {
               <Text style={styles.modalSubtitle}>
                 {MONTH_NAMES[month - 1]} {year} · ₹{formatINR(detailTarget.rate_amount)}/{detailTarget.rate_type}
               </Text>
+              {detailTarget.meets_min_wage != null && (
+                <Text style={{ fontSize: 12, fontWeight: "700", marginBottom: 8, color: detailTarget.meets_min_wage ? colors.present : colors.warningTintText }}>
+                  {detailTarget.meets_min_wage
+                    ? `Meets minimum wage (₹${detailTarget.min_daily_wage}/day)`
+                    : `Below minimum wage: ₹${formatINR(detailTarget.daily_equivalent_rate ?? 0)}/day vs ₹${detailTarget.min_daily_wage}/day`}
+                </Text>
+              )}
 
               <View style={styles.daysRow}>
                 <View style={[styles.dayStat, { backgroundColor: colors.presentTint }]}>
@@ -759,7 +767,7 @@ function RatesView({ navigation }: { navigation: NativeStackNavigationProp<RootS
             </View>
             <Text style={rate ? styles.rateValue : styles.rateMissing}>
               {rate ? `₹${formatINR(Number(rate.basic))}` : "No rate"}
-              {rate ? <Text style={styles.rateUnit}> /{rate.rate_type === "daily" ? "day" : "month"}</Text> : null}
+              {rate ? <Text style={styles.rateUnit}> /{rateUnit(rate.rate_type)}</Text> : null}
             </Text>
             <ChevronRight size={16} color={colors.disabled} />
           </TouchableOpacity>

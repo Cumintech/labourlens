@@ -326,21 +326,6 @@ class WorkerTypeAssignIn(BaseModel):
     worker_type_id: int | None  # null clears the assignment
 
 
-class PortalCredentialIn(BaseModel):
-    portal_username: str
-    portal_password: str
-
-
-class SyncStatusOut(BaseModel):
-    id: int
-    worker_id: int
-    action: str
-    state: str
-    attempts: int
-    last_attempted_at: datetime | None
-    last_error: str | None
-
-
 class AttendanceMarkIn(BaseModel):
     worker_id: int
     date: date

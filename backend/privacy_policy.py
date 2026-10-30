@@ -8,7 +8,7 @@ neither the app nor the HTML page hardcodes its own copy.
 
 Originally a verbatim mirror of what PrivacyPolicyScreen.tsx said
 before this file existed; since then, biometric attendance, bank/IFSC
-collection, and the Labour Portal sync feature were built without this
+collection were built without this
 text being updated to disclose them -- added here ahead of Play Store
 submission, since Data Safety declarations must match actual behavior.
 """
@@ -62,10 +62,7 @@ SECTIONS = [
         "heading": "Where it goes",
         "body": (
             "Data stays on this app's backend unless you explicitly download or email a form or report yourself, "
-            "with one exception: if your factory has connected a third-party government/industry Labour Portal "
-            "account, a worker's name and Aadhaar number are sent to that Portal when you register or deactivate "
-            "them, for the sole purpose of keeping that statutory record in sync -- this only happens for "
-            "factories that have explicitly set up Portal credentials. We don't sell or share worker data with "
+            "and we don't sell or share worker data with "
             "advertisers or any other third party."
         ),
     },

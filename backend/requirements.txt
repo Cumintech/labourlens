@@ -36,12 +36,6 @@ easyocr==1.7.2
 # real image).
 pillow==12.3.0
 
-# Portal Sync Worker (see sync_worker.py) -- the Portal has no API, so
-# this drives it the same way a person would. `playwright install
-# chromium` also needs to run once wherever this deploys (not just pip
-# install -- that only gets the Python bindings, not the browser binary).
-playwright==1.62.0
-
 # Day 4 reports (see reports.py) -- both pure-Python/pip-installable, no
 # system binary (same reasoning as EasyOCR over Tesseract elsewhere).
 openpyxl==3.1.5

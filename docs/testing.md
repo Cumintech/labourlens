@@ -12,4 +12,4 @@
 - Attendance/shifts/leave: verify_attendance_dashboard, verify_shift_config, verify_leave_entry, verify_month_end_and_alerts
 - Wages: verify_wage_payment, verify_wage_profile, verify_wage_profile_effective, verify_wage_summary
 - Statutory forms/docs: verify_forms, verify_forms_range, verify_form12, verify_id_card, verify_appointment_letter, verify_reports, verify_tamil_rendering, verify_xml_escaping
-- Biometric / portal sync: verify_biometric_sync, verify_sync_worker
+- Biometric sync: verify_biometric_sync

@@ -29,7 +29,7 @@ class TenantScoped:
     (Attendance.marked_by, WorkerCompliance.registered_by,
     WageProfile.created_by, LeaveEntry.marked_by, WagePayment.recorded_by,
     BiometricConsent.consented_by) or transitively via worker_id/device_id
-    (SyncStatus, DeviceUserMapping, BiometricPunch, FactoryPayment,
+    (DeviceUserMapping, BiometricPunch, FactoryPayment,
     FactoryEmployeeSnapshot) are NOT covered here -- still protected only
     by their existing manual filters, same as before this change."""
 

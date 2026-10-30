@@ -3,13 +3,7 @@ command, against its own fresh throwaway SQLite DB, and fails fast and
 loud on the first failure -- replaces having to invoke each of the 33
 scripts individually with hand-set environment variables.
 
-verify_sync_worker.py is skipped by default: it needs the separate
-test-portal/ app running on 127.0.0.1:8020 (real Playwright automation
-against it, not mocked), which this runner doesn't start. Pass
---include-sync-worker once that's running separately.
-
     python run_verify_suite.py
-    python run_verify_suite.py --include-sync-worker
 """
 
 import glob
@@ -19,14 +13,10 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).parent
-SKIP_BY_DEFAULT = {"verify_sync_worker.py"}
 
 
 def main() -> int:
-    include_sync_worker = "--include-sync-worker" in sys.argv
     scripts = sorted(Path(p).name for p in glob.glob(str(HERE / "verify_*.py")))
-    if not include_sync_worker:
-        scripts = [s for s in scripts if s not in SKIP_BY_DEFAULT]
 
     env = os.environ.copy()
     env.setdefault("OCR_WARM_UP", "false")

@@ -31,6 +31,9 @@
 ## PR3 bulk wages (2026-10-30, perf/bulk-wage)
 - forms.compute_wage_bulk / compute_daily_wage_bulk: fixed ~5 queries for any worker count (was ~6-8 per worker). Used by /wage-summary, /wage-summary/daily, month-end checklist, Form 15. Shared pure maths in _compute_wage_core; verify_wage_bulk.py asserts bulk == per-worker.
 
+## PR5 router split (2026-10-30, refactor/routers)
+- main.py (2.4k lines) -> main.py (app setup, health, privacy) + common.py (shared imports/constants/helpers) + routers/{owners,workers,attendance,wages,forms,insights}.py. Moved verbatim; OpenAPI schema identical (89 routes). Add new routes to the matching router, shared helpers to common.py. Start command stays `main:app`.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

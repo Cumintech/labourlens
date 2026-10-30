@@ -21,6 +21,7 @@ import biometric_api
 import forms
 import models
 import ocr
+from dates import age_years as _age_years
 import photo_storage
 import privacy_policy
 import reports
@@ -98,13 +99,6 @@ DEFAULT_PF_RATE_PERCENT = 12.0
 # this app never blocks registration on it, just surfaces a banner.
 MINIMUM_WORKING_AGE = 14
 YOUNG_PERSON_AGE_CEILING = 18
-
-
-def _age_years(dob: date_, as_of: date_) -> int:
-    years = as_of.year - dob.year
-    if (as_of.month, as_of.day) < (dob.month, dob.day):
-        years -= 1
-    return years
 
 
 def _add_years(d: date_, years: int) -> date_:
@@ -1314,7 +1308,7 @@ MINIMUM_DAILY_WAGE = 500.0
 
 
 def _daily_equivalent(rate_type: str, basic: float) -> float:
-    return basic / 7 if rate_type == "weekly" else basic / 30 if rate_type == "monthly" else basic
+    return forms.daily_rate_equivalent(rate_type, basic)
 
 
 def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:

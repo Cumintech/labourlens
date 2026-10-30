@@ -39,7 +39,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import { Avatar, BlueHeader, SegmentedControl } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { formatINR } from "../format";
+import { formatINR, MONTH_NAMES } from "../format";
 import { colors, radius, spacing, type } from "../theme";
 import { workerLabel } from "../workerLabel";
 
@@ -50,10 +50,6 @@ type PayrollMode = "daily" | "monthly";
 // Wage-split chart palette: brand blues alternating with oranges (no red).
 const SLICE_COLORS = ["#1565C0", "#F57C00", "#42A5F5", "#FFB74D", "#0D47A1", "#EF6C00", "#90CAF9", "#FFCC80"];
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 function todayString() {
   return isoDate(new Date());

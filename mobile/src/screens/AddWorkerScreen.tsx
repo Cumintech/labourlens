@@ -39,6 +39,7 @@ import {
 import DateField, { addYearsIso, isoDate } from "../components/DateField";
 import EmploymentFields from "../components/EmploymentFields";
 import SelectField from "../components/SelectField";
+import RateTypeSelect from "../components/RateTypeSelect";
 import JoiningDateField from "../components/JoiningDateField";
 import { complianceProgress } from "../employment";
 import { ALL_INDIAN_STATE_OPTIONS } from "../indianStates";
@@ -673,13 +674,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
                   noneLabel="No type -- set a custom rate below"
                 />
-                <View style={styles.toggleRow}>
-                  {(["daily", "weekly", "monthly"] as const).map((option) => (
-                    <TouchableOpacity key={option} style={[styles.toggleOption, rateType === option && styles.toggleOptionSelected]} onPress={() => setRateType(option)}>
-                      <Text style={[styles.toggleText, rateType === option && styles.toggleTextSelected]}>{option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : "Monthly"}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <RateTypeSelect value={rateType} onChange={setRateType} />
                 {basic.trim() !== "" && dailyEquivalent(rateType, parseFloat(basic) || 0) < MIN_DAILY_WAGE && (
                   <Text style={styles.minWageWarn}>Below minimum wage of ₹{MIN_DAILY_WAGE}/day (daily equivalent ₹{Math.round(dailyEquivalent(rateType, parseFloat(basic) || 0))}).</Text>
                 )}

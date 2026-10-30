@@ -1,11 +1,8 @@
 import React, { useState } from "react";
+import { MONTH_NAMES } from "../format";
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 function daysInMonth(year: number, month0: number): number {
   return new Date(year, month0 + 1, 0).getDate();

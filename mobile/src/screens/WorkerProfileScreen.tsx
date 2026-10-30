@@ -49,7 +49,7 @@ import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
 import { complianceProgress } from "../employment";
-import { formatINR } from "../format";
+import { formatINR, MONTH_NAMES } from "../format";
 import { colors, radius, spacing, type } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkerProfile">;
@@ -60,10 +60,6 @@ const ID_PHOTO_WIDTH = 400;
 const ID_PHOTO_HEIGHT = 500;
 const ID_PHOTO_JPEG_QUALITY = 0.65;
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function daysInMonth(month: number, year: number): number {

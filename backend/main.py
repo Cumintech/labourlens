@@ -1393,8 +1393,9 @@ def get_wage_summary(
     results = []
     total_gross = 0.0
     total_net = 0.0
+    wages = forms.compute_wage_bulk(db, owner.id, [w.id for w in workers], month, year)
     for worker in workers:
-        wage = forms.compute_wage(db, owner.id, worker.id, month, year)
+        wage = wages.get(worker.id)
         if wage is not None:
             total_gross += wage["gross"]
             total_net += wage["net"]
@@ -1416,8 +1417,9 @@ def get_daily_wage_summary(
     results = []
     total_cost = 0.0
     present_count = 0
+    dailies = forms.compute_daily_wage_bulk(db, [w.id for w in workers], date)
     for worker in workers:
-        daily = forms.compute_daily_wage(db, worker.id, date)
+        daily = dailies[worker.id]
         if daily["present"]:
             present_count += 1
             total_cost += daily["daily_cost"]
@@ -1902,8 +1904,9 @@ def get_month_end(
     # the Wages tab itself uses.
     rated_count = 0
     paid_count = 0
+    wages_by_worker = forms.compute_wage_bulk(db, owner.id, [w.id for w in active_workers], month, year)
     for worker in active_workers:
-        wage = forms.compute_wage(db, owner.id, worker.id, month, year)
+        wage = wages_by_worker.get(worker.id)
         wage_out = _worker_wage_out(worker, wage)
         if wage_out.has_rate:
             rated_count += 1

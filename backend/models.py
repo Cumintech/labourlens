@@ -97,7 +97,7 @@ class Worker(Base, TenantScoped):
     __table_args__ = (UniqueConstraint("owner_id", "numeric_employee_code", name="uq_worker_employee_code"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     mobile: Mapped[str | None] = mapped_column(String, nullable=True)
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -187,7 +187,7 @@ class AuditLog(Base, TenantScoped):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False, index=True)
     worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False)
     # "activate" | "deactivate"
     action: Mapped[str] = mapped_column(String, nullable=False)
@@ -258,7 +258,7 @@ class WageProfile(Base):
     __tablename__ = "wage_profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False)
+    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False, index=True)
     # "daily" | "monthly" -- which way `basic` should be read
     rate_type: Mapped[str] = mapped_column(String, default="daily", nullable=False)
     basic: Mapped[float] = mapped_column(nullable=False)
@@ -284,7 +284,7 @@ class LeaveEntry(Base):
     __tablename__ = "leave_entries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False)
+    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False, index=True)
     # "earned" | "national_festival_special" | "other"
     leave_type: Mapped[str] = mapped_column(String, nullable=False)
     date_from: Mapped[date] = mapped_column(Date, nullable=False)
@@ -502,8 +502,8 @@ class BiometricPunch(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    device_id: Mapped[int] = mapped_column(ForeignKey("biometric_devices.id"), nullable=False)
-    worker_id: Mapped[int | None] = mapped_column(ForeignKey("workers.id"), nullable=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("biometric_devices.id"), nullable=False, index=True)
+    worker_id: Mapped[int | None] = mapped_column(ForeignKey("workers.id"), nullable=True, index=True)
     raw_device_user_id: Mapped[str] = mapped_column(String, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # "in" | "out"

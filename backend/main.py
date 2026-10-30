@@ -6,12 +6,13 @@ from datetime import date as date_, datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.concurrency import run_in_threadpool
 from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 import admin
@@ -285,7 +286,13 @@ def _owner_out(db: Session, owner: models.Owner) -> OwnerOut:
 
 
 @app.get("/health", response_model=HealthOut)
-def health():
+def health(db: Session = Depends(get_db)):
+    # Real check: a failing database must show up as unhealthy so uptime
+    # monitors / Render restart it instead of reporting a false "ok".
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "db_unavailable"})
     return HealthOut(status="ok", time=datetime.now(timezone.utc))
 
 
@@ -517,15 +524,26 @@ def delete_account(owner: models.Owner = Depends(get_current_owner), db: Session
     return Response(status_code=204)
 
 
+MAX_OCR_UPLOAD_BYTES = 8 * 1024 * 1024
+
+
 @app.post("/workers/ocr", response_model=OcrFieldsOut)
 async def scan_aadhaar(
     front_image: UploadFile = File(...),
     back_image: UploadFile | None = File(None),
     owner: models.Owner = Depends(get_current_owner),
 ):
-    front_bytes = await front_image.read()
-    back_bytes = await back_image.read() if back_image else None
-    fields = ocr.extract_fields(front_bytes, back_bytes)
+    # Bounded reads so an oversized upload can't exhaust memory.
+    front_bytes = await front_image.read(MAX_OCR_UPLOAD_BYTES + 1)
+    back_bytes = await back_image.read(MAX_OCR_UPLOAD_BYTES + 1) if back_image else None
+    if len(front_bytes) > MAX_OCR_UPLOAD_BYTES or (back_bytes is not None and len(back_bytes) > MAX_OCR_UPLOAD_BYTES):
+        raise HTTPException(status_code=413, detail="Image too large (max 8 MB per side)")
+    try:
+        # OCR is CPU-bound and synchronous -- run it off the event loop so
+        # one scan doesn't freeze every other request.
+        fields = await run_in_threadpool(ocr.extract_fields, front_bytes, back_bytes)
+    except UnidentifiedImageError:
+        raise HTTPException(status_code=400, detail="Could not read that image")
     return OcrFieldsOut(**fields)
 
 

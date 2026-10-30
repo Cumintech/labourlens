@@ -724,6 +724,17 @@ def compute_wage_bulk(db: Session, owner_id: int, worker_ids: list[int], month: 
     return out
 
 
+def daily_rate_equivalent(rate_type: str, basic: float, days_in_month: int = 30) -> float:
+    """One definition of "what is this rate per day": daily as-is, weekly /7,
+    monthly / days in the month. Used by the daily-cost maths and the
+    minimum-wage comparison."""
+    if rate_type == "daily":
+        return basic
+    if rate_type == "weekly":
+        return basic / 7
+    return basic / days_in_month
+
+
 def compute_daily_wage(db: Session, worker_id: int, target_date: date) -> dict:
     """Cost of one worker for one specific day -- the daily-equivalent
     rate (looked up as of that date) plus that day's own OT wages. Not
@@ -748,7 +759,7 @@ def compute_daily_wage(db: Session, worker_id: int, target_date: date) -> dict:
         return {"present": False, "has_rate": True, "daily_cost": 0.0}
 
     days_in_month = calendar.monthrange(target_date.year, target_date.month)[1]
-    daily_rate = rate.basic if rate.rate_type == "daily" else (rate.basic / 7 if rate.rate_type == "weekly" else rate.basic / days_in_month)
+    daily_rate = daily_rate_equivalent(rate.rate_type, rate.basic, days_in_month)
     hourly_rate = daily_rate / STANDARD_DAILY_HOURS
     ot_hours = sum(r.overtime_hours or 0 for r in present_today)
     ot_wages = ot_hours * hourly_rate * OT_MULTIPLIER
@@ -778,7 +789,7 @@ def compute_daily_wage_bulk(db: Session, worker_ids: list[int], target_date: dat
         if not present:
             out[wid] = {"present": False, "has_rate": True, "daily_cost": 0.0}
             continue
-        daily_rate = rate.basic if rate.rate_type == "daily" else (rate.basic / 7 if rate.rate_type == "weekly" else rate.basic / days_in_month)
+        daily_rate = daily_rate_equivalent(rate.rate_type, rate.basic, days_in_month)
         hourly_rate = daily_rate / STANDARD_DAILY_HOURS
         ot_wages = sum(r.overtime_hours or 0 for r in present) * hourly_rate * OT_MULTIPLIER
         out[wid] = {"present": True, "has_rate": True, "daily_cost": daily_rate + ot_wages}

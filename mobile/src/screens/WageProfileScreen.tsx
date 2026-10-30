@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import RateTypeSelect from "../components/RateTypeSelect";
 import { Info } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
@@ -334,19 +335,7 @@ export default function WageProfileScreen({ route, navigation }: Props) {
             disabled={assigningType}
           />
 
-          <View style={styles.segmentRow}>
-            {(["daily", "weekly", "monthly"] as const).map((option) => (
-              <TouchableOpacity
-                key={option}
-                style={[styles.segmentOption, rateType === option && styles.segmentOptionSelected]}
-                onPress={() => setRateType(option)}
-              >
-                <Text style={[styles.segmentText, rateType === option && styles.segmentTextSelected]}>
-                  {option === "daily" ? "Daily" : option === "weekly" ? "Weekly" : "Monthly"}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <RateTypeSelect value={rateType} onChange={setRateType} />
 
           <View style={styles.gridRow}>
             <Field label="Basic wage" value={basic} onChangeText={setBasic} prefix="₹" />

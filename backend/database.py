@@ -8,7 +8,10 @@ load_dotenv()
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-engine = create_engine(DATABASE_URL)
+# pool_pre_ping drops dead connections (Supabase closes idle ones) instead of
+# failing the request; pool_recycle retires connections before the server does.
+_engine_kwargs = {} if DATABASE_URL.startswith("sqlite") else {"pool_pre_ping": True, "pool_recycle": 300, "pool_size": 5, "max_overflow": 5}
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

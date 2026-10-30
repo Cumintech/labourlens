@@ -25,6 +25,9 @@
 ## Portal Sync removed (2026-10-30, PR chore/remove-portal-sync)
 - Deleted sync_worker.py, test-portal/, playwright dep, /portal-credentials, /sync/*, SyncStatus/PortalCredential models. Migration c1d8e4f7a2b9 drops the tables -- BACK UP the DB, then run `alembic upgrade head` manually (Render does not). Older docs (BUILD_PLAN, ARCHITECTURE_REVIEW, ONBOARDING §9) still describe it historically.
 
+## PR2 hardening (2026-10-30, chore/pr2-hardening)
+- DB pool settings, /health checks the DB (503 if down), OCR runs off the event loop with 8MB cap, *.db gitignored, unused RECORD_AUDIO permission removed, EAS projectId committed. Index migration d2e9f5a8b3c1 is OPTIONAL (not applied unless `alembic upgrade head` is run; also drops sync tables via c1d8e4f7a2b9).
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

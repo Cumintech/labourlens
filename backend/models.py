@@ -181,41 +181,6 @@ class Attendance(Base):
     source_detail: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
-class SyncStatus(Base):
-    """Portal sync state, tracked independently of Worker.status -- the
-    app's own state is never blocked on Portal success (see SPEC.md)."""
-
-    __tablename__ = "sync_status"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id"), nullable=False)
-    # "create" | "deactivate" -- which sync action this row represents
-    action: Mapped[str] = mapped_column(String, nullable=False)
-    # "pending" | "synced" | "failed"
-    state: Mapped[str] = mapped_column(String, default="pending", nullable=False)
-    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_error: Mapped[str | None] = mapped_column(String, nullable=True)
-
-
-class PortalCredential(Base, TenantScoped):
-    """One row per owner -- confirmed each factory owner has their own
-    separate login on the real Portal, not one shared account. Password
-    encrypted the same way as Worker PII (EncryptedString); username
-    encrypted too for consistency even though it's less sensitive on its
-    own, since it's meaningless without the password anyway."""
-
-    __tablename__ = "portal_credentials"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("owners.id"), nullable=False, unique=True)
-    portal_username: Mapped[str] = mapped_column(EncryptedString, nullable=False)
-    portal_password: Mapped[str] = mapped_column(EncryptedString, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-
 class AuditLog(Base, TenantScoped):
     """Append-only. Every activate/deactivate action."""
 

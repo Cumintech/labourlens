@@ -292,7 +292,7 @@ function OverviewTab({
   function handleDeactivate() {
     Alert.alert(
       "Deactivate worker?",
-      `${workerName} will be marked deactivated and removed from the Labour Portal on the next sync. Their records are kept, not deleted. This needs confirmation before it happens.`,
+      `${workerName} will be marked deactivated. Their records are kept, not deleted. This needs confirmation before it happens.`,
       [
         { text: "Cancel", style: "cancel" },
         {

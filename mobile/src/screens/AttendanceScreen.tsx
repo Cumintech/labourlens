@@ -315,7 +315,7 @@ function DayView({ navigation }: { navigation: NativeStackNavigationProp<RootSta
   function handleDeactivate(worker: Worker) {
     Alert.alert(
       "Deactivate worker",
-      `Deactivate ${worker.name}? This also removes them from the Labour Portal on the next sync.`,
+      `Deactivate ${worker.name}?`,
       [
         { text: "Cancel", style: "cancel" },
         {

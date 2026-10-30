@@ -24,7 +24,6 @@ import photo_storage
 import privacy_policy
 import reports
 from rate_limit import limiter
-import sync_worker
 from attendance_service import upsert_attendance
 from auth import create_token, get_current_owner, hash_password, verify_password
 from crypto import mask_aadhaar
@@ -56,13 +55,11 @@ from schemas import (
     OwnerLoginIn,
     OwnerOut,
     OwnerSignupIn,
-    PortalCredentialIn,
     ReportEmailIn,
     ResetPasswordIn,
     ShiftConfigIn,
     ShiftConfigOut,
     SlotSummary,
-    SyncStatusOut,
     TokenOut,
     UpgradeRequestIn,
     UpgradeRequestOut,
@@ -580,10 +577,6 @@ def create_worker(
     db.commit()
     db.refresh(worker)
 
-    # Written immediately, but nothing acts on it until the Sync Worker
-    # runs -- registration is never blocked on Portal success.
-    db.add(models.SyncStatus(worker_id=worker.id, action="create", state="pending"))
-    db.commit()
 
     return worker
 
@@ -824,7 +817,6 @@ def deactivate_worker(
     worker.status = "deactivated"
     worker.deactivated_at = datetime.now(timezone.utc)
     db.add(models.AuditLog(owner_id=owner.id, worker_id=worker.id, action="deactivate"))
-    db.add(models.SyncStatus(worker_id=worker.id, action="deactivate", state="pending"))
     db.commit()
     db.refresh(worker)
     return worker
@@ -1956,58 +1948,6 @@ def get_month_end(
                 detail="Generated or emailed this month" if forms_complete else "Not generated yet this month",
             ),
         ],
-    )
-
-
-@app.post("/portal-credentials", status_code=204)
-def set_portal_credentials(
-    body: PortalCredentialIn,
-    owner: models.Owner = Depends(get_current_owner),
-    db: Session = Depends(get_db),
-):
-    existing = (
-        db.query(models.PortalCredential)
-        .filter(models.PortalCredential.owner_id == owner.id)
-        .first()
-    )
-    if existing:
-        existing.portal_username = body.portal_username
-        existing.portal_password = body.portal_password
-    else:
-        db.add(
-            models.PortalCredential(
-                owner_id=owner.id,
-                portal_username=body.portal_username,
-                portal_password=body.portal_password,
-            )
-        )
-    db.commit()
-
-
-@app.post("/sync/run", status_code=202)
-def run_sync(
-    owner: models.Owner = Depends(get_current_owner),
-    db: Session = Depends(get_db),
-):
-    """Manual trigger -- Day 3 testing shouldn't have to wait for a real
-    daily schedule. Scoped to the authenticated owner only, matching the
-    multi-tenant boundary everywhere else -- no owner can trigger sync
-    for any other owner's workers."""
-    sync_worker.reconcile_today(db, owner.id)
-    return {"status": "sync run complete"}
-
-
-@app.get("/sync-status", response_model=list[SyncStatusOut])
-def list_sync_status(
-    owner: models.Owner = Depends(get_current_owner),
-    db: Session = Depends(get_db),
-):
-    return (
-        db.query(models.SyncStatus)
-        .join(models.Worker, models.Worker.id == models.SyncStatus.worker_id)
-        .filter(models.Worker.owner_id == owner.id)
-        .order_by(models.SyncStatus.id.desc())
-        .all()
     )
 
 

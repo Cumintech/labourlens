@@ -384,6 +384,17 @@ def _shift_duration_hours(shift: models.ShiftConfig | None) -> float:
     return (end_minutes - start_minutes) / 60
 
 
+def _paid_leave_dates_from_entries(entries, start_date: date, end_date: date) -> set[date]:
+    dates: set[date] = set()
+    for e in entries:
+        d = max(e.date_from, start_date)
+        last = min(e.date_to, end_date)
+        while d <= last:
+            dates.add(d)
+            d += timedelta(days=1)
+    return dates
+
+
 def _paid_leave_dates(db: Session, worker_id: int, start_date: date, end_date: date) -> set[date]:
     entries = (
         db.query(models.LeaveEntry)
@@ -395,35 +406,36 @@ def _paid_leave_dates(db: Session, worker_id: int, start_date: date, end_date: d
         )
         .all()
     )
-    dates: set[date] = set()
-    for e in entries:
-        d = max(e.date_from, start_date)
-        last = min(e.date_to, end_date)
-        while d <= last:
-            dates.add(d)
-            d += timedelta(days=1)
-    return dates
+    return _paid_leave_dates_from_entries(entries, start_date, end_date)
 
 
 def _monthly_attendance_rows(
-    db: Session, worker_id: int, start_date: date, end_date: date, shifts: dict[str, models.ShiftConfig]
+    db: Session,
+    worker_id: int,
+    start_date: date,
+    end_date: date,
+    shifts: dict[str, models.ShiftConfig],
+    records: list | None = None,
+    paid_leave: set[date] | None = None,
 ) -> list[dict]:
     """One dict per calendar day in the range -- the single source of
     truth both Form 25 (days as columns) and Form 25-B (days as rows)
     read from, so they can never silently disagree with each other."""
-    records = (
-        db.query(models.Attendance)
-        .filter(
-            models.Attendance.worker_id == worker_id,
-            models.Attendance.date >= start_date,
-            models.Attendance.date <= end_date,
+    if records is None:
+        records = (
+            db.query(models.Attendance)
+            .filter(
+                models.Attendance.worker_id == worker_id,
+                models.Attendance.date >= start_date,
+                models.Attendance.date <= end_date,
+            )
+            .all()
         )
-        .all()
-    )
     by_date: dict[date, list[models.Attendance]] = {}
     for r in records:
         by_date.setdefault(r.date, []).append(r)
-    paid_leave = _paid_leave_dates(db, worker_id, start_date, end_date)
+    if paid_leave is None:
+        paid_leave = _paid_leave_dates(db, worker_id, start_date, end_date)
 
     rows = []
     d = start_date
@@ -563,17 +575,9 @@ def _leave_wages_for_period(db: Session, worker_id: int, start_date: date, end_d
     return sum(e.wages_paid or 0 for e in entries)
 
 
-def compute_wage(db: Session, owner_id: int, worker_id: int, month: int, year: int) -> dict | None:
-    """The one place Form 15 and the Wage Slip's numbers come from --
-    returns None if no WageProfile has ever been set for this worker
-    (nothing to compute), never a fabricated zero."""
-    start_date, end_date = _month_date_range(month, year)
-    rate = _wage_rate_as_of(db, worker_id, end_date)
-    if rate is None:
-        return None
-
-    shifts = _shift_map(db, owner_id)
-    rows = _monthly_attendance_rows(db, worker_id, start_date, end_date, shifts)
+def _compute_wage_core(rate, rows: list[dict], leave_wages: float, payment, start_date: date, end_date: date) -> dict:
+    """Pure wage maths shared by compute_wage (one worker) and
+    compute_wage_bulk (whole factory) so both always agree."""
     summary = _summarize_month(rows)
 
     days_in_month = (end_date - start_date).days + 1
@@ -596,7 +600,6 @@ def compute_wage(db: Session, owner_id: int, worker_id: int, month: int, year: i
         hourly_rate = (rate.basic / days_in_month) / STANDARD_DAILY_HOURS
 
     ot_wages = summary["ot_hours"] * hourly_rate * OT_MULTIPLIER
-    leave_wages = _leave_wages_for_period(db, worker_id, start_date, end_date)
     if rate.rate_type != "daily":
         # Paid-leave days are already inside the prorated basic above.
         leave_wages = 0.0
@@ -613,12 +616,6 @@ def compute_wage(db: Session, owner_id: int, worker_id: int, month: int, year: i
     total_deductions = pf + esi + lwf
     net = gross - total_deductions
 
-    payment = (
-        db.query(models.WagePayment)
-        .filter(models.WagePayment.worker_id == worker_id, models.WagePayment.month == month, models.WagePayment.year == year)
-        .first()
-    )
-
     return {
         "rate": rate,
         "summary": summary,
@@ -633,6 +630,98 @@ def compute_wage(db: Session, owner_id: int, worker_id: int, month: int, year: i
         "net": net,
         "payment": payment,
     }
+
+
+def compute_wage(db: Session, owner_id: int, worker_id: int, month: int, year: int) -> dict | None:
+    """The one place Form 15 and the Wage Slip's numbers come from --
+    returns None if no WageProfile has ever been set for this worker
+    (nothing to compute), never a fabricated zero."""
+    start_date, end_date = _month_date_range(month, year)
+    rate = _wage_rate_as_of(db, worker_id, end_date)
+    if rate is None:
+        return None
+
+    shifts = _shift_map(db, owner_id)
+    rows = _monthly_attendance_rows(db, worker_id, start_date, end_date, shifts)
+    leave_wages = _leave_wages_for_period(db, worker_id, start_date, end_date)
+    payment = (
+        db.query(models.WagePayment)
+        .filter(models.WagePayment.worker_id == worker_id, models.WagePayment.month == month, models.WagePayment.year == year)
+        .first()
+    )
+    return _compute_wage_core(rate, rows, leave_wages, payment, start_date, end_date)
+
+
+def _latest_rate_by_worker(db: Session, worker_ids: list[int], as_of: date) -> dict[int, models.WageProfile]:
+    """Same pick as _wage_rate_as_of (latest effective_from, ties by id)
+    for many workers in one query."""
+    if not worker_ids:
+        return {}
+    rates = (
+        db.query(models.WageProfile)
+        .filter(models.WageProfile.worker_id.in_(worker_ids), models.WageProfile.effective_from <= as_of)
+        .order_by(models.WageProfile.effective_from.desc(), models.WageProfile.id.desc())
+        .all()
+    )
+    best: dict[int, models.WageProfile] = {}
+    for r in rates:
+        best.setdefault(r.worker_id, r)
+    return best
+
+
+def compute_wage_bulk(db: Session, owner_id: int, worker_ids: list[int], month: int, year: int) -> dict[int, dict | None]:
+    """compute_wage for many workers using a fixed handful of queries
+    (rates, attendance, leave, payments, shifts) instead of ~6 per worker.
+    Returns {worker_id: wage dict, or None when no rate is set}."""
+    start_date, end_date = _month_date_range(month, year)
+    if not worker_ids:
+        return {}
+    rates = _latest_rate_by_worker(db, worker_ids, end_date)
+    shifts = _shift_map(db, owner_id)
+
+    att_by_worker: dict[int, list] = {}
+    for rec in (
+        db.query(models.Attendance)
+        .filter(models.Attendance.worker_id.in_(worker_ids), models.Attendance.date >= start_date, models.Attendance.date <= end_date)
+        .all()
+    ):
+        att_by_worker.setdefault(rec.worker_id, []).append(rec)
+
+    leave_by_worker: dict[int, list] = {}
+    for e in (
+        db.query(models.LeaveEntry)
+        .filter(
+            models.LeaveEntry.worker_id.in_(worker_ids),
+            models.LeaveEntry.leave_type.in_(PAID_LEAVE_TYPES),
+            models.LeaveEntry.date_from <= end_date,
+            models.LeaveEntry.date_to >= start_date,
+        )
+        .all()
+    ):
+        leave_by_worker.setdefault(e.worker_id, []).append(e)
+
+    payments = {
+        p.worker_id: p
+        for p in db.query(models.WagePayment)
+        .filter(models.WagePayment.worker_id.in_(worker_ids), models.WagePayment.month == month, models.WagePayment.year == year)
+        .all()
+    }
+
+    out: dict[int, dict | None] = {}
+    for wid in worker_ids:
+        rate = rates.get(wid)
+        if rate is None:
+            out[wid] = None
+            continue
+        entries = leave_by_worker.get(wid, [])
+        rows = _monthly_attendance_rows(
+            db, wid, start_date, end_date, shifts,
+            records=att_by_worker.get(wid, []),
+            paid_leave=_paid_leave_dates_from_entries(entries, start_date, end_date),
+        )
+        leave_wages = sum(e.wages_paid or 0 for e in entries)
+        out[wid] = _compute_wage_core(rate, rows, leave_wages, payments.get(wid), start_date, end_date)
+    return out
 
 
 def compute_daily_wage(db: Session, worker_id: int, target_date: date) -> dict:
@@ -664,6 +753,36 @@ def compute_daily_wage(db: Session, worker_id: int, target_date: date) -> dict:
     ot_hours = sum(r.overtime_hours or 0 for r in present_today)
     ot_wages = ot_hours * hourly_rate * OT_MULTIPLIER
     return {"present": True, "has_rate": True, "daily_cost": daily_rate + ot_wages}
+
+
+def compute_daily_wage_bulk(db: Session, worker_ids: list[int], target_date: date) -> dict[int, dict]:
+    """compute_daily_wage for many workers in two queries."""
+    if not worker_ids:
+        return {}
+    rates = _latest_rate_by_worker(db, worker_ids, target_date)
+    present_by_worker: dict[int, list] = {}
+    for r in (
+        db.query(models.Attendance)
+        .filter(models.Attendance.worker_id.in_(worker_ids), models.Attendance.date == target_date, models.Attendance.status == "present")
+        .all()
+    ):
+        present_by_worker.setdefault(r.worker_id, []).append(r)
+    days_in_month = calendar.monthrange(target_date.year, target_date.month)[1]
+    out: dict[int, dict] = {}
+    for wid in worker_ids:
+        rate = rates.get(wid)
+        if rate is None:
+            out[wid] = {"present": False, "has_rate": False, "daily_cost": 0.0}
+            continue
+        present = present_by_worker.get(wid, [])
+        if not present:
+            out[wid] = {"present": False, "has_rate": True, "daily_cost": 0.0}
+            continue
+        daily_rate = rate.basic if rate.rate_type == "daily" else (rate.basic / 7 if rate.rate_type == "weekly" else rate.basic / days_in_month)
+        hourly_rate = daily_rate / STANDARD_DAILY_HOURS
+        ot_wages = sum(r.overtime_hours or 0 for r in present) * hourly_rate * OT_MULTIPLIER
+        out[wid] = {"present": True, "has_rate": True, "daily_cost": daily_rate + ot_wages}
+    return out
 
 
 def _header_elements(owner: models.Owner, styles, form_title, period_label: str | None = None) -> list:
@@ -1358,8 +1477,9 @@ def _form15_month_elements(db: Session, owner: models.Owner, styles, month: int,
     period_label = f"{start_date.isoformat()} to {end_date.isoformat()}"
 
     table_data = [FORM15_HEADER]
+    wages_by_worker = compute_wage_bulk(db, owner.id, [w.id for w in workers], month, year)
     for i, worker in enumerate(workers, start=1):
-        wage = compute_wage(db, owner.id, worker.id, month, year)
+        wage = wages_by_worker.get(worker.id)
         worker_code = compliance.get(worker.id).worker_code if compliance.get(worker.id) else None
         sl_no = str(serials.get(worker.id, "-"))
         if wage is None:

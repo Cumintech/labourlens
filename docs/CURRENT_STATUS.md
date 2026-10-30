@@ -28,6 +28,9 @@
 ## PR2 hardening (2026-10-30, chore/pr2-hardening)
 - DB pool settings, /health checks the DB (503 if down), OCR runs off the event loop with 8MB cap, *.db gitignored, unused RECORD_AUDIO permission removed, EAS projectId committed. Index migration d2e9f5a8b3c1 is OPTIONAL (not applied unless `alembic upgrade head` is run; also drops sync tables via c1d8e4f7a2b9).
 
+## PR3 bulk wages (2026-10-30, perf/bulk-wage)
+- forms.compute_wage_bulk / compute_daily_wage_bulk: fixed ~5 queries for any worker count (was ~6-8 per worker). Used by /wage-summary, /wage-summary/daily, month-end checklist, Form 15. Shared pure maths in _compute_wage_core; verify_wage_bulk.py asserts bulk == per-worker.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

@@ -1,7 +1,8 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { MONTH_NAMES } from "../format";
 import { useFocusEffect } from "@react-navigation/native";
 import { ChevronRight, Clock, MapPin, CreditCard, Fingerprint, FileText, Settings as SettingsIcon, Sparkles, UserPlus, Users } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,7 +16,9 @@ import {
   listShiftConfigs,
   listWorkers,
   getComplianceCheck,
+  subscribeAttendanceSynced,
 } from "../api/client";
+import PendingSyncBanner from "../components/PendingSyncBanner";
 import { isoDate } from "../components/DateField";
 import WorkerHeroArt from "../components/WorkerHeroArt";
 import { IconButton, LogoMark } from "../components/ui";
@@ -34,7 +37,6 @@ import { colors, radius, spacing, type } from "../theme";
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList> };
 
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function formatLongDate(d: Date): string {
   return `${WEEKDAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
@@ -94,6 +96,9 @@ export default function HomeScreen({ navigation }: Props) {
       load().catch(() => {});
     }, [load]),
   );
+
+  // Refresh Today's numbers once queued offline marks have uploaded.
+  useEffect(() => subscribeAttendanceSynced(() => { load().catch(() => {}); }), [load]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -171,6 +176,7 @@ export default function HomeScreen({ navigation }: Props) {
           )}
         </View>
 
+        <PendingSyncBanner />
         <View style={styles.attendanceCard}>
           <View style={styles.cardTitleRow}>
             <Text style={styles.cardTitle}>Today</Text>
@@ -245,11 +251,7 @@ export default function HomeScreen({ navigation }: Props) {
             <QuickAction icon={FileText} label="Wage slips" onPress={() => goToTab("ReportsTab", { formCode: "wageslip", lockForm: true })} />
             <QuickAction icon={Fingerprint} label="Biometric" onPress={() => navigation.navigate("BiometricDevices")} />
             <QuickAction icon={Clock} label="Shifts" onPress={() => navigation.navigate("ShiftSettings")} />
-            <QuickAction
-              icon={Users}
-              label={`ISM contractors (${ismContractorIds.length})`}
-              onPress={() => goToTab("WorkersTab", { filterIds: ismContractorIds, filterLabel: "ISM contractors" })}
-            />
+            <QuickAction icon={Users} label="Worker type report" onPress={() => navigation.navigate("WorkerTypeReport")} />
           </View>
         </View>
 

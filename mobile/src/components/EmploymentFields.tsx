@@ -5,7 +5,7 @@ import { EMPLOYMENT_COLORS, employmentLabel, groupOf, suggestIsm } from "../empl
 import SelectField from "./SelectField";
 import { colors, radius, spacing } from "../theme";
 
-type EmploymentTypeValue = "permanent" | "temporary";
+type EmploymentTypeValue = "permanent" | "temporary" | "contract";
 
 // Shared "Employment" form section -- used by both AddWorkerScreen
 // (Step 2) and WorkerProfileScreen's Employment edit, so the
@@ -49,18 +49,24 @@ export default function EmploymentFields({
       <Text style={styles.cardTitle}>Employment</Text>
 
       <View style={styles.segToggle}>
-        {(["permanent", "temporary"] as const).map((option) => (
+        {(["permanent", "temporary", "contract"] as const).map((option) => (
           <TouchableOpacity
             key={option}
             style={[styles.segOption, employmentType === option && styles.segOptionActive]}
             onPress={() => onEmploymentTypeChange(option)}
           >
             <Text style={[styles.segText, employmentType === option && styles.segTextActive]}>
-              {option === "permanent" ? "Permanent" : "Temporary"}
+              {option === "permanent" ? "Permanent" : option === "temporary" ? "Temporary" : "Contract"}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      {employmentType === "temporary" && (
+        <View style={styles.hintOk}>
+          <Text style={styles.hintOkText}>Temporary workers are on daily wages and are not covered under ESI and PF.</Text>
+        </View>
+      )}
 
       <SelectField label="Home state" value={homeState || null} options={ALL_INDIAN_STATE_OPTIONS} onChange={onHomeStateChange} placeholder="Select" />
 

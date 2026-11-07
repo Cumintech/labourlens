@@ -13,6 +13,7 @@ import ErrorBoundary from "./src/components/ErrorBoundary";
 import { ToastProvider } from "./src/components/ui";
 import { AppLockProvider, useAppLock } from "./src/context/AppLockContext";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { useAttendanceQueueSync } from "./src/hooks/useAttendanceQueueSync";
 import { useAutoBiometricSync } from "./src/hooks/useAutoBiometricSync";
 import RootNavigator from "./src/navigation/RootNavigator";
 import AppLockScreen from "./src/screens/AppLockScreen";
@@ -33,6 +34,7 @@ function Gate() {
   const { isLocked, loading } = useAppLock();
   const { token } = useAuth();
   useAutoBiometricSync(isLocked ? null : token);
+  useAttendanceQueueSync(isLocked ? null : token);
   if (loading) return null;
   // Signed-in app and lock screen sit on blue header bands -> light status
   // bar icons; the white Login screen needs dark icons.

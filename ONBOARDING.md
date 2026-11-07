@@ -109,7 +109,6 @@ labourlens/
 │   ├── models.py              # All 22 SQLAlchemy tables (§3)
 │   ├── auth.py / admin_auth.py # Two separate JWT systems (§5)
 │   ├── biometric.py / biometric_api.py / biometric_sync.py  # ZKTeco integration (§6)
-│   ├── sync_worker.py          # Playwright automation that syncs workers to an external Labour Portal
 │   ├── forms.py                 # Every PDF-building function (statutory forms, wage slip, ID card, letter)
 │   ├── photo_storage.py          # Supabase Storage upload/fetch for worker photos
 │   ├── privacy_policy.py          # Single source of truth for the Privacy Policy (served 2 ways — see §9)

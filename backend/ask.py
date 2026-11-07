@@ -16,6 +16,7 @@ from datetime import date as date_
 from sqlalchemy.orm import Session
 
 import models
+from dates import age_years as _age_years
 from forms import compute_wage
 
 # Mirrors main.py's MINIMUM_WORKING_AGE -- duplicated, not imported,
@@ -23,13 +24,6 @@ from forms import compute_wage
 MINIMUM_WORKING_AGE = 14
 
 FORM12_FIELDS = ("father_or_spouse_name", "designation_or_nature_of_work", "epf_uan_no", "esic_no", "date_of_joining")
-
-
-def _age_years(dob: date_, as_of: date_) -> int:
-    years = as_of.year - dob.year
-    if (as_of.month, as_of.day) < (dob.month, dob.day):
-        years -= 1
-    return years
 
 
 def _active_workers(db: Session, owner_id: int) -> list[models.Worker]:

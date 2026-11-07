@@ -1,4 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { MONTH_NAMES } from "../format";
 import { useFocusEffect } from "@react-navigation/native";
 import { CalendarCheck, CheckCircle2, Circle, FileText, IndianRupee } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
@@ -14,10 +15,6 @@ import { colors, radius, spacing, type } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "MonthEnd">;
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 const STEP_ICON: Record<string, typeof CalendarCheck> = {
   attendance: CalendarCheck,

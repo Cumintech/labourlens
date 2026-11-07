@@ -252,7 +252,7 @@ class WorkerCreateIn(BaseModel):
     native_district: str | None = None
     bank_account_number: str | None = None
     bank_ifsc: str | None = None
-    employment_type: Literal["permanent", "temporary"] | None = None
+    employment_type: Literal["permanent", "temporary", "contract"] | None = None
     is_ism: bool = False
     home_state: str | None = None
 
@@ -268,7 +268,7 @@ class WorkerCreateIn(BaseModel):
 
 
 class WorkerEmploymentIn(BaseModel):
-    employment_type: Literal["permanent", "temporary"] | None = None
+    employment_type: Literal["permanent", "temporary", "contract"] | None = None
     is_ism: bool = False
     home_state: str | None = None
 
@@ -324,21 +324,6 @@ class WorkerTypeOut(BaseModel):
 
 class WorkerTypeAssignIn(BaseModel):
     worker_type_id: int | None  # null clears the assignment
-
-
-class PortalCredentialIn(BaseModel):
-    portal_username: str
-    portal_password: str
-
-
-class SyncStatusOut(BaseModel):
-    id: int
-    worker_id: int
-    action: str
-    state: str
-    attempts: int
-    last_attempted_at: datetime | None
-    last_error: str | None
 
 
 class AttendanceMarkIn(BaseModel):
@@ -516,7 +501,7 @@ class WorkerComplianceOut(BaseModel):
 
 
 class WageProfileIn(BaseModel):
-    rate_type: Literal["daily", "monthly"] = "daily"
+    rate_type: Literal["daily", "weekly", "monthly"] = "daily"
     basic: float
     hra: float = 0
     da: float = 0
@@ -613,6 +598,11 @@ class WorkerWageOut(BaseModel):
     esi_base: float = 0  # Gross Wages, the statutory ESI wage base
     lwf: float = 0
     total_deductions: float = 0
+    # Placeholder minimum wage (flat Rs 500/day for all states/workers
+    # until real rates are provided) vs the worker's daily-equivalent rate.
+    min_daily_wage: float = 0
+    daily_equivalent_rate: float = 0
+    meets_min_wage: bool | None = None
 
 
 class WageSummaryOut(BaseModel):

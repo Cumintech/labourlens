@@ -327,6 +327,15 @@ def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = No
     aadhaar_match = AADHAAR_PATTERN.search(joined)
     if aadhaar_match:
         fields["aadhaar_number"] = "".join(aadhaar_match.groups())
+    else:
+        # OCR often splits the number oddly ("1234 56 789012") -- accept a
+        # line that is exactly 12 digits once spaces/noise are stripped
+        # (VID lines are 16 digits, so they never match).
+        for line in all_lines:
+            digits = re.sub(r"\D", "", line)
+            if len(digits) == 12 and len(re.sub(r"[\d\s]", "", line)) <= 2:
+                fields["aadhaar_number"] = digits
+                break
 
     dob_match = DOB_PATTERN.search(joined)
     if dob_match:

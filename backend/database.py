@@ -8,7 +8,10 @@ load_dotenv()
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-engine = create_engine(DATABASE_URL)
+# pool_pre_ping drops dead connections (Supabase closes idle ones) instead of
+# failing the request; pool_recycle retires connections before the server does.
+_engine_kwargs = {} if DATABASE_URL.startswith("sqlite") else {"pool_pre_ping": True, "pool_recycle": 300, "pool_size": 5, "max_overflow": 5}
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -29,7 +32,7 @@ class TenantScoped:
     (Attendance.marked_by, WorkerCompliance.registered_by,
     WageProfile.created_by, LeaveEntry.marked_by, WagePayment.recorded_by,
     BiometricConsent.consented_by) or transitively via worker_id/device_id
-    (SyncStatus, DeviceUserMapping, BiometricPunch, FactoryPayment,
+    (DeviceUserMapping, BiometricPunch, FactoryPayment,
     FactoryEmployeeSnapshot) are NOT covered here -- still protected only
     by their existing manual filters, same as before this change."""
 

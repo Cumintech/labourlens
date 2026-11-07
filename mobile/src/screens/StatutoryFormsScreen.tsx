@@ -55,16 +55,16 @@ const DEFAULT_FORM_METADATA = { hasPeriod: true, workerFilterable: false, worker
 // A code with no entry (a brand-new state's form before this is updated)
 // falls under "Other" rather than being dropped.
 const FORM_CATEGORY: Record<string, string> = {
-  attendance: "Attendance",
-  form25: "Statutory Registers",
-  form25b: "Statutory Registers",
-  form12: "Statutory Registers",
-  form15: "Statutory Registers",
-  wageslip: "Payroll",
-  id_card: "ID & Letters",
-  appointment_letter: "ID & Letters",
+  attendance: "Consolidated Reports",
+  form25: "Consolidated Reports",
+  form12: "Consolidated Reports",
+  form15: "Consolidated Reports",
+  form25b: "Individual Worker Reports",
+  wageslip: "Individual Worker Reports",
+  id_card: "Individual Worker Reports",
+  appointment_letter: "Individual Worker Reports",
 };
-const FORM_CATEGORY_ORDER = ["Attendance", "Payroll", "Statutory Registers", "ID & Letters", "Other"];
+const FORM_CATEGORY_ORDER = ["Consolidated Reports", "Individual Worker Reports", "Other"];
 
 // Forms generated through their own dedicated POST endpoint (see
 // backend/main.py) rather than the generic GET /forms/{code} dispatcher

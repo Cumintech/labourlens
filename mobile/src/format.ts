@@ -20,3 +20,6 @@ export function formatINR(amount: number): string {
   const sign = rounded < 0 ? "-" : "";
   return `${sign}${groupIndian(intPart)}${fracPart ? `.${fracPart}` : ""}`;
 }
+
+// Full month names, index 0 = January (shared; was copy-pasted in 5 files).
+export const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];

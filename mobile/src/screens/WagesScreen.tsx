@@ -29,6 +29,7 @@ import {
   listWorkerTypes,
   listWorkers,
   recordWagePayment,
+  rateUnit,
 } from "../api/client";
 import DateField, { isoDate } from "../components/DateField";
 import DonutChart from "../components/DonutChart";
@@ -38,7 +39,7 @@ import { ListSkeleton } from "../components/Skeleton";
 import { Avatar, BlueHeader, SegmentedControl } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import { formatINR } from "../format";
+import { formatINR, MONTH_NAMES } from "../format";
 import { colors, radius, spacing, type } from "../theme";
 import { workerLabel } from "../workerLabel";
 
@@ -49,10 +50,6 @@ type PayrollMode = "daily" | "monthly";
 // Wage-split chart palette: brand blues alternating with oranges (no red).
 const SLICE_COLORS = ["#1565C0", "#F57C00", "#42A5F5", "#FFB74D", "#0D47A1", "#EF6C00", "#90CAF9", "#FFCC80"];
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 function todayString() {
   return isoDate(new Date());
@@ -545,6 +542,13 @@ function PayrollView() {
               <Text style={styles.modalSubtitle}>
                 {MONTH_NAMES[month - 1]} {year} · ₹{formatINR(detailTarget.rate_amount)}/{detailTarget.rate_type}
               </Text>
+              {detailTarget.meets_min_wage != null && (
+                <Text style={{ fontSize: 12, fontWeight: "700", marginBottom: 8, color: detailTarget.meets_min_wage ? colors.present : colors.warningTintText }}>
+                  {detailTarget.meets_min_wage
+                    ? `Meets minimum wage (₹${detailTarget.min_daily_wage}/day)`
+                    : `Below minimum wage: ₹${formatINR(detailTarget.daily_equivalent_rate ?? 0)}/day vs ₹${detailTarget.min_daily_wage}/day`}
+                </Text>
+              )}
 
               <View style={styles.daysRow}>
                 <View style={[styles.dayStat, { backgroundColor: colors.presentTint }]}>
@@ -759,7 +763,7 @@ function RatesView({ navigation }: { navigation: NativeStackNavigationProp<RootS
             </View>
             <Text style={rate ? styles.rateValue : styles.rateMissing}>
               {rate ? `₹${formatINR(Number(rate.basic))}` : "No rate"}
-              {rate ? <Text style={styles.rateUnit}> /{rate.rate_type === "daily" ? "day" : "month"}</Text> : null}
+              {rate ? <Text style={styles.rateUnit}> /{rateUnit(rate.rate_type)}</Text> : null}
             </Text>
             <ChevronRight size={16} color={colors.disabled} />
           </TouchableOpacity>

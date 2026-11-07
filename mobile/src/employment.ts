@@ -5,7 +5,7 @@
 // employment_type: a permanent worker can also be ISM.
 import { colors } from "./theme";
 
-export type EmploymentType = "permanent" | "temporary" | null;
+export type EmploymentType = "permanent" | "temporary" | "contract" | null;
 export type EmploymentWorker = { employment_type: EmploymentType; is_ism: boolean };
 export type EmploymentGroup = "perm" | "con" | "ism" | null;
 
@@ -15,7 +15,8 @@ export type EmploymentGroup = "perm" | "con" | "ism" | null;
 export function employmentLabel(w: EmploymentWorker): string {
   if (!w.employment_type) return "Not set";
   if (w.employment_type === "permanent") return "Permanent";
-  return w.is_ism ? "ISM" : "Contractor";
+  if (w.is_ism) return "ISM";
+  return w.employment_type === "contract" ? "Contract" : "Temporary";
 }
 
 export function isIsm(w: EmploymentWorker): boolean {
@@ -40,4 +41,17 @@ export const EMPLOYMENT_COLORS: Record<"perm" | "con" | "ism", { fg: string; bg:
 export function suggestIsm(homeState: string | null | undefined, factoryState: string | null | undefined): boolean {
   if (!homeState || !factoryState) return false;
   return homeState.trim().toLowerCase() !== factoryState.trim().toLowerCase();
+}
+
+// Form 12 completeness shown on the worker profile and enforced when
+// adding a worker. Temporary workers are not covered by EPF/ESIC, so
+// those two numbers aren't required for them (3 of 3 instead of 5 of 5).
+export function complianceProgress(
+  employmentType: EmploymentType,
+  f: { father: string | null | undefined; nature: string | null | undefined; joined: string | null | undefined; epf: string | null | undefined; esic: string | null | undefined },
+): { filled: number; total: number; complete: boolean } {
+  const fields = [f.father, f.nature, f.joined];
+  if (employmentType !== "temporary") fields.push(f.epf, f.esic);
+  const filled = fields.filter((v) => !!v && v.trim() !== "").length;
+  return { filled, total: fields.length, complete: filled === fields.length };
 }

@@ -41,10 +41,19 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const pin = await Store.getItemAsync(PIN_KEY);
-      setStoredPin(pin);
-      setIsLocked(!!pin);
-      setLoading(false);
+      // An unreadable keystore must not block startup: clear the bad PIN
+      // and continue unlocked (App Lock off) so the owner can re-enable it.
+      try {
+        const pin = await Store.getItemAsync(PIN_KEY);
+        setStoredPin(pin);
+        setIsLocked(!!pin);
+      } catch {
+        await Store.deleteItemAsync(PIN_KEY).catch(() => {});
+        setStoredPin(null);
+        setIsLocked(false);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 

@@ -22,6 +22,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import {
   ApiError,
+  WageRateType,
+  MIN_DAILY_WAGE,
+  dailyEquivalent,
   WorkerType,
   assignWorkerType,
   createWageProfile,
@@ -36,6 +39,9 @@ import {
 import DateField, { addYearsIso, isoDate } from "../components/DateField";
 import EmploymentFields from "../components/EmploymentFields";
 import SelectField from "../components/SelectField";
+import RateTypeSelect from "../components/RateTypeSelect";
+import JoiningDateField from "../components/JoiningDateField";
+import { complianceProgress } from "../employment";
 import { ALL_INDIAN_STATE_OPTIONS } from "../indianStates";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
@@ -132,7 +138,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [mobile, setMobile] = useState("");
 
   // --- Step 2: Employment + Compliance (Form 12) ---
-  const [employmentType, setEmploymentType] = useState<"permanent" | "temporary">("permanent");
+  const [employmentType, setEmploymentType] = useState<"permanent" | "temporary" | "contract">("permanent");
   const [homeState, setHomeState] = useState("");
   const [isIsmValue, setIsIsmValue] = useState(false);
   const [ismTouched, setIsmTouched] = useState(false);
@@ -140,7 +146,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [designation, setDesignation] = useState("");
   const [epfUanNo, setEpfUanNo] = useState("");
   const [esicNo, setEsicNo] = useState("");
-  const [dateOfJoining, setDateOfJoining] = useState("");
+  const [dateOfJoining, setDateOfJoining] = useState(isoDate(new Date()));
   const [fitnessCertNo, setFitnessCertNo] = useState("");
   const [fitnessCertValidTill, setFitnessCertValidTill] = useState("");
 
@@ -149,7 +155,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
   const [selectedWorkerTypeId, setSelectedWorkerTypeId] = useState<number | null>(null);
   const [typeAutoFilled, setTypeAutoFilled] = useState(false);
-  const [rateType, setRateType] = useState<"daily" | "monthly">("daily");
+  const [rateType, setRateType] = useState<WageRateType>("daily");
   const [basic, setBasic] = useState("");
   const [pfRate, setPfRate] = useState("");
   const [esiRate, setEsiRate] = useState("");
@@ -350,8 +356,8 @@ export default function AddWorkerScreen({ navigation }: Props) {
               hra: parseFloat(hra) || 0,
               da: parseFloat(da) || 0,
               other_allowances: parseFloat(otherAllowances) || 0,
-              pf_rate: parseFloat(pfRate) || 0,
-              esi_rate: parseFloat(esiRate) || 0,
+              pf_rate: employmentType === "temporary" ? 0 : parseFloat(pfRate) || 0,
+              esi_rate: employmentType === "temporary" ? 0 : parseFloat(esiRate) || 0,
               lwf_amount: parseFloat(lwfAmount) || 0,
               effective_from: isoDate(new Date()),
             });
@@ -474,11 +480,19 @@ export default function AddWorkerScreen({ navigation }: Props) {
   }
 
   const step1Continueable = detailsRevealed && identityValid;
+  const progress = complianceProgress(employmentType, {
+    father: fatherOrSpouseName,
+    nature: designation,
+    joined: dateOfJoining,
+    epf: epfUanNo,
+    esic: esicNo,
+  });
+  const step2Blocked = step === 2 && !progress.complete;
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior="padding"
       keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
     >
       <View style={styles.header}>
@@ -497,7 +511,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" nestedScrollEnabled>
         {step === 1 && (
           <>
             <View style={styles.segToggle}>
@@ -604,20 +618,29 @@ export default function AddWorkerScreen({ navigation }: Props) {
             />
             <View style={styles.helpBox}>
               <Text style={styles.helpBoxText}>
-                These details feed the statutory Form 12 register. Optional here -- the Dashboard reminds you later if
-                any active worker is still missing them.
+                These details feed the statutory Form 12 register. {progress.filled} of {progress.total} filled
+                {progress.complete ? " -- all set." : " -- fill the rest to continue."}
+                {employmentType === "temporary" ? " (Temporary workers: EPF/ESIC not required.)" : ""}
               </Text>
             </View>
+            <SelectField
+              label="Salary type"
+              value={rateType}
+              options={[
+                { label: "Daily", value: "daily" },
+                { label: "Weekly", value: "weekly" },
+                { label: "Monthly", value: "monthly" },
+              ]}
+              onChange={(v) => setRateType(v as WageRateType)}
+            />
             <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} />
-            <Field label="Designation / nature of work" value={designation} onChangeText={setDesignation} />
+            <Field label="Nature of work" value={designation} onChangeText={setDesignation} />
             <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} />
             <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} />
-            <DateField
-              label="Date of entry into service"
+            <JoiningDateField
               value={dateOfJoining}
               onChange={setDateOfJoining}
               minDate={dob ? addYearsIso(dob, MINIMUM_WORKING_AGE) : undefined}
-              maxDate={isoDate(new Date())}
             />
             {estimate?.category === "young_person" && (
               <>
@@ -651,13 +674,10 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
                   noneLabel="No type -- set a custom rate below"
                 />
-                <View style={styles.toggleRow}>
-                  {(["daily", "monthly"] as const).map((option) => (
-                    <TouchableOpacity key={option} style={[styles.toggleOption, rateType === option && styles.toggleOptionSelected]} onPress={() => setRateType(option)}>
-                      <Text style={[styles.toggleText, rateType === option && styles.toggleTextSelected]}>{option === "daily" ? "Daily rate" : "Monthly rate"}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <RateTypeSelect value={rateType} onChange={setRateType} />
+                {basic.trim() !== "" && dailyEquivalent(rateType, parseFloat(basic) || 0) < MIN_DAILY_WAGE && (
+                  <Text style={styles.minWageWarn}>Below minimum wage of ₹{MIN_DAILY_WAGE}/day (daily equivalent ₹{Math.round(dailyEquivalent(rateType, parseFloat(basic) || 0))}).</Text>
+                )}
                 <Field
                   label="Basic wage"
                   value={basic}
@@ -705,14 +725,14 @@ export default function AddWorkerScreen({ navigation }: Props) {
             </Text>
 
             {!rawPhotoUri && !photoUploaded && (
-              <View style={styles.scanRow}>
-                <TouchableOpacity style={styles.scanCard} onPress={() => pickPhoto("camera")}>
-                  <Camera size={28} color={colors.teal} style={styles.scanIcon} />
+              <View>
+                <TouchableOpacity style={styles.photoFrame} onPress={() => pickPhoto("camera")}>
+                  <Camera size={36} color={colors.teal} />
                   <Text style={styles.scanCardLabel}>Take Photo</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.scanCard} onPress={() => pickPhoto("gallery")}>
-                  <Images size={28} color={colors.teal} style={styles.scanIcon} />
-                  <Text style={styles.scanCardLabel}>Choose from Gallery</Text>
+                <TouchableOpacity style={styles.galleryLink} onPress={() => pickPhoto("gallery")}>
+                  <Images size={16} color={colors.teal} />
+                  <Text style={styles.galleryLinkText}>Choose from Gallery</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -775,9 +795,9 @@ export default function AddWorkerScreen({ navigation }: Props) {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || saving) && styles.buttonDisabled]}
+            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || step2Blocked || saving) && styles.buttonDisabled]}
             onPress={goContinue}
-            disabled={(step === 1 && !step1Continueable) || saving}
+            disabled={(step === 1 && !step1Continueable) || step2Blocked || saving}
           >
             {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.nextBtnText}>Continue</Text>}
           </TouchableOpacity>
@@ -837,7 +857,7 @@ const styles = StyleSheet.create({
   stepLabelDone: { color: colors.tealPale },
   stepLabelCurrent: { color: colors.white, fontWeight: "700" },
   body: { flex: 1 },
-  bodyContent: { padding: spacing.lg, paddingBottom: spacing.xl },
+  bodyContent: { padding: spacing.lg, paddingBottom: 120 },
   segToggle: { flexDirection: "row", backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 4, marginBottom: spacing.md },
   segOption: { flex: 1, paddingVertical: spacing.sm + 2, alignItems: "center", borderRadius: radius.sm - 2 },
   segOptionActive: { backgroundColor: colors.teal },
@@ -895,6 +915,22 @@ const styles = StyleSheet.create({
   nextBtn: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
   nextBtnText: { color: colors.white, fontSize: 15, fontWeight: "700" },
   buttonDisabled: { opacity: 0.5 },
+  minWageWarn: { fontSize: 12, fontWeight: "700", color: colors.warningTintText, backgroundColor: colors.warningTint, padding: spacing.sm, borderRadius: radius.sm, marginBottom: spacing.sm },
+  photoFrame: {
+    width: 160,
+    height: 200,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: colors.teal,
+    backgroundColor: colors.fieldBg,
+  },
+  galleryLink: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: spacing.md },
+  galleryLinkText: { fontSize: 14, fontWeight: "700", color: colors.teal },
   photoPreview: {
     width: 160,
     height: 200,

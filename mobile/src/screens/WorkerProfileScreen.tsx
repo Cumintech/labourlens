@@ -35,6 +35,7 @@ import {
   markAttendance,
   updateWorkerEmployment,
   uploadWorkerPhoto,
+  rateUnit,
 } from "../api/client";
 import DayAttendanceRow from "../components/DayAttendanceRow";
 import EmploymentFields from "../components/EmploymentFields";
@@ -47,7 +48,8 @@ import TradeIcon from "../components/TradeIcon";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
-import { formatINR } from "../format";
+import { complianceProgress } from "../employment";
+import { formatINR, MONTH_NAMES } from "../format";
 import { colors, radius, spacing, type } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "WorkerProfile">;
@@ -58,10 +60,6 @@ const ID_PHOTO_WIDTH = 400;
 const ID_PHOTO_HEIGHT = 500;
 const ID_PHOTO_JPEG_QUALITY = 0.65;
 
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function daysInMonth(month: number, year: number): number {
@@ -131,13 +129,17 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
     }, [loadCompliance, token, workerId]),
   );
 
-  const completeness = useMemo(() => {
-    const fields = compliance
-      ? [compliance.father_or_spouse_name, compliance.designation_or_nature_of_work, compliance.epf_uan_no, compliance.esic_no, compliance.date_of_joining]
-      : [];
-    const filled = fields.filter((f) => !!f && f.trim() !== "").length;
-    return { filled, total: 5, complete: filled === 5 };
-  }, [compliance]);
+  const completeness = useMemo(
+    () =>
+      complianceProgress(headerWorker?.employment_type ?? null, {
+        father: compliance?.father_or_spouse_name,
+        nature: compliance?.designation_or_nature_of_work,
+        joined: compliance?.date_of_joining,
+        epf: compliance?.epf_uan_no,
+        esic: compliance?.esic_no,
+      }),
+    [compliance, headerWorker],
+  );
 
   return (
     <View style={styles.container}>
@@ -263,7 +265,7 @@ function OverviewTab({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [editingEmployment, setEditingEmployment] = useState(false);
-  const [empType, setEmpType] = useState<"permanent" | "temporary">("permanent");
+  const [empType, setEmpType] = useState<"permanent" | "temporary" | "contract">("permanent");
   const [empHomeState, setEmpHomeState] = useState("");
   const [empIsIsm, setEmpIsIsm] = useState(false);
   const [empTouched, setEmpTouched] = useState(true); // editing an existing worker: don't silently re-auto-suggest on open
@@ -286,7 +288,7 @@ function OverviewTab({
   function handleDeactivate() {
     Alert.alert(
       "Deactivate worker?",
-      `${workerName} will be marked deactivated and removed from the Labour Portal on the next sync. Their records are kept, not deleted. This needs confirmation before it happens.`,
+      `${workerName} will be marked deactivated. Their records are kept, not deleted. This needs confirmation before it happens.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -854,7 +856,7 @@ function WagesTab({
         {currentRate ? (
           <View style={styles.rateCard}>
             <Text style={styles.rateValue}>
-              ₹{currentRate.basic} / {currentRate.rate_type === "daily" ? "day" : "month"}
+              ₹{currentRate.basic} / {rateUnit(currentRate.rate_type)}
             </Text>
             <Text style={styles.rateDetail}>Effective from {currentRate.effective_from}</Text>
           </View>

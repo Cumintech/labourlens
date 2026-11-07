@@ -23,11 +23,13 @@ import ShiftSettingsScreen from "../screens/ShiftSettingsScreen";
 import WageProfileScreen from "../screens/WageProfileScreen";
 import WorkerEditScreen from "../screens/WorkerEditScreen";
 import WorkerProfileScreen from "../screens/WorkerProfileScreen";
+import WorkerTypeReportScreen from "../screens/WorkerTypeReportScreen";
 import WorkerTypesScreen from "../screens/WorkerTypesScreen";
 import { colors } from "../theme";
 import MainTabs from "./MainTabs";
 
 export type RootStackParamList = {
+  WorkerTypeReport: undefined;
   Home: undefined;
   // Route name kept as "NewWorkerScan" (not renamed to "AddWorker")
   // so HomeScreen's existing navigation.navigate("NewWorkerScan") call
@@ -142,6 +144,7 @@ export default function RootNavigator() {
             bar above it. */}
         <Stack.Screen name="WorkerEdit" component={WorkerEditScreen} options={{ headerShown: false }} />
         <Stack.Screen name="WageProfile" component={WageProfileScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="WorkerTypeReport" component={WorkerTypeReportScreen} options={{ title: "Worker Type Report" }} />
         <Stack.Screen name="MonthEnd" component={MonthEndScreen} options={{ title: "Month-End Checklist" }} />
         <Stack.Screen name="NeedsAttention" component={NeedsAttentionScreen} options={{ title: "Needs Attention" }} />
         <Stack.Screen name="ComplianceCheck" component={ComplianceCheckScreen} options={{ headerShown: false }} />

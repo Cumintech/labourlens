@@ -2,6 +2,7 @@
 
 from common import *  # noqa: F401,F403
 from common import _rate_limit_exceeded_handler  # noqa: F401
+import minimum_wage
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -17,6 +18,9 @@ async def lifespan(app: FastAPI):
     # in production. Kept for local dev/fresh-SQLite convenience only.
     if ENVIRONMENT != "production":
         Base.metadata.create_all(bind=engine)
+        # Production gets this reference data from the Alembic migration.
+        with SessionLocal() as _db:
+            minimum_wage.seed_reference_data(_db)
     # Skippable via OCR_WARM_UP=false -- loading EasyOCR's PyTorch models
     # at startup needs real memory headroom a free-tier host (e.g.
     # Render's 512MB web service) doesn't have, and an OOM here takes
@@ -139,6 +143,7 @@ from routers.wages import router as wages_router
 from routers.insights import router as insights_router
 from routers.attendance import router as attendance_router
 from routers.forms import router as forms_router
+from routers.minimum_wages import router as minimum_wages_router
 
 app.include_router(owners_router)
 app.include_router(workers_router)
@@ -146,3 +151,4 @@ app.include_router(wages_router)
 app.include_router(insights_router)
 app.include_router(attendance_router)
 app.include_router(forms_router)
+app.include_router(minimum_wages_router)

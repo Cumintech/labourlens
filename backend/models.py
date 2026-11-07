@@ -39,6 +39,8 @@ class Owner(Base):
     # Printed on every Phase 3 statutory form header -- not PII, plain columns.
     factory_address: Mapped[str | None] = mapped_column(String, nullable=True)
     factory_licence_no: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Which scheduled employment's minimum-wage notification applies to this factory.
+    min_wage_employment_id: Mapped[int | None] = mapped_column(ForeignKey("minimum_wage_employments.id"), nullable=True)
     # Which state's statutory forms apply to this factory -- e.g. "Tamil
     # Nadu", "Karnataka" -- drives the Forms & Reports state selector and
     # which form_templates rows show up there. Free text today (not an
@@ -103,6 +105,8 @@ class Worker(Base, TenantScoped):
     dob: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[str | None] = mapped_column(String, nullable=True)
     worker_type_id: Mapped[int | None] = mapped_column(ForeignKey("worker_types.id"), nullable=True)
+    # Statutory minimum-wage class (see minimum_wage.py); independent of the factory-defined worker_type.
+    min_wage_class_id: Mapped[int | None] = mapped_column(ForeignKey("minimum_wage_classes.id"), nullable=True)
     # A stable numeric badge/token number -- generated once, on demand,
     # never reused even after deactivation. Exists specifically so a
     # biometric device that only accepts numeric enrollment IDs can use
@@ -553,3 +557,60 @@ class FormTemplate(Base):
     form_code: Mapped[str] = mapped_column(String, nullable=False)
     label: Mapped[str] = mapped_column(String, nullable=False)
     is_available: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+
+class MinimumWageEmployment(Base):
+    """Reference data (not owner-scoped): a scheduled employment with its own
+    minimum-wage notification, e.g. Tamil Nadu Rice/Flour/Dhall Mills."""
+
+    __tablename__ = "minimum_wage_employments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String, nullable=False)
+    da_unit: Mapped[str] = mapped_column(String, default="daily", nullable=False)
+    da_days_per_month: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    monthly_to_daily_divisor: Mapped[int] = mapped_column(Integer, default=26, nullable=False)
+    da_revision_note: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class MinimumWageClass(Base):
+    """A class of employee within an employment (Hamali, Clerk, ...)."""
+
+    __tablename__ = "minimum_wage_classes"
+    __table_args__ = (UniqueConstraint("employment_id", "name", name="uq_min_wage_class_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employment_id: Mapped[int] = mapped_column(ForeignKey("minimum_wage_employments.id"), nullable=False, index=True)
+    sl_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # "daily" | "monthly" -- the unit the class's Basic is fixed in
+    rate_type: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class MinimumWageBasicVersion(Base):
+    """Basic rate from the GO, append-only and effective-dated. Never
+    overwritten when DA changes (DA lives in MinimumWageDaVersion)."""
+
+    __tablename__ = "minimum_wage_basic_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    class_id: Mapped[int] = mapped_column(ForeignKey("minimum_wage_classes.id"), nullable=False, index=True)
+    basic: Mapped[float] = mapped_column(nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class MinimumWageDaVersion(Base):
+    """Dearness Allowance per day for an employment, append-only and
+    effective-dated (revised each 1 April)."""
+
+    __tablename__ = "minimum_wage_da_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employment_id: Mapped[int] = mapped_column(ForeignKey("minimum_wage_employments.id"), nullable=False, index=True)
+    da_value: Mapped[float] = mapped_column(nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    verified: Mapped[bool] = mapped_column(default=False, nullable=False)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)

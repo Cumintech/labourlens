@@ -545,8 +545,8 @@ function PayrollView() {
               {detailTarget.meets_min_wage != null && (
                 <Text style={{ fontSize: 12, fontWeight: "700", marginBottom: 8, color: detailTarget.meets_min_wage ? colors.present : colors.warningTintText }}>
                   {detailTarget.meets_min_wage
-                    ? `Meets minimum wage (₹${detailTarget.min_daily_wage}/day)`
-                    : `Below minimum wage: ₹${formatINR(detailTarget.daily_equivalent_rate ?? 0)}/day vs ₹${detailTarget.min_daily_wage}/day`}
+                    ? `Meets minimum wage for ${detailTarget.min_wage_class} (₹${detailTarget.min_daily_wage}/day)`
+                    : `Below minimum wage for ${detailTarget.min_wage_class}: ₹${formatINR(detailTarget.daily_equivalent_rate ?? 0)}/day vs ₹${detailTarget.min_daily_wage}/day (Basic + DA)`}
                 </Text>
               )}
 

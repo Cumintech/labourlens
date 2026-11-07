@@ -40,8 +40,8 @@ w2 = client.post("/workers", headers=h, json={"name": "Weekly Guy", "aadhaar_num
 wage(w2["id"], "weekly", 7000)  # 1000/day, no attendance marked -> no LOP
 g2 = client.get(f"/workers/{w2['id']}/wage-computation", headers=h, params={"month": 9, "year": 2026}).json()
 assert g2["rate_type"] == "weekly" and abs(g2["basic_wage"] - 30000) < 0.01, g2
-assert g["meets_min_wage"] is True and g["min_daily_wage"] == 500, g  # 30000/30 = 1000/day
+assert g["meets_min_wage"] is None and g["min_daily_wage"] == 0 and g["daily_equivalent_rate"] == 1000, g  # no min-wage class -> no comparison (see verify_minimum_wage.py)
 wage(w2["id"], "daily", 400)
 g3 = client.get(f"/workers/{w2['id']}/wage-computation", headers=h, params={"month": 9, "year": 2026}).json()
-assert g3["meets_min_wage"] is False, g3
+assert g3["meets_min_wage"] is None and g3["daily_equivalent_rate"] == 400, g3
 print("verify_wage_lop: OK")

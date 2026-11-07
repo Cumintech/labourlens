@@ -190,6 +190,7 @@ class OwnerOut(BaseModel):
     factory_licence_no: str | None = None
     state: str | None = None
     industry: str | None = None
+    min_wage_employment_id: int | None = None
     # Mirrors the admin-portal Factory row's status -- "trial" /
     # "active" / "payment_overdue" / "suspended" / "churned".
     # trial_days_remaining is only meaningful while plan_status ==
@@ -285,6 +286,7 @@ class WorkerOut(BaseModel):
     deactivated_at: datetime | None
     deactivated_reason: str | None
     worker_type_id: int | None
+    min_wage_class_id: int | None = None
     numeric_employee_code: str | None = None
     # A confirmed DeviceUserMapping row for this worker, on any of the
     # owner's devices -- None means not explicitly mapped, even if their
@@ -598,11 +600,17 @@ class WorkerWageOut(BaseModel):
     esi_base: float = 0  # Gross Wages, the statutory ESI wage base
     lwf: float = 0
     total_deductions: float = 0
-    # Placeholder minimum wage (flat Rs 500/day for all states/workers
-    # until real rates are provided) vs the worker's daily-equivalent rate.
+    # Statutory minimum (Basic + DA) for the worker's minimum-wage class vs
+    # their Basic + DA, both per day. meets_min_wage is None -- and the
+    # min_wage_* fields empty -- when no class is assigned or no rate was in
+    # force; there is deliberately no flat fallback figure.
     min_daily_wage: float = 0
     daily_equivalent_rate: float = 0
     meets_min_wage: bool | None = None
+    min_wage_class: str | None = None
+    min_wage_amount: float | None = None  # in min_wage_unit
+    min_wage_unit: str | None = None  # "day" | "month"
+    min_wage_da_verified: bool | None = None
 
 
 class WageSummaryOut(BaseModel):
@@ -793,3 +801,54 @@ class VerifyPunchOut(BaseModel):
     worker_employee_code: str | None = None
     timestamp: datetime | None = None
     message: str
+
+
+class MinimumWageClassOut(BaseModel):
+    id: int
+    sl_no: int
+    name: str
+    rate_type: str  # "daily" | "monthly"
+    basic: float | None = None  # in force today
+    minimum: float | None = None  # Basic + DA in force today, per rate_type
+
+
+class MinimumWageEmploymentOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    jurisdiction: str
+    da_unit: str
+    da_days_per_month: int
+    monthly_to_daily_divisor: int
+    da_value: float | None = None  # per day, in force today
+    da_effective_from: date | None = None
+    da_verified: bool | None = None
+    classes: list[MinimumWageClassOut]
+
+
+class MinimumWageCheckOut(BaseModel):
+    available: bool
+    reason: str | None = None
+    class_id: int | None = None
+    class_name: str | None = None
+    employment_name: str | None = None
+    rate_type: str | None = None
+    unit: str | None = None  # "day" | "month"
+    basic: float | None = None
+    da: float | None = None
+    minimum: float | None = None
+    proposed: float | None = None  # Basic + DA converted to the class unit
+    meets: bool | None = None
+    shortfall: float | None = None
+    minimum_per_day: float | None = None
+    proposed_per_day: float | None = None
+    da_effective_from: date | None = None
+    da_verified: bool | None = None
+
+
+class MinimumWageEmploymentIn(BaseModel):
+    employment_id: int | None = None  # None clears
+
+
+class WorkerMinimumWageClassIn(BaseModel):
+    class_id: int | None = None  # None clears

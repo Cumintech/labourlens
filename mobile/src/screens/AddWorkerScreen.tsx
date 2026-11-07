@@ -23,10 +23,9 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import {
   ApiError,
   WageRateType,
-  MIN_DAILY_WAGE,
-  dailyEquivalent,
   WorkerType,
   assignWorkerType,
+  setWorkerMinimumWageClass,
   createWageProfile,
   createWorker,
   createWorkerCompliance,
@@ -43,6 +42,7 @@ import RateTypeSelect from "../components/RateTypeSelect";
 import JoiningDateField from "../components/JoiningDateField";
 import { complianceProgress } from "../employment";
 import { ALL_INDIAN_STATE_OPTIONS } from "../indianStates";
+import MinimumWageClassSelect from "../components/MinimumWageClassSelect";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
@@ -153,6 +153,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   // --- Step 3: Wage, optional ---
   const [wageEnabled, setWageEnabled] = useState(true);
   const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
+  const [minWageClassId, setMinWageClassId] = useState<number | null>(null);
   const [selectedWorkerTypeId, setSelectedWorkerTypeId] = useState<number | null>(null);
   const [typeAutoFilled, setTypeAutoFilled] = useState(false);
   const [rateType, setRateType] = useState<WageRateType>("daily");
@@ -346,6 +347,13 @@ export default function AddWorkerScreen({ navigation }: Props) {
             await assignWorkerType(token, created.id, selectedWorkerTypeId);
           } catch {
             warnings.push("worker type");
+          }
+        }
+        if (minWageClassId != null) {
+          try {
+            await setWorkerMinimumWageClass(token, created.id, minWageClassId);
+          } catch {
+            warnings.push("minimum-wage class");
           }
         }
         if (basic.trim()) {
@@ -675,9 +683,13 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   noneLabel="No type -- set a custom rate below"
                 />
                 <RateTypeSelect value={rateType} onChange={setRateType} />
-                {basic.trim() !== "" && dailyEquivalent(rateType, parseFloat(basic) || 0) < MIN_DAILY_WAGE && (
-                  <Text style={styles.minWageWarn}>Below minimum wage of ₹{MIN_DAILY_WAGE}/day (daily equivalent ₹{Math.round(dailyEquivalent(rateType, parseFloat(basic) || 0))}).</Text>
-                )}
+                <MinimumWageClassSelect
+                  token={token ?? ""}
+                  employmentId={owner?.min_wage_employment_id}
+                  value={minWageClassId}
+                  onChange={setMinWageClassId}
+                  rate={{ rateType, basic: parseFloat(basic) || 0, da: parseFloat(da) || 0 }}
+                />
                 <Field
                   label="Basic wage"
                   value={basic}
@@ -915,7 +927,6 @@ const styles = StyleSheet.create({
   nextBtn: { flex: 2, backgroundColor: colors.teal, borderRadius: radius.sm, paddingVertical: 14, alignItems: "center" },
   nextBtnText: { color: colors.white, fontSize: 15, fontWeight: "700" },
   buttonDisabled: { opacity: 0.5 },
-  minWageWarn: { fontSize: 12, fontWeight: "700", color: colors.warningTintText, backgroundColor: colors.warningTint, padding: spacing.sm, borderRadius: radius.sm, marginBottom: spacing.sm },
   photoFrame: {
     width: 160,
     height: 200,

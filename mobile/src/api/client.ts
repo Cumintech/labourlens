@@ -39,6 +39,8 @@ export type Owner = {
   // unlike trial_days_remaining which counts down. Also null outside
   // plan_status === "trial". See planStatus.ts's trialStatusText.
   trial_ends_at: string | null;
+  // Which scheduled employment's minimum-wage notification applies (null = none chosen).
+  min_wage_employment_id: number | null;
 };
 
 export function updateFactoryProfile(
@@ -279,6 +281,7 @@ export type Worker = {
   deactivated_at: string | null;
   deactivated_reason: string | null;
   worker_type_id: number | null;
+  min_wage_class_id: number | null;
   numeric_employee_code: string | null;
   // A confirmed device mapping, if any -- null means "Not mapped", not
   // an error. Never the direct-employee-code enrollment path (that has
@@ -339,6 +342,72 @@ export async function deleteWorkerType(token: string, id: number): Promise<void>
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) await throwForErrorResponse(res, "Request failed");
+}
+
+export type MinimumWageClass = {
+  id: number;
+  sl_no: number;
+  name: string;
+  rate_type: "daily" | "monthly";
+  basic: number | null;
+  minimum: number | null;
+};
+
+export type MinimumWageEmployment = {
+  id: number;
+  code: string;
+  name: string;
+  jurisdiction: string;
+  da_value: number | null;
+  da_verified: boolean | null;
+  classes: MinimumWageClass[];
+};
+
+export type MinimumWageCheck = {
+  available: boolean;
+  reason: string | null;
+  class_name: string | null;
+  unit: "day" | "month" | null;
+  minimum: number | null;
+  proposed: number | null;
+  meets: boolean | null;
+  shortfall: number | null;
+  da_verified: boolean | null;
+};
+
+export function listMinimumWageEmployments(token: string): Promise<MinimumWageEmployment[]> {
+  return request<MinimumWageEmployment[]>("/minimum-wages/employments", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function checkMinimumWage(
+  token: string,
+  classId: number,
+  rateType: string,
+  basic: number,
+  da: number,
+): Promise<MinimumWageCheck> {
+  const qs = `class_id=${classId}&rate_type=${encodeURIComponent(rateType)}&basic=${basic}&da=${da}`;
+  return request<MinimumWageCheck>(`/minimum-wages/check?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function setMinimumWageEmployment(token: string, employmentId: number | null): Promise<Owner> {
+  return request<Owner>("/owners/me/minimum-wage-employment", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ employment_id: employmentId }),
+  });
+}
+
+export function setWorkerMinimumWageClass(token: string, workerId: number, classId: number | null): Promise<Worker> {
+  return request<Worker>(`/workers/${workerId}/minimum-wage-class`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ class_id: classId }),
+  });
 }
 
 export function assignWorkerType(token: string, workerId: number, workerTypeId: number | null): Promise<Worker> {
@@ -1084,12 +1153,16 @@ export function recordWagePayment(token: string, workerId: number, input: WagePa
   });
 }
 
-export const MIN_DAILY_WAGE = 500; // placeholder until real state/industry rates are supplied
-export const dailyEquivalent = (type: string, basic: number) => (type === "weekly" ? basic / 7 : type === "monthly" ? basic / 30 : basic);
 export type WorkerWage = {
+  // Statutory minimum for the worker's minimum-wage class (Basic + DA); all
+  // empty when no class is assigned or no rate was in force that month.
   meets_min_wage?: boolean | null;
   daily_equivalent_rate?: number;
   min_daily_wage?: number;
+  min_wage_class?: string | null;
+  min_wage_amount?: number | null;
+  min_wage_unit?: "day" | "month" | null;
+  min_wage_da_verified?: boolean | null;
   worker_id: number;
   worker_name: string;
   numeric_employee_code: string | null;

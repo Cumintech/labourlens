@@ -19,6 +19,7 @@ import {
   WorkerType,
   WorkerWage,
   assignWorkerType,
+  setWorkerMinimumWageClass,
   createLeaveEntry,
   deactivateWorker,
   deleteLeaveEntry,
@@ -42,6 +43,7 @@ import EmploymentFields from "../components/EmploymentFields";
 import ErrorState from "../components/ErrorState";
 import OtHoursModal from "../components/OtHoursModal";
 import { ListSkeleton } from "../components/Skeleton";
+import MinimumWageClassSelect from "../components/MinimumWageClassSelect";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
 import { Avatar, EmploymentChip, SegmentedControl } from "../components/ui";
 import TradeIcon from "../components/TradeIcon";
@@ -779,7 +781,7 @@ function WagesTab({
   isActive: boolean;
   navigation: Props["navigation"];
 }) {
-  const { token } = useAuth();
+  const { token, owner } = useAuth();
   const insets = useSafeAreaInsets();
   const [worker, setWorker] = useState<Worker | null>(null);
   const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
@@ -808,6 +810,16 @@ function WagesTab({
   );
 
   const currentRate = wageHistory[0]; // newest-first
+
+  async function handleAssignMinWageClass(classId: number | null) {
+    if (!token) return;
+    try {
+      setWorker(await setWorkerMinimumWageClass(token, workerId, classId));
+    } catch (e) {
+      const message = e instanceof ApiError ? e.message : "Couldn't reach the server.";
+      Alert.alert("Could not set minimum-wage class", message);
+    }
+  }
 
   async function handleAssignType(typeId: number | null) {
     if (!token) return;
@@ -852,6 +864,13 @@ function WagesTab({
           disabled={assigning || !isActive}
         />
         <Text style={styles.helper}>Assigning a type sets this worker's rate to the type's default, unless they already have one.</Text>
+        <MinimumWageClassSelect
+          token={token ?? ""}
+          employmentId={owner?.min_wage_employment_id}
+          value={worker.min_wage_class_id}
+          onChange={handleAssignMinWageClass}
+          rate={currentRate ? { rateType: currentRate.rate_type, basic: currentRate.basic, da: currentRate.da } : undefined}
+        />
 
         {currentRate ? (
           <View style={styles.rateCard}>

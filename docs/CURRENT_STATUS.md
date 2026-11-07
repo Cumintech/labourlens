@@ -34,6 +34,12 @@
 ## PR5 router split (2026-10-30, refactor/routers)
 - main.py (2.4k lines) -> main.py (app setup, health, privacy) + common.py (shared imports/constants/helpers) + routers/{owners,workers,attendance,wages,forms,insights}.py. Moved verbatim; OpenAPI schema identical (89 routes). Add new routes to the matching router, shared helpers to common.py. Start command stays `main:app`.
 
+## Statutory minimum wage (2026-11-07, branch claude/labourlens-pre-deploy-review-nl7cff)
+- Replaced the flat Rs500/day placeholder. backend/minimum_wage.py + 4 reference tables (employments, classes, Basic versions, DA versions -- Basic and DA versioned separately, append-only). Seeded: TN Rice/Flour/Dhall Mills, 33 classes, DA 292.80/day eff. 2026-04-01 (verified=false -- confirm officially; Basic effective date unknown, sentinel 2000-01-01).
+- Rule: daily class = Basic+DA; monthly class = Basic + DA x 30; monthly->daily /26 (weekly /6, my assumption). Compares worker Basic+DA. No class/rate in force => no check (null), never a guess.
+- Owner.min_wage_employment_id (Factory Profile) -> Worker.min_wage_class_id (Add Worker / Worker Profile). Migration e3b7a1c9d5f2: BACK UP, run `alembic upgrade head` manually. Test: verify_minimum_wage.py.
+- Next DA revision: INSERT a minimum_wage_da_versions row (effective_from 1 April); no admin UI yet.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

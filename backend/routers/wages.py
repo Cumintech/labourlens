@@ -2,7 +2,10 @@
 
 from fastapi import APIRouter
 
+import calendar
+
 from common import *  # noqa: F401,F403
+from common import _worker_wage_out, date_, minimum_wage  # noqa: F401
 
 router = APIRouter()
 
@@ -21,12 +24,14 @@ def get_wage_summary(
     total_gross = 0.0
     total_net = 0.0
     wages = forms.compute_wage_bulk(db, owner.id, [w.id for w in workers], month, year)
+    minwage = minimum_wage.MinimumWageResolver(db)
+    month_end = date_(year, month, calendar.monthrange(year, month)[1])
     for worker in workers:
         wage = wages.get(worker.id)
         if wage is not None:
             total_gross += wage["gross"]
             total_net += wage["net"]
-        results.append(_worker_wage_out(worker, wage))
+        results.append(_worker_wage_out(worker, wage, minwage, month_end))
     return WageSummaryOut(
         period_label=f"{year}-{month:02d}", total_workers=len(workers), total_gross=total_gross, total_net=total_net, workers=results
     )

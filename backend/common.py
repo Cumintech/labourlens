@@ -40,6 +40,8 @@ import biometric_api
 
 import forms
 
+import minimum_wage
+
 import models
 
 import ocr
@@ -257,12 +259,38 @@ def _get_owned_worker(worker_id: int, owner: models.Owner, db: Session) -> model
     return worker
 
 # Placeholder until per-state/industry minimum wages are supplied.
-MINIMUM_DAILY_WAGE = 500.0
 
 def _daily_equivalent(rate_type: str, basic: float) -> float:
     return forms.daily_rate_equivalent(rate_type, basic)
 
-def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:
+def _min_wage_fields(worker, wage, minwage, as_of) -> dict:
+    """Statutory minimum (Basic + DA of the worker's class) vs the worker's
+    own Basic + DA, per day. All-empty when no class/rate applies."""
+    rate = wage["rate"]
+    out = {"daily_equivalent_rate": round(_daily_equivalent(rate.rate_type, rate.basic + rate.da), 2)}
+    if minwage is None or worker.min_wage_class_id is None:
+        return out
+    chk = minwage.check(worker.min_wage_class_id, rate.rate_type, rate.basic, rate.da, as_of or date_.today())
+    if not chk["available"]:
+        return out
+    return {
+        **out,
+        "min_daily_wage": chk["minimum_per_day"],
+        "daily_equivalent_rate": chk["proposed_per_day"],
+        "meets_min_wage": chk["meets"],
+        "min_wage_class": chk["class_name"],
+        "min_wage_amount": chk["minimum"],
+        "min_wage_unit": chk["unit"],
+        "min_wage_da_verified": chk["da_verified"],
+    }
+
+
+def _worker_wage_out(
+    worker: models.Worker,
+    wage: dict | None,
+    minwage: "minimum_wage.MinimumWageResolver | None" = None,
+    as_of: date_ | None = None,
+) -> WorkerWageOut:
     """The same figures Form 15/Wage Slip print, as JSON -- shared by the
     per-worker wage-computation endpoint and the factory-wide summary so
     both always agree on the same breakdown."""
@@ -289,9 +317,7 @@ def _worker_wage_out(worker: models.Worker, wage: dict | None) -> WorkerWageOut:
         paid=wage["payment"] is not None and wage["payment"].date_of_payment is not None,
         rate_amount=wage["rate"].basic,
         rate_type=wage["rate"].rate_type,
-        min_daily_wage=MINIMUM_DAILY_WAGE,
-        daily_equivalent_rate=round(_daily_equivalent(wage["rate"].rate_type, wage["rate"].basic), 2),
-        meets_min_wage=_daily_equivalent(wage["rate"].rate_type, wage["rate"].basic) >= MINIMUM_DAILY_WAGE,
+        **_min_wage_fields(worker, wage, minwage, as_of),
         basic_wage=wage["basic_wage"],
         da=wage["rate"].da,
         hra=wage["rate"].hra,
@@ -549,7 +575,6 @@ __all__ = [
     "_generate_worker_code",
     "_compliance_out",
     "_get_owned_worker",
-    "MINIMUM_DAILY_WAGE",
     "_daily_equivalent",
     "_worker_wage_out",
     "COMPLIANCE_CATEGORY_LABELS",

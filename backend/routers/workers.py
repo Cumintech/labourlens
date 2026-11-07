@@ -2,7 +2,10 @@
 
 from fastapi import APIRouter
 
+import calendar
+
 from common import *  # noqa: F401,F403
+from common import _worker_wage_out, date_, minimum_wage  # noqa: F401
 
 router = APIRouter()
 
@@ -761,7 +764,8 @@ def get_worker_wage_computation(
     the wage detail breakdown on the Wage Calculation tab."""
     worker = _get_owned_worker(worker_id, owner, db)
     wage = forms.compute_wage(db, owner.id, worker_id, month, year)
-    return _worker_wage_out(worker, wage)
+    month_end = date_(year, month, calendar.monthrange(year, month)[1])
+    return _worker_wage_out(worker, wage, minimum_wage.MinimumWageResolver(db), month_end)
 
 
 @router.get("/workers/{worker_id}/attendance-month", response_model=list[AttendanceOut])

@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity } from "react-native";
-import { updateAccount, updateFactoryProfile } from "../api/client";
+import { MinimumWageEmployment, listMinimumWageEmployments, setMinimumWageEmployment, updateAccount, updateFactoryProfile } from "../api/client";
 import KeyboardScreen from "../components/KeyboardScreen";
 import SelectField from "../components/SelectField";
 import { useAuth } from "../context/AuthContext";
@@ -29,6 +29,35 @@ export default function ProfileScreen({}: Props) {
   const [state, setState] = useState(owner?.state ?? "");
   const [industry, setIndustry] = useState(owner?.industry ?? "");
   const [saving, setSaving] = useState(false);
+  const [employments, setEmployments] = useState<MinimumWageEmployment[]>([]);
+
+  useEffect(() => {
+    if (!token) return;
+    listMinimumWageEmployments(token).then(setEmployments).catch(() => {});
+  }, [token]);
+
+  // Saved immediately (not with "Save profile"): it also clears every worker's
+  // minimum-wage class, so it asks first when one is already chosen.
+  function handleEmploymentChange(value: string) {
+    if (!token) return;
+    const next = value === "none" ? null : Number(value);
+    const apply = async () => {
+      try {
+        await updateOwner(await setMinimumWageEmployment(token, next));
+      } catch (e: any) {
+        Alert.alert("Could not update", e?.message ?? "Please try again.");
+      }
+    };
+    if (owner?.min_wage_employment_id && owner.min_wage_employment_id !== next) {
+      Alert.alert(
+        "Change employment?",
+        "Workers' minimum-wage classes belong to the current employment and will be cleared.",
+        [{ text: "Cancel", style: "cancel" }, { text: "Change", style: "destructive", onPress: apply }],
+      );
+    } else {
+      apply();
+    }
+  }
 
   async function handleSave() {
     if (!token) return;
@@ -133,6 +162,15 @@ export default function ProfileScreen({}: Props) {
         options={INDUSTRY_OPTIONS}
         onChange={setIndustry}
         placeholder="Select your factory's industry"
+      />
+      <SelectField
+        label="Minimum-wage employment (statutory minimum wages)"
+        value={owner?.min_wage_employment_id != null ? String(owner.min_wage_employment_id) : "none"}
+        options={[
+          { label: "None", value: "none" },
+          ...employments.map((e) => ({ label: `${e.name} (${e.jurisdiction})`, value: String(e.id) })),
+        ]}
+        onChange={handleEmploymentChange}
       />
       <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
         {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Save profile</Text>}

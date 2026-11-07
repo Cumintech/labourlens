@@ -37,6 +37,7 @@ from reportlab.platypus import Image as RLImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 
+import minimum_wage
 import models
 
 # Only Form 25 and Form 25-B's REAL government references are bilingual
@@ -1593,6 +1594,19 @@ def build_form15(db: Session, owner: models.Owner, start_date: date, end_date: d
 # --------------------------------------------------------------------------
 
 
+def _statutory_minimum_text(db: Session, worker: models.Worker, wage: dict, month: int, year: int) -> str:
+    """Statutory minimum (Basic + DA of the worker's minimum-wage class, as of
+    the wage month's end); falls back to the worker's own rate when no class
+    is assigned or no rate was in force."""
+    if worker.min_wage_class_id is not None:
+        m = minimum_wage.MinimumWageResolver(db).minimum_as_of(
+            worker.min_wage_class_id, date(year, month, calendar.monthrange(year, month)[1])
+        )
+        if m is not None:
+            return f"{m['minimum']:.2f} / {m['rate_type']}"
+    return f"{wage['rate'].basic:.2f} / {wage['rate'].rate_type}"
+
+
 def _wageslip_month_elements(db: Session, owner: models.Owner, styles, worker: models.Worker, month: int, year: int) -> list:
     """Field order/labels follow the "Fields of Wage Slip" list exactly
     (the Tamil chit-style sample sent alongside it is a different,
@@ -1618,7 +1632,7 @@ def _wageslip_month_elements(db: Session, owner: models.Owner, styles, worker: m
                 ),
             ],
             ["Wage Period", period_label],
-            ["Minimum Wages / day or month", f"{wage['rate'].basic:.2f} / {wage['rate'].rate_type}"],
+            ["Minimum Wages / day or month", _statutory_minimum_text(db, worker, wage, month, year)],
             ["Total Days Worked", str(wage["summary"]["days_worked"])],
             ["Gross Wages", f"{wage['gross']:.2f}"],
             ["Deductions", ""],

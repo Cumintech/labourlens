@@ -1,4 +1,5 @@
-import { Flame, Hammer, HardHat, LucideIcon, Paintbrush, ShieldCheck, Truck, Wrench, Zap } from "lucide-react-native";
+import { Flame, Hammer, HardHat, Paintbrush, ShieldCheck, Truck, Wrench, Zap } from "../icons";
+import type { LucideIcon } from "lucide-react-native";
 import React from "react";
 import { View } from "react-native";
 

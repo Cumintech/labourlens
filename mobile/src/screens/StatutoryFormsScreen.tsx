@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { ChevronRight, Download, FileText } from "lucide-react-native";
+import { ChevronRight, Download, FileText } from "../icons";
 import Svg, { Circle } from "react-native-svg";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";

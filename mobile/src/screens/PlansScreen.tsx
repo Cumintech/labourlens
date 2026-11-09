@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { ArrowLeft, Check, FileText, Lock, MapPin } from "lucide-react-native";
+import { ArrowLeft, Check, FileText, Lock, MapPin } from "../icons";
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";

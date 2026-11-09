@@ -1,4 +1,4 @@
-import { Check, Clock, Fingerprint, MoreVertical, UserX } from "lucide-react-native";
+import { Check, Clock, Fingerprint, MoreVertical, UserX } from "../icons";
 import React, { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { AttendanceStatus, ShiftConfig, Worker } from "../api/client";

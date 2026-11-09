@@ -1,7 +1,7 @@
 import React from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { ChevronRight, MessageCircle } from "lucide-react-native";
+import { ChevronRight, MessageCircle } from "../icons";
 import { useAuth } from "../context/AuthContext";
 import { openWhatsApp } from "../support";
 import { colors, radius, spacing } from "../theme";

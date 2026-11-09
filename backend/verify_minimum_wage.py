@@ -108,6 +108,8 @@ assert client.get("/minimum-wages/check", headers=h, params={"class_id": 9999, "
 w = client.post("/workers", headers=h, json={"name": "Min Wage Guy", "aadhaar_number": "555511112225"}).json()
 assert "id" in w, w
 wid = w["id"]
+legacy = client.post(f"/workers/{wid}/wage-profile", headers=h, json={"rate_type": "daily", "basic": 400, "hra": 0, "da": 0, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": "2026-01-01"})
+assert legacy.status_code == 201, legacy.text  # no class yet -> not checked
 # class assignment needs the factory's employment first
 assert client.put(f"/workers/{wid}/minimum-wage-class", headers=h, json={"class_id": hamali_id}).status_code == 422
 o = client.put("/owners/me/minimum-wage-employment", headers=h, json={"employment_id": emp_id})
@@ -118,13 +120,27 @@ assert a.status_code == 200 and a.json()["min_wage_class_id"] == hamali_id, a.te
 # another owner cannot touch this worker
 assert client.put(f"/workers/{wid}/minimum-wage-class", headers=h2, json={"class_id": hamali_id}).status_code == 404
 
-def rate(basic, da, rate_type="daily", eff="2026-01-01"):
-    r = client.post(f"/workers/{wid}/wage-profile", headers=h, json={"rate_type": rate_type, "basic": basic, "hra": 0, "da": da, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": eff})
-    assert r.status_code in (200, 201), r.text
-rate(400, 0)
+# the legacy 400/day rate (saved before the class existed) now shows as below the minimum
 g = client.get(f"/workers/{wid}/wage-computation", headers=h, params={"month": 11, "year": 2026}).json()
 assert g["meets_min_wage"] is False and g["min_daily_wage"] == 563.3 and g["min_wage_class"] == "Hamalis (Bag Carriers)", g
 assert g["min_wage_amount"] == 563.3 and g["min_wage_unit"] == "day" and g["min_wage_da_verified"] is False, g
+def rate_raw(basic, da, rate_type="daily", eff="2026-01-01"):
+    return client.post(f"/workers/{wid}/wage-profile", headers=h, json={"rate_type": rate_type, "basic": basic, "hra": 0, "da": da, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": eff})
+def rate(basic, da, rate_type="daily", eff="2026-01-01"):
+    r = rate_raw(basic, da, rate_type, eff)
+    assert r.status_code in (200, 201), r.text
+
+# A rate below the statutory minimum (Basic + DA) is refused once the worker has a class
+bad = rate_raw(127, 0, eff="2026-11-01")
+assert bad.status_code == 422 and "Below the minimum wage for Hamalis" in bad.json()["detail"] and "563.3" in bad.json()["detail"], bad.text
+assert rate_raw(270.50, 0, eff="2026-11-01").status_code == 422          # forgot the DA: 270.5 < 563.3
+assert rate_raw(14000, 0, "monthly", eff="2026-11-01").status_code == 422  # 14000/26 = 538.5/day
+assert rate_raw(270.50, 292.80, eff="2026-11-01").status_code == 201       # exactly the minimum
+assert rate_raw(127, 0, eff="2026-03-01").status_code == 201               # no DA in force that early: nothing to compare against
+assert len(client.get(f"/workers/{wid}/wage-profile/history", headers=h).json()) == 3  # legacy + the two accepted; refused rates were not saved
+# a worker with no class is not checked
+nw = client.post("/workers", headers=h, json={"name": "No Class Worker", "aadhaar_number": "555511117003"}).json()
+assert client.post(f"/workers/{nw['id']}/wage-profile", headers=h, json={"rate_type": "daily", "basic": 127, "hra": 0, "da": 0, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": "2026-11-01"}).status_code == 201
 rate(270.50, 292.80, eff="2026-06-01")
 g = client.get(f"/workers/{wid}/wage-computation", headers=h, params={"month": 11, "year": 2026}).json()
 assert g["meets_min_wage"] is True and g["daily_equivalent_rate"] == 563.3, g

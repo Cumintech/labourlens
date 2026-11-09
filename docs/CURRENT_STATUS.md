@@ -56,6 +56,11 @@
 - App: each side is scanned as soon as it is captured (front is read while the back is photographed), photos are shrunk to 1280px/q0.8 before upload, and Add Worker pings POST /workers/ocr/warm to wake the host and load the engine. Server: sideways cards use a cheap detector-only probe + one full pass (was ~3), upside-down pages are fixed by reversing the line list (no second pass); POST /workers/ocr accepts front and/or back; scan time logged ("ocr scan: Ns", no card text).
 - Measured on 1 CPU core, dense test card: sideways 2.4s -> 0.9s, upside-down 2.5s -> 0.8s, upright unchanged (~0.9s); peak ~369MB. Not measurable here: the phone's upload time and Render's real CPU. If still slow on Render, the free/starter CPU share is the limit -- check the "ocr scan" log lines.
 
+## Scan slowness, compliance step, minimum-wage block (2026-11-09, fix/scan-threads-compliance-minwage)
+- Scan: ONNX Runtime sized its thread pools from the HOST's cores, not the container quota. Measured under a real cgroup quota: 0.5 CPU 7.7s -> 3.0s, 1 CPU 3.1s -> 1.5s per two-sided scan. ocr._ThreadLimit reads the cgroup quota (or OCR_THREADS) and sets intra_op threads; engine load is single-flight; log "OCR engine ready: ..., cpu limit N". Per-scan cost on a 0.5 CPU instance is still ~1.5s/side (text recognition dominates) -- a full-CPU Render plan is the remaining lever.
+- Add Worker compliance step: only Salary type and Father/Spouse name are required (red *); Nature of work, joining date, EPF/UAN, ESIC are optional.
+- Minimum wage is now enforced: Add Worker step 3 blocks Continue when Basic+DA is below the class minimum (and requires a class when the factory has an employment set); POST /workers/{id}/wage-profile returns 422 for a below-minimum rate (class assigned, rate in force on the effective date). Workers without a class, or dates before any DA version, are not checked. Auto-created rates from a Worker Type default are not checked.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

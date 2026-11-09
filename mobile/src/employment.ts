@@ -43,8 +43,8 @@ export function suggestIsm(homeState: string | null | undefined, factoryState: s
   return homeState.trim().toLowerCase() !== factoryState.trim().toLowerCase();
 }
 
-// Form 12 completeness shown on the worker profile and enforced when
-// adding a worker. Temporary workers are not covered by EPF/ESIC, so
+// Form 12 completeness shown on the worker profile (informational: adding a
+// worker only requires the father / spouse name). Temporary workers are not covered by EPF/ESIC, so
 // those two numbers aren't required for them (3 of 3 instead of 5 of 5).
 export function complianceProgress(
   employmentType: EmploymentType,

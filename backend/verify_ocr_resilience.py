@@ -62,6 +62,36 @@ try:
 finally:
     ocr._get_engine = orig
 
+# CPU limit: OCR_THREADS wins, and the engine's ONNX sessions get exactly that many threads
+# (the default sizes pools from the host's cores; on a fractional-CPU container that made a scan ~2x slower).
+import os
+os.environ["OCR_THREADS"] = "1"
+assert ocr._container_cpu_limit() == 1
+ocr._engine = None
+engine = ocr._get_engine()
+assert engine.text_detector.infer.session.get_session_options().intra_op_num_threads == 1
+assert engine.text_recognizer.session.session.get_session_options().intra_op_num_threads == 1
+import rapidocr_onnxruntime.utils as _u
+assert _u.SessionOptions.__name__ != "limited", "SessionOptions was not restored after the engine loaded"
+ocr._engine = None
+del os.environ["OCR_THREADS"]
+
+# Two threads asking for the engine at once load it once (warm-up + first scan can coincide)
+import threading
+loads = []
+class _FakeRapid:
+    def __init__(self, **kw):
+        loads.append(1)
+import types
+fake_mod = types.ModuleType("rapidocr_onnxruntime"); fake_mod.RapidOCR = _FakeRapid
+sys.modules["rapidocr_onnxruntime"] = fake_mod
+ocr._engine = None
+ts = [threading.Thread(target=ocr._get_engine) for _ in range(6)]
+[t.start() for t in ts]; [t.join() for t in ts]
+assert len(loads) == 1, loads
+ocr._engine = None
+del sys.modules["rapidocr_onnxruntime"]
+
 # Lines ending in commas must not produce ",," when joined
 addr = ocr._guess_address(["Address:", "S/O Muthu, 12, Gandhi Street,", "Anna Nagar, Madurai,", "Tamil Nadu - 625020"])
 assert addr and ",," not in addr.replace(" ", "") and addr.endswith("625020"), addr

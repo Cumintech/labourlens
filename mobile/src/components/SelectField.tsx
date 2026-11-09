@@ -15,6 +15,8 @@ type Props<T extends string> = {
   onChange: (value: T) => void;
   placeholder?: string;
   disabled?: boolean;
+  // Shows a red * after the label for a field the form can't continue without
+  required?: boolean;
 };
 
 // One reusable dropdown pattern for every "pick one of a short list"
@@ -23,13 +25,18 @@ type Props<T extends string> = {
 // tapping a row selects it and closes. Matches DateField's look (same
 // tap-to-open field shell) so all "structured choice" inputs feel like
 // one family instead of a mix of buttons/chips/free text.
-export default function SelectField<T extends string>({ label, value, options, onChange, placeholder = "Select", disabled = false }: Props<T>) {
+export default function SelectField<T extends string>({ label, value, options, onChange, placeholder = "Select", disabled = false, required = false }: Props<T>) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
 
   return (
     <View style={styles.fieldWrap}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <Text style={styles.label}>
+          {label}
+          {required ? <Text style={styles.requiredStar}> *</Text> : null}
+        </Text>
+      ) : null}
       <TouchableOpacity
         style={[styles.input, disabled && styles.inputDisabled]}
         onPress={() => !disabled && setOpen(true)}
@@ -74,6 +81,7 @@ export default function SelectField<T extends string>({ label, value, options, o
 }
 
 const styles = StyleSheet.create({
+  requiredStar: { color: colors.danger },
   fieldWrap: { marginBottom: spacing.md },
   label: { fontFamily: "IBMPlexSans_500Medium", fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
   input: {

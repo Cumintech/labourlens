@@ -458,7 +458,23 @@ def create_wage_profile(
     # slip generated for a past month must keep reflecting that month's
     # rate even after a later correction. See
     # PHASE3_STATUTORY_FORMS_PLAN.md's Day 2 section.
-    _get_owned_worker(worker_id, owner, db)
+    worker = _get_owned_worker(worker_id, owner, db)
+    # A rate below the statutory minimum (Basic + DA of the worker's
+    # minimum-wage class, as in force on the effective date) is refused. No class,
+    # or no rate in force on that date, means nothing to compare against.
+    if worker.min_wage_class_id is not None:
+        check = minimum_wage.MinimumWageResolver(db).check(
+            worker.min_wage_class_id, body.rate_type, body.basic, body.da, body.effective_from
+        )
+        if check["available"] and not check["meets"]:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Below the minimum wage for {check['class_name']}: Rs {check['proposed']:g}/{check['unit']} "
+                    f"(Basic + DA) vs the required Rs {check['minimum']:g}/{check['unit']}. "
+                    f"Raise the rate by Rs {check['shortfall']:g}."
+                ),
+            )
     profile = models.WageProfile(worker_id=worker_id, created_by=owner.id, **body.model_dump())
     db.add(profile)
     db.add(

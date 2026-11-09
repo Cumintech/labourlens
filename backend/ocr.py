@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 import os
 import re
 from datetime import date
@@ -102,6 +103,7 @@ OCR_ENGINE = os.environ.get("OCR_ENGINE", "rapidocr").lower()
 OCR_DET_LIMIT_SIDE = int(os.environ.get("OCR_DET_LIMIT_SIDE", "960"))
 
 _engine = None
+_engine_lock = threading.Lock()
 # One scan at a time: two concurrent scans would double peak memory.
 _ocr_lock = threading.Lock()
 
@@ -119,32 +121,129 @@ def _limit_malloc_arenas() -> None:
         pass
 
 
+def _cgroup_cpu_candidates() -> list[tuple[str, str]]:
+    """(kind, path) of every place this process's CPU quota may be recorded: the
+    container root (the usual case, where the container's own cgroup is mounted
+    at /sys/fs/cgroup) and the cgroup path listed in /proc/self/cgroup."""
+    found = [("v2", "/sys/fs/cgroup/cpu.max"), ("v1", "/sys/fs/cgroup/cpu")]
+    try:
+        for line in open("/proc/self/cgroup").read().splitlines():
+            _num, controllers, path = line.split(":", 2)
+            path = path.strip("/")
+            if controllers == "":
+                found.append(("v2", f"/sys/fs/cgroup/{path}/cpu.max"))
+            elif "cpu" in controllers.split(","):
+                found.append(("v1", f"/sys/fs/cgroup/cpu/{path}" if path else "/sys/fs/cgroup/cpu"))
+    except Exception:
+        pass
+    return found
+
+
+def _container_cpu_limit() -> int | None:
+    """How many CPUs this container may really use, from the cgroup quota
+    (a host with 64 cores can still give a service half of one). OCR_THREADS
+    overrides. None when unknown."""
+    override = os.environ.get("OCR_THREADS")
+    if override and override.isdigit() and int(override) > 0:
+        return int(override)
+    for kind, path in _cgroup_cpu_candidates():
+        try:
+            if kind == "v2":  # "max 100000" or "50000 100000"
+                quota, period = open(path).read().split()[:2]
+                if quota != "max":
+                    return max(1, math.ceil(int(quota) / int(period)))
+            else:
+                quota = int(open(f"{path}/cpu.cfs_quota_us").read())
+                period = int(open(f"{path}/cpu.cfs_period_us").read())
+                if quota > 0:
+                    return max(1, math.ceil(quota / period))
+        except Exception:
+            continue
+    return None
+
+
+class _ThreadLimit:
+    """While the engine is built, size its thread pools to the container's
+    real CPU count. ONNX Runtime sizes them from the cores it can see, and a
+    container sees the whole host: on a 0.5 CPU quota a two-sided scan took
+    6.6 s with the default pools and 3.3 s with one thread (measured, same
+    code) -- threads fight over a sliver of CPU instead of working. Only
+    applies when a limit is known (cgroup quota or OCR_THREADS); on a machine
+    with no limit the defaults are left alone."""
+
+    def __enter__(self):
+        self.restore = None
+        self.limit = _container_cpu_limit()
+        if self.limit is None:
+            return self
+        try:
+            import cv2
+
+            cv2.setNumThreads(self.limit)
+        except Exception:
+            pass
+        try:
+            if OCR_ENGINE == "easyocr":
+                import torch
+
+                torch.set_num_threads(self.limit)
+            else:
+                import rapidocr_onnxruntime.utils as ort_utils
+
+                original, limit = ort_utils.SessionOptions, self.limit
+
+                def limited():
+                    options = original()
+                    options.intra_op_num_threads = limit
+                    options.inter_op_num_threads = 1
+                    return options
+
+                ort_utils.SessionOptions = limited
+                self.restore = (ort_utils, original)
+        except Exception:  # leave the defaults rather than fail to load
+            self.restore = None
+        return self
+
+    def __exit__(self, *exc):
+        if self.restore is not None:
+            self.restore[0].SessionOptions = self.restore[1]
+
+
 def _get_engine():
     # The engine (and onnxruntime / torch) is imported here, not at module
     # level -- merely importing it costs resident memory, and
     # OCR_WARM_UP=false (see main.py's lifespan) is meant to keep that cost
     # off the startup path. Python caches the import after the first call.
     global _engine
-    if _engine is None:
-        try:
-            if OCR_ENGINE == "easyocr":
-                import easyocr
+    if _engine is not None:
+        return _engine
+    # One load at a time: the warm-up call and a first scan can arrive together,
+    # and two simultaneous loads double the memory.
+    with _engine_lock:
+        if _engine is None:
+            try:
+                with _ThreadLimit() as limiter:
+                    if OCR_ENGINE == "easyocr":
+                        import easyocr
 
-                _engine = easyocr.Reader(["en"], gpu=False)
-            else:
-                from rapidocr_onnxruntime import RapidOCR
+                        _engine = easyocr.Reader(["en"], gpu=False)
+                    else:
+                        from rapidocr_onnxruntime import RapidOCR
 
-                # Cap the detector's input on the long side. Its default
-                # upscales every image to at least 736px on the short side, which
-                # made a scan spike to ~375 MB; capped at 960px it peaks ~295 MB with the same
-                # fields read (measured). det_model_path=None keeps the bundled model.
-                _limit_malloc_arenas()
-                _engine = RapidOCR(det_limit_side_len=OCR_DET_LIMIT_SIDE, det_limit_type="max", det_model_path=None)
-        except Exception as exc:  # ImportError, onnx/torch load failure, MemoryError
-            # The error text names a missing library or model, never card data,
-            # so it is safe (and needed) in the logs to diagnose a host.
-            logging.getLogger("uvicorn.error").error("OCR engine failed to load: %s: %s", type(exc).__name__, exc)
-            raise OcrUnavailable(type(exc).__name__) from exc
+                        # Cap the detector's input on the long side. Its default
+                        # upscales every image to at least 736px on the short side, which
+                        # made a scan spike to ~375 MB; capped at 960px it peaks ~295 MB with the same
+                        # fields read (measured). det_model_path=None keeps the bundled model.
+                        _limit_malloc_arenas()
+                        _engine = RapidOCR(det_limit_side_len=OCR_DET_LIMIT_SIDE, det_limit_type="max", det_model_path=None)
+                logging.getLogger("uvicorn.error").info(
+                    "OCR engine ready: %s, cpu limit %s", OCR_ENGINE, limiter.limit if limiter.limit else "none detected"
+                )
+            except Exception as exc:  # ImportError, onnx/torch load failure, MemoryError
+                # The error text names a missing library or model, never card data,
+                # so it is safe (and needed) in the logs to diagnose a host.
+                logging.getLogger("uvicorn.error").error("OCR engine failed to load: %s: %s", type(exc).__name__, exc)
+                raise OcrUnavailable(type(exc).__name__) from exc
     return _engine
 
 

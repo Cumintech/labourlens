@@ -14,6 +14,8 @@ type Props = {
   onChange: (classId: number | null) => void;
   // When set, the proposed Basic + DA is compared with the class minimum live.
   rate?: Rate;
+  // Reports the live comparison to the parent (null while unknown / no class), so a form can block saving below the minimum.
+  onCheck?: (check: MinimumWageCheck | null) => void;
 };
 
 const NONE = "none";
@@ -22,9 +24,13 @@ const formatRupees = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFra
 // Picks the worker's statutory minimum-wage class (Basic + DA, per the
 // factory's employment) and warns when the proposed salary is below it.
 // The minimum always comes from the server, never computed or hardcoded here.
-export default function MinimumWageClassSelect({ token, employmentId, value, onChange, rate }: Props) {
+export default function MinimumWageClassSelect({ token, employmentId, value, onChange, rate, onCheck }: Props) {
   const [employment, setEmployment] = useState<MinimumWageEmployment | null>(null);
   const [check, setCheck] = useState<MinimumWageCheck | null>(null);
+  useEffect(() => {
+    onCheck?.(check);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [check]);
 
   useEffect(() => {
     if (!employmentId) {
@@ -49,6 +55,7 @@ export default function MinimumWageClassSelect({ token, employmentId, value, onC
       return;
     }
     let cancelled = false;
+    setCheck(null);
     const timer = setTimeout(() => {
       checkMinimumWage(token, value, rateType, basic, da)
         .then((c) => !cancelled && setCheck(c))
@@ -92,7 +99,7 @@ export default function MinimumWageClassSelect({ token, employmentId, value, onC
       {check?.available && check.meets === false && (
         <Text style={styles.warn}>
           Below minimum wage: {formatRupees(check.proposed ?? 0)}/{check.unit} vs {formatRupees(check.minimum ?? 0)}/
-          {check.unit} (short by {formatRupees(check.shortfall ?? 0)}). Basic + DA are compared.
+          {check.unit} (short by {formatRupees(check.shortfall ?? 0)}). Basic + DA are compared, and a rate below the minimum can't be saved.
         </Text>
       )}
       {check?.available && check.meets === true && <Text style={styles.ok}>Meets the statutory minimum wage.</Text>}

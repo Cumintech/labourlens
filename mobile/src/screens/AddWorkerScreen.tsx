@@ -25,6 +25,8 @@ import {
   WageRateType,
   WorkerType,
   assignWorkerType,
+  checkMinimumWage,
+  MinimumWageCheck,
   setWorkerMinimumWageClass,
   createWageProfile,
   createWorker,
@@ -41,7 +43,6 @@ import EmploymentFields from "../components/EmploymentFields";
 import SelectField from "../components/SelectField";
 import RateTypeSelect from "../components/RateTypeSelect";
 import JoiningDateField from "../components/JoiningDateField";
-import { complianceProgress } from "../employment";
 import { ALL_INDIAN_STATE_OPTIONS } from "../indianStates";
 import MinimumWageClassSelect from "../components/MinimumWageClassSelect";
 import WorkerTypeSelect from "../components/WorkerTypeSelect";
@@ -162,6 +163,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [wageEnabled, setWageEnabled] = useState(true);
   const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
   const [minWageClassId, setMinWageClassId] = useState<number | null>(null);
+  const [minWageCheck, setMinWageCheck] = useState<MinimumWageCheck | null>(null);
   const [selectedWorkerTypeId, setSelectedWorkerTypeId] = useState<number | null>(null);
   const [typeAutoFilled, setTypeAutoFilled] = useState(false);
   const [rateType, setRateType] = useState<WageRateType>("daily");
@@ -326,8 +328,36 @@ export default function AddWorkerScreen({ navigation }: Props) {
     } else if (step === 2) {
       setStep(3);
     } else if (step === 3) {
-      handleCreateWorker();
+      void verifyMinimumWageThenCreate();
     }
+  }
+
+  // The live check above can be a moment behind the typing, so the rate is
+  // checked once more, against the server, before the worker is created.
+  async function verifyMinimumWageThenCreate() {
+    if (wageEnabled && basic.trim() && token && owner?.min_wage_employment_id) {
+      if (minWageClassId == null) {
+        Alert.alert(
+          "Select the minimum-wage class",
+          "Choose this worker's minimum-wage class so the rate can be checked against the statutory minimum, or turn off \"Set up wage rate now\" and set it later.",
+        );
+        return;
+      }
+      try {
+        const check = await checkMinimumWage(token, minWageClassId, rateType, parseFloat(basic) || 0, parseFloat(da) || 0);
+        if (check.available && check.meets === false) {
+          Alert.alert(
+            "Below minimum wage",
+            `This rate is ₹${check.proposed}/${check.unit} (Basic + DA) but the minimum for ${check.class_name} is ₹${check.minimum}/${check.unit}. Raise it by ₹${check.shortfall} (DA can be added under "Add more pay components").`,
+          );
+          return;
+        }
+      } catch {
+        Alert.alert("Couldn't check the minimum wage", "Check your connection and try again.");
+        return;
+      }
+    }
+    handleCreateWorker();
   }
 
   function goBack() {
@@ -528,14 +558,12 @@ export default function AddWorkerScreen({ navigation }: Props) {
   }
 
   const step1Continueable = detailsRevealed && identityValid && !scanning;
-  const progress = complianceProgress(employmentType, {
-    father: fatherOrSpouseName,
-    nature: designation,
-    joined: dateOfJoining,
-    epf: epfUanNo,
-    esic: esicNo,
-  });
-  const step2Blocked = step === 2 && !progress.complete;
+  // Only the salary type (always set) and the father / spouse name are required;
+  // Nature of work, joining date, EPF and ESIC are optional.
+  // Step 3: a rate below the statutory minimum (Basic + DA) for the chosen class is not allowed.
+  const belowMinimumWage =
+    step === 3 && wageEnabled && basic.trim() !== "" && minWageClassId != null && minWageCheck?.available === true && minWageCheck.meets === false;
+  const step2Blocked = step === 2 && (!fatherOrSpouseName.trim() || !rateType);
 
   return (
     <KeyboardAvoidingView
@@ -666,13 +694,13 @@ export default function AddWorkerScreen({ navigation }: Props) {
             />
             <View style={styles.helpBox}>
               <Text style={styles.helpBoxText}>
-                These details feed the statutory Form 12 register. {progress.filled} of {progress.total} filled
-                {progress.complete ? " -- all set." : " -- fill the rest to continue."}
-                {employmentType === "temporary" ? " (Temporary workers: EPF/ESIC not required.)" : ""}
+                These details feed the statutory Form 12 register. Fields marked * are required; the rest (including EPF
+                and ESIC) are optional and can be added later from the worker's profile.
               </Text>
             </View>
             <SelectField
               label="Salary type"
+              required
               value={rateType}
               options={[
                 { label: "Daily", value: "daily" },
@@ -681,7 +709,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
               ]}
               onChange={(v) => setRateType(v as WageRateType)}
             />
-            <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} />
+            <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} required />
             <Field label="Nature of work" value={designation} onChangeText={setDesignation} />
             <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} />
             <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} />
@@ -728,6 +756,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   employmentId={owner?.min_wage_employment_id}
                   value={minWageClassId}
                   onChange={setMinWageClassId}
+                  onCheck={setMinWageCheck}
                   rate={{ rateType, basic: parseFloat(basic) || 0, da: parseFloat(da) || 0 }}
                 />
                 <Field
@@ -847,9 +876,9 @@ export default function AddWorkerScreen({ navigation }: Props) {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || step2Blocked || saving) && styles.buttonDisabled]}
+            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || step2Blocked || belowMinimumWage || saving) && styles.buttonDisabled]}
             onPress={goContinue}
-            disabled={(step === 1 && !step1Continueable) || step2Blocked || saving}
+            disabled={(step === 1 && !step1Continueable) || step2Blocked || belowMinimumWage || saving}
           >
             {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.nextBtnText}>Continue</Text>}
           </TouchableOpacity>
@@ -868,6 +897,7 @@ function Field({
   keyboardType,
   maxLength,
   error,
+  required,
 }: {
   label: string;
   value: string;
@@ -877,11 +907,15 @@ function Field({
   keyboardType?: "default" | "number-pad" | "phone-pad" | "numeric";
   maxLength?: number;
   error?: string;
+  required?: boolean;
 }) {
   return (
     <View style={styles.fieldWrap}>
       <View style={styles.labelRow}>
-        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.label}>
+          {label}
+          {required ? <Text style={styles.requiredStar}> *</Text> : null}
+        </Text>
         {autoFilled && <Text style={styles.autoTag}>{autoFilledLabel}</Text>}
       </View>
       <TextInput
@@ -951,6 +985,7 @@ const styles = StyleSheet.create({
   dateFieldWrap: { marginBottom: spacing.md },
   labelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted },
+  requiredStar: { color: colors.danger },
   autoTag: { fontSize: 10, fontWeight: "700", color: colors.tealDark, backgroundColor: colors.tealLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   input: { borderWidth: 0, backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.navy },
   fieldError: { fontSize: 11, color: colors.danger, marginTop: 4 },

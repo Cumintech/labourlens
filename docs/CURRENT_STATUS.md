@@ -48,6 +48,10 @@
 - Engine failure -> 503 "enter manually" (not 502); cause is logged (no card data). Verified only on synthetic cards -- re-test with real cards on device. Render may need opencv-python-headless instead of opencv-python if the log shows libGL.so.1 missing.
 - Test: verify_ocr_resilience.py (+ verify_registration / verify_ocr_refinements now run real OCR without torch).
 
+## OCR accuracy: orientation, DOB, name (2026-11-09, fix/ocr-orientation-dob-name)
+- Real-phone scan read only the Aadhaar number: card photographed sideways (tall text boxes), DOB took another printed date (issue date), name took garbled "Authority". ocr.py now: applies EXIF rotation; detects sideways pages from box shape and turns them upright, flips upside-down pages (lines come back reversed); DOB only from a DOB/Date-of-Birth line (never back-side/issue dates, must be a real date and age >= 10); name = line above the DOB line, with garbled-boilerplate prefixes excluded; Aadhaar number prefers a Verhoeff-valid number and skips the VID.
+- Test: verify_ocr_orientation.py (synthetic cards: upright, rot90/270, upside-down, EXIF; real OCR). Real server: sideways 3000px pair ~2s, peak ~393MB. Still unverified on the owner's real cards.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

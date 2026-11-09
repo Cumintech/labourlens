@@ -217,7 +217,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
       Alert.alert("Camera permission needed", "Enable camera access to scan the ID card.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.7, base64: false });
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.9, base64: false });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
     if (side === "front") {
@@ -575,7 +575,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.hint}>
-                  {scanning ? "Reading the card…" : "Both front and back are required -- scanning fills in the fields below automatically."}
+                  {scanning ? "Reading the card…" : "Both front and back are required -- scanning fills in the fields below automatically. For best results, lay the card flat in good light, fill the frame and hold steady until it is sharp."}
                 </Text>
               </>
             )}

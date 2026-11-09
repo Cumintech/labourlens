@@ -447,24 +447,27 @@ export type WorkerCreateInput = {
 
 // Multipart upload -- not JSON, so this bypasses the request() helper
 // above (which always sends Content-Type: application/json).
+// Expo SDK 57's fetch only encodes a string, a Blob, or an object exposing
+// bytes() as a multipart part -- the classic React Native { uri, name, type }
+// object throws "Unsupported FormDataPart implementation" before any request
+// is sent (see uploadWorkerPhoto below). expo-file-system's File works on
+// native; web needs a real Blob.
+async function appendImagePart(formData: FormData, field: string, uri: string, filename: string): Promise<void> {
+  if (Platform.OS === "web") {
+    formData.append(field, await fetch(uri).then((r) => r.blob()), filename);
+  } else {
+    formData.append(field, new File(uri), filename);
+  }
+}
+
 export async function scanAadhaar(
   token: string,
   frontUri: string,
   backUri: string | null,
 ): Promise<OcrFields> {
   const formData = new FormData();
-  formData.append("front_image", {
-    uri: frontUri,
-    name: "front.jpg",
-    type: "image/jpeg",
-  } as any);
-  if (backUri) {
-    formData.append("back_image", {
-      uri: backUri,
-      name: "back.jpg",
-      type: "image/jpeg",
-    } as any);
-  }
+  await appendImagePart(formData, "front_image", frontUri, "front.jpg");
+  if (backUri) await appendImagePart(formData, "back_image", backUri, "back.jpg");
 
   const res = await apiFetch(`${API_BASE_URL}/workers/ocr`, {
     method: "POST",

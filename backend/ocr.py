@@ -37,17 +37,14 @@ gender keyword, and no address text at all):
 from __future__ import annotations
 
 import io
+import logging
 import os
 import re
+import threading
 import unicodedata
-from typing import TYPE_CHECKING
 
 from PIL import Image
 
-if TYPE_CHECKING:
-    import easyocr
-
-_reader: easyocr.Reader | None = None
 
 # Real-device scans come off a phone camera at full resolution (often
 # 3000px+ on the long edge), which EasyOCR (CPU, PyTorch-based) is slow
@@ -55,11 +52,16 @@ _reader: easyocr.Reader | None = None
 # loss in field-extraction accuracy -- the text on an Aadhaar card is
 # large enough relative to the card that 1600px is still plenty of
 # resolution for EasyOCR's recognizer.
-MAX_OCR_DIMENSION = 1600
+MAX_OCR_DIMENSION = 1280
 
 
 def _resize_for_ocr(image_bytes: bytes) -> bytes:
-    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    img = Image.open(io.BytesIO(image_bytes))
+    # JPEG draft mode decodes straight at a reduced size (the decoder skips
+    # detail it would throw away), so a 12MP phone photo never exists in
+    # memory at full size -- a large part of the scan's peak memory.
+    img.draft("RGB", (MAX_OCR_DIMENSION, MAX_OCR_DIMENSION))
+    img = img.convert("RGB")
     largest_side = max(img.size)
     if largest_side > MAX_OCR_DIMENSION:
         scale = MAX_OCR_DIMENSION / largest_side
@@ -70,33 +72,77 @@ def _resize_for_ocr(image_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
-def _get_reader() -> easyocr.Reader:
-    # easyocr (and the torch it pulls in) is imported here, not at module
-    # level -- merely importing torch costs real resident memory on its
-    # own, before any model is ever loaded, and OCR_WARM_UP=false (see
-    # main.py's lifespan) is meant to keep that cost off the startup path
-    # entirely on a memory-constrained host. A module-level import would
-    # undo that: the cost would land at app-import time regardless of the
-    # flag, every time. Python caches the import after the first call, so
-    # this has no repeat cost on later scans.
-    import easyocr
+class OcrUnavailable(Exception):
+    """The OCR engine could not be imported or loaded (missing library,
+    out of memory). Surfaced as a 503 with a "enter manually" message, not
+    a crash."""
 
-    # Loaded once and reused -- each Reader() call loads real models into
-    # memory, far too expensive to do per-request.
-    global _reader
-    if _reader is None:
-        _reader = easyocr.Reader(["en"], gpu=False)
-    return _reader
+
+# "rapidocr" (default): ONNX Runtime, ~170 MB resident once loaded, about a
+# second per card on CPU -- fits a small (512 MB) Render instance.
+# "easyocr": PyTorch based, ~1 GB+ resident -- the original engine, kept for
+# local/dev machines that have it installed (it is no longer in
+# requirements.txt, because loading it ran the 512 MB instance out of memory
+# and every scan came back as a 502).
+OCR_ENGINE = os.environ.get("OCR_ENGINE", "rapidocr").lower()
+
+# Detector input cap (long side, px). 960 reads a card fine and peaks ~295 MB
+# in a standalone process; lower it (e.g. 640) on a very small instance if
+# scans still run out of memory -- smaller text (the address) gets harder to read.
+OCR_DET_LIMIT_SIDE = int(os.environ.get("OCR_DET_LIMIT_SIDE", "960"))
+
+_engine = None
+# One scan at a time: two concurrent scans would double peak memory.
+_ocr_lock = threading.Lock()
+
+
+def _limit_malloc_arenas() -> None:
+    """glibc gives every worker thread its own malloc arena, and inference
+    running on the request threadpool leaves several of them holding freed
+    memory (about 40 MB measured). Capping arenas keeps the resident set
+    smaller. Linux/glibc only; a no-op anywhere else."""
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").mallopt(-8, 2)  # M_ARENA_MAX
+    except Exception:
+        pass
+
+
+def _get_engine():
+    # The engine (and onnxruntime / torch) is imported here, not at module
+    # level -- merely importing it costs resident memory, and
+    # OCR_WARM_UP=false (see main.py's lifespan) is meant to keep that cost
+    # off the startup path. Python caches the import after the first call.
+    global _engine
+    if _engine is None:
+        try:
+            if OCR_ENGINE == "easyocr":
+                import easyocr
+
+                _engine = easyocr.Reader(["en"], gpu=False)
+            else:
+                from rapidocr_onnxruntime import RapidOCR
+
+                # Cap the detector's input on the long side. Its default
+                # upscales every image to at least 736px on the short side, which
+                # made a scan spike to ~375 MB; capped at 960px it peaks ~295 MB with the same
+                # fields read (measured). det_model_path=None keeps the bundled model.
+                _limit_malloc_arenas()
+                _engine = RapidOCR(det_limit_side_len=OCR_DET_LIMIT_SIDE, det_limit_type="max", det_model_path=None)
+        except Exception as exc:  # ImportError, onnx/torch load failure, MemoryError
+            # The error text names a missing library or model, never card data,
+            # so it is safe (and needed) in the logs to diagnose a host.
+            logging.getLogger("uvicorn.error").error("OCR engine failed to load: %s: %s", type(exc).__name__, exc)
+            raise OcrUnavailable(type(exc).__name__) from exc
+    return _engine
 
 
 def warm_up() -> None:
-    """Loads the EasyOCR model eagerly. Call once at backend startup so
-    the model-load cost (several seconds, separate from the resize
-    speedup) lands during server startup, not during an owner's first
-    real scan -- real-device feedback flagged scanning as "very slow",
-    which lazy-loading on the first request would produce every time the
-    dev backend restarts."""
-    _get_reader()
+    """Loads the OCR engine eagerly. Call once at backend startup so the
+    model-load cost lands during server startup, not during an owner's
+    first real scan."""
+    _get_engine()
 
 
 AADHAAR_PATTERN = re.compile(r"\b(\d{4})\s?(\d{4})\s?(\d{4})\b")
@@ -162,9 +208,16 @@ ADDRESS_MAX_LINES = 15
 
 
 def _extract_text_lines(image_bytes: bytes) -> list[str]:
-    reader = _get_reader()
-    results = reader.readtext(_resize_for_ocr(image_bytes))
-    return [text for (_bbox, text, _conf) in results]
+    engine = _get_engine()
+    resized = _resize_for_ocr(image_bytes)
+    with _ocr_lock:
+        if OCR_ENGINE == "easyocr":
+            return [text for (_bbox, text, _conf) in engine.readtext(resized)]
+        import numpy as np
+
+        result, _elapsed = engine(np.array(Image.open(io.BytesIO(resized)).convert("RGB")))
+    # RapidOCR returns [[box, text, confidence], ...] (None when nothing found)
+    return [text for (_box, text, _conf) in (result or [])]
 
 
 def _is_mostly_latin(line: str) -> bool:
@@ -279,7 +332,7 @@ def _guess_address(lines: list[str]) -> str | None:
         upper = line.upper()
         if any(keyword in upper for keyword in ADDRESS_STOP_KEYWORDS):
             break
-        stripped = line.strip()
+        stripped = line.strip().rstrip(",;").strip()
         # Drop bare label fragments ("Sio:", ":") -- real content, even
         # noisy OCR content, carries more than a couple of characters.
         if sum(c.isalnum() for c in stripped) <= 3:

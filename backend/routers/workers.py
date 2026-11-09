@@ -27,6 +27,10 @@ async def scan_aadhaar(
         fields = await run_in_threadpool(ocr.extract_fields, front_bytes, back_bytes)
     except UnidentifiedImageError:
         raise HTTPException(status_code=400, detail="Could not read that image")
+    except ocr.OcrUnavailable:
+        raise HTTPException(status_code=503, detail="ID scanning is unavailable right now. Please enter the details manually.")
+    except MemoryError:
+        raise HTTPException(status_code=503, detail="ID scanning is busy. Please try again, or enter the details manually.")
     return OcrFieldsOut(**fields)
 
 

@@ -22,11 +22,13 @@ slowapi==0.1.10
 # explicitly now that backend runtime code depends on it directly too.
 requests==2.34.2
 
-# Aadhaar OCR (see ocr.py for why EasyOCR over Tesseract on this
-# machine). Heavy (PyTorch-based) -- revisit if this ends up deployed
-# somewhere Tesseract's system binary is easy to install (any normal
-# Linux host, unlike this Windows dev machine).
-easyocr==1.7.2
+# Aadhaar OCR (see ocr.py). RapidOCR runs on ONNX Runtime: ~170 MB resident,
+# about a second per card, no PyTorch. The previous engine (EasyOCR, which
+# pulls in PyTorch) needed 1 GB+ and ran a 512 MB Render instance out of
+# memory, so every scan came back as a 502. EasyOCR still works locally:
+# `pip install easyocr` and set OCR_ENGINE=easyocr.
+rapidocr-onnxruntime==1.2.3
+
 
 # Was already resolvable transitively (easyocr and reportlab both pull
 # it in), pinned explicitly now that main.py depends on it directly too

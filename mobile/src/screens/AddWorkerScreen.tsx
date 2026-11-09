@@ -255,7 +255,14 @@ export default function AddWorkerScreen({ navigation }: Props) {
       });
       setDetailsRevealed(true);
     } catch (e) {
-      const message = e instanceof ApiError ? e.message : "Couldn't reach the server. Check your connection.";
+      // A 5xx / timeout means the scan service itself is down or overloaded,
+      // not that this card was unreadable: point the owner at manual entry.
+      const serviceDown = e instanceof ApiError && (e.status >= 500 || e.status === 0);
+      const message = serviceDown
+        ? "The scan service is not available right now. Try again in a minute, or tap \"Enter manually\"."
+        : e instanceof ApiError
+          ? e.message
+          : "Couldn't reach the server. Check your connection.";
       Alert.alert("Scan failed", message);
     } finally {
       setScanning(false);

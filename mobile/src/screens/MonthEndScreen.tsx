@@ -1,7 +1,7 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { MONTH_NAMES } from "../format";
 import { useFocusEffect } from "@react-navigation/native";
-import { CalendarCheck, CheckCircle2, Circle, FileText, IndianRupee } from "lucide-react-native";
+import { CalendarCheck, CheckCircle2, Circle, FileText, IndianRupee } from "../icons";
 import React, { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

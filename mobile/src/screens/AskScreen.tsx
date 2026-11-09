@@ -1,18 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  CalendarX,
-  CheckCircle2,
-  ClipboardX,
-  Fingerprint,
-  Info,
-  IndianRupee,
-  Receipt,
-  ShieldAlert,
-  Sparkles,
-  Tag,
-} from "lucide-react-native";
+import { AlertTriangle, ArrowLeft, CalendarX, CheckCircle2, ClipboardX, Fingerprint, Info, IndianRupee, Receipt, ShieldAlert, Sparkles, Tag } from "../icons";
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

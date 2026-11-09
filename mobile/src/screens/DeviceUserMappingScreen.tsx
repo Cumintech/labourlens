@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { CheckCircle2, ChevronDown, ChevronRight, Fingerprint, Trash2 } from "lucide-react-native";
+import { CheckCircle2, ChevronDown, ChevronRight, Fingerprint, Trash2 } from "../icons";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";

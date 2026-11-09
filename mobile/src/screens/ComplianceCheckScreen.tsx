@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Info, RotateCcw } from "lucide-react-native";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Info, RotateCcw } from "../icons";
 import React, { useCallback, useState } from "react";
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";

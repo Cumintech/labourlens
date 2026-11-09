@@ -43,6 +43,9 @@
 ## OCR scan fix (2026-11-09, fix/ocr-formdata-sdk57)
 - Aadhaar scan sent `{uri,name,type}` parts, which SDK 57's fetch rejects ("Unsupported FormDataPart") -> generic network-error popup, Continue stayed disabled. scanAadhaar now uses expo-file-system File like uploadWorkerPhoto. Not yet verified on device; if scan still fails, check Render memory (EasyOCR).
 
+## Metro stall at ~31% (2026-11-09, fix/metro-dev-bundle-size)
+- Dev bundle was 3,963 modules (~1,870 were lucide icons via the package root, plus all 24 IBM Plex font files). Now icons come from src/icons.ts (per-icon paths) and App.tsx imports only the 3 fonts used: 2,161 modules. Add new icons to src/icons.ts, not the package root. Not yet confirmed on the owner's laptop.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

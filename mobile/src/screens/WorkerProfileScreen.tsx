@@ -2,7 +2,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
-import { Briefcase, Calendar as CalendarIcon, Camera, FileCheck2, Fingerprint, Hash, Images, Pencil, Phone, User, UserX } from "lucide-react-native";
+import { Briefcase, Calendar as CalendarIcon, Camera, FileCheck2, Fingerprint, Hash, Images, Pencil, Phone, User, UserX } from "../icons";
 import React, { useCallback, useMemo, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, Alert, FlatList, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";

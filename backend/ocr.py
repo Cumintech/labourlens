@@ -40,10 +40,13 @@ import io
 import logging
 import os
 import re
+from datetime import date
 import threading
 import unicodedata
 
-from PIL import Image
+from PIL import Image, ImageOps
+
+from verhoeff import validate_verhoeff
 
 
 # Real-device scans come off a phone camera at full resolution (often
@@ -55,20 +58,26 @@ from PIL import Image
 MAX_OCR_DIMENSION = 1280
 
 
-def _resize_for_ocr(image_bytes: bytes) -> bytes:
+def _prepare_image(image_bytes: bytes) -> Image.Image:
     img = Image.open(io.BytesIO(image_bytes))
     # JPEG draft mode decodes straight at a reduced size (the decoder skips
     # detail it would throw away), so a 12MP phone photo never exists in
     # memory at full size -- a large part of the scan's peak memory.
     img.draft("RGB", (MAX_OCR_DIMENSION, MAX_OCR_DIMENSION))
-    img = img.convert("RGB")
+    # Phone cameras often store the picture sideways plus an EXIF "rotate me"
+    # tag; honour it so the card is the right way up where the file says so.
+    img = ImageOps.exif_transpose(img).convert("RGB")
     largest_side = max(img.size)
     if largest_side > MAX_OCR_DIMENSION:
         scale = MAX_OCR_DIMENSION / largest_side
         new_size = (int(img.width * scale), int(img.height * scale))
         img = img.resize(new_size, Image.LANCZOS)
+    return img
+
+
+def _resize_for_ocr(image_bytes: bytes) -> bytes:
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=90)
+    _prepare_image(image_bytes).save(buf, format="JPEG", quality=90)
     return buf.getvalue()
 
 
@@ -147,6 +156,11 @@ def warm_up() -> None:
 
 AADHAAR_PATTERN = re.compile(r"\b(\d{4})\s?(\d{4})\s?(\d{4})\b")
 DOB_PATTERN = re.compile(r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b")
+# Same, but tolerant of OCR spacing ("15 / 06 / 1984").
+DATE_PATTERN = re.compile(r"\b(\d{1,2})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{4})\b")
+DOB_LABEL = re.compile(r"\b(D\s?[O0]\s?B|D\.\s?O\.\s?B|BIRTH|YOB)\b|जन्म")
+# Other dates printed on the card/letter -- never a date of birth.
+NON_DOB_DATE_WORDS = ("ISSUE", "DOWNLOAD", "GENERAT", "PRINT", "UPDATE", "AS ON", "ENROL", "VALID", "DATE:")
 PIN_CODE_PATTERN = re.compile(r"\b\d{6}\b")
 # "3RD", "1ST", "2ND" -- ordinal numbers are a normal part of a real
 # street name ("ANDIYAPPAN 3RD LANE") and shouldn't be treated as OCR
@@ -207,17 +221,112 @@ ADDRESS_SCAN_WINDOW = 25
 ADDRESS_MAX_LINES = 15
 
 
-def _extract_text_lines(image_bytes: bytes) -> list[str]:
+def _box_is_vertical(box) -> bool:
+    """True when a detected text box is clearly taller than it is wide."""
+    try:
+        (x0, y0), (x1, y1), (x2, y2) = box[0], box[1], box[2]
+        width = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+        height = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+        return height > 1.5 * width
+    except Exception:
+        return False
+
+
+def _run_engine(img: Image.Image) -> list[tuple[str, float, bool]]:
+    """One OCR pass over an image: [(text, confidence, is_vertical), ...] in
+    the engine's order (top to bottom of the image as given)."""
+    import numpy as np
+
     engine = _get_engine()
-    resized = _resize_for_ocr(image_bytes)
     with _ocr_lock:
         if OCR_ENGINE == "easyocr":
-            return [text for (_bbox, text, _conf) in engine.readtext(resized)]
-        import numpy as np
-
-        result, _elapsed = engine(np.array(Image.open(io.BytesIO(resized)).convert("RGB")))
+            return [(text, float(conf), _box_is_vertical(box)) for (box, text, conf) in engine.readtext(np.array(img))]
+        result, _elapsed = engine(np.array(img))
     # RapidOCR returns [[box, text, confidence], ...] (None when nothing found)
-    return [text for (_box, text, _conf) in (result or [])]
+    return [(text, float(conf), _box_is_vertical(box)) for (box, text, conf) in (result or [])]
+
+
+# Words printed on every card; finding several of them is how we tell that a
+# pass read real card text rather than noise.
+ORIENTATION_ANCHORS = (
+    "GOVERNMENT", "INDIA", "AADHAAR", "UNIQUE", "IDENTIFICATION", "AUTHORITY",
+    "DOB", "BIRTH", "MALE", "FEMALE", "ADDRESS", "UIDAI", "ENROLMENT", "VID",
+)
+# Enough anchors in the first pass and we don't try other rotations.
+ORIENTATION_GOOD_ENOUGH = 4
+# Printed near the top / bottom of a card side. An upside-down page still reads
+# correctly line by line (the engine flips each line) but comes back in reverse
+# order, which breaks "the address follows the Address label".
+HEADER_WORDS = ("GOVERNMENT", "UNIQUE", "IDENTIFICATION", "AUTHORITY")
+FOOTER_WORDS = ("VID", "UIDAI", "WWW", "GOV.IN", "HELP")
+
+
+def _orientation_score(lines: list[tuple[str, float, bool]]) -> float:
+    if not lines:
+        return 0.0
+    anchors = sum(1 for text, _c, _v in lines if any(word in text.upper() for word in ORIENTATION_ANCHORS))
+    joined = " ".join(text for text, _c, _v in lines)
+    bonus = 2.0 * bool(AADHAAR_PATTERN.search(joined)) + 2.0 * bool(DATE_PATTERN.search(joined))
+    mean_conf = sum(conf for _t, conf, _v in lines) / len(lines)
+    return anchors * 2.0 + bonus + mean_conf
+
+
+def _looks_reversed(lines: list[tuple[str, float, bool]]) -> bool:
+    n = len(lines)
+    header = [i for i, (t, _c, _v) in enumerate(lines) if any(w in t.upper() for w in HEADER_WORDS)]
+    footer = [i for i, (t, _c, _v) in enumerate(lines) if any(w in t.upper() for w in FOOTER_WORDS)]
+    if header and footer:
+        return sum(header) / len(header) > sum(footer) / len(footer)
+    if header:
+        return sum(header) / len(header) > (n - 1) / 2
+    if footer:
+        return sum(footer) / len(footer) < (n - 1) / 2
+    return False
+
+
+def _vertical_share(lines: list[tuple[str, float, bool]]) -> float:
+    real = [v for t, _c, v in lines if sum(c.isalnum() for c in t) >= 3]
+    return sum(real) / len(real) if real else 0.0
+
+
+def _extract_text_lines(image_bytes: bytes) -> list[str]:
+    """Reads a card photo and returns its lines top to bottom, whatever way up
+    the photo is. People photograph a landscape card with the phone held
+    upright, so the text runs sideways (tall text boxes): the engine can still
+    read that text but returns the lines in scrambled order, so the image is
+    turned upright first. An upside-down page is detected from where the
+    header/footer words fall, and flipped."""
+    img = _prepare_image(image_bytes)
+    best_img = img
+    best = _run_engine(img)
+    sideways = _vertical_share(best) >= 0.5
+
+    if sideways:
+        # Turn it 90 degrees one way or the other; the right one reads upright
+        # (not reversed), the wrong one upside-down.
+        trials = []
+        for rotation in (Image.Transpose.ROTATE_90, Image.Transpose.ROTATE_270):
+            rotated = img.transpose(rotation)
+            trials.append((rotated, _run_engine(rotated)))
+        upright = [t for t in trials if not _looks_reversed(t[1])] or trials
+        best_img, best = max(upright, key=lambda t: _orientation_score(t[1]))
+    else:
+        anchors_found = sum(1 for t, _c, _v in best if any(w in t.upper() for w in ORIENTATION_ANCHORS))
+        if anchors_found < ORIENTATION_GOOD_ENOUGH:
+            best_score = _orientation_score(best)
+            for rotation in (Image.Transpose.ROTATE_90, Image.Transpose.ROTATE_270):
+                rotated = img.transpose(rotation)
+                lines = _run_engine(rotated)
+                score = _orientation_score(lines)
+                if score > best_score + 1.0:  # a clear win, not noise
+                    best_img, best, best_score = rotated, lines, score
+
+    if _looks_reversed(best):
+        flipped = best_img.transpose(Image.Transpose.ROTATE_180)
+        lines = _run_engine(flipped)
+        if not _looks_reversed(lines) and _orientation_score(lines) >= _orientation_score(best) - 1.0:
+            best = lines
+    return [text for text, _c, _v in best]
 
 
 def _is_mostly_latin(line: str) -> bool:
@@ -233,25 +342,96 @@ def _is_mostly_latin(line: str) -> bool:
     return (latin_count / len(alpha_chars)) >= 0.8
 
 
-def _guess_name(lines: list[str]) -> str | None:
-    for line in lines:
-        upper = line.upper()
-        if any(keyword in upper for keyword in NAME_EXCLUDE_KEYWORDS):
-            continue
-        if AADHAAR_PATTERN.search(line) or DOB_PATTERN.search(line):
-            continue
-        if not _is_mostly_latin(line):
-            continue
-        # A real name never contains digits -- a noisy OCR line with
-        # stray digits (VID fragments, misread boilerplate) was beating
-        # the actual name line before this check existed (a real bug
-        # found on real-device testing, not a hypothetical).
-        if any(c.isdigit() for c in line):
-            continue
-        letters = sum(c.isalpha() for c in line)
-        if letters >= 4:
-            return line.strip()
+# First four letters of boilerplate words printed on cards/letters. OCR often
+# garbles these ("Authority" -> "auther"), so an exact-keyword check misses
+# them and they get picked as the person's name.
+BOILERPLATE_PREFIXES = (
+    "AUTH", "GOVE", "GOVT", "UNIQ", "IDEN", "AADH", "AADA", "ENRO", "SIGN",
+    "DOWN", "ISSU", "VERI", "ADDR", "DIGI", "ELEC", "HELP", "TOLL", "PROO",
+    "CITI", "ONLI", "OFFL", "DATE", "BIRT", "FEMA", "TRAN", "INDI", "MALE",
+)
+
+
+def _is_boilerplate_line(line: str) -> bool:
+    upper = line.upper()
+    if any(keyword in upper for keyword in NAME_EXCLUDE_KEYWORDS):
+        return True
+    return any(len(tok) >= 4 and tok[:4] in BOILERPLATE_PREFIXES for tok in re.findall(r"[A-Z]+", upper))
+
+
+def _valid_name_line(line: str) -> bool:
+    if _is_boilerplate_line(line):
+        return False
+    if AADHAAR_PATTERN.search(line) or DATE_PATTERN.search(line):
+        return False
+    if not _is_mostly_latin(line):
+        return False
+    # A real name never contains digits -- a noisy OCR line with
+    # stray digits (VID fragments, misread boilerplate) was beating
+    # the actual name line before this check existed (a real bug
+    # found on real-device testing, not a hypothetical).
+    if any(c.isdigit() for c in line):
+        return False
+    # Letters, spaces and the odd dot/apostrophe only
+    if sum(1 for c in line if not (c.isalpha() or c in " .'-")) > 0:
+        return False
+    return sum(c.isalpha() for c in line) >= 4
+
+
+def _find_dob_line(lines: list[str]) -> int | None:
+    """Index of the line carrying the date of birth (a "DOB"/"Date of Birth"
+    label, or the date directly under one), else None."""
+    for i, line in enumerate(lines):
+        up = line.upper()
+        if DOB_LABEL.search(up) and (DATE_PATTERN.search(line) or i + 1 < len(lines)):
+            return i
     return None
+
+
+def _tidy_name(line: str) -> str:
+    # Blurry photos make the engine run words together ("GaneshPrabu")
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", " ".join(line.split()))
+
+
+def _guess_name(lines: list[str], dob_line: int | None = None) -> str | None:
+    # On an Aadhaar front the English name is printed directly above the
+    # "DOB:" line, so when that line is known look just above it first --
+    # far more reliable than "first line that looks like a name", which
+    # also matches garbled boilerplate.
+    if dob_line is not None:
+        for idx in range(dob_line - 1, max(dob_line - 5, -1), -1):
+            if _valid_name_line(lines[idx]):
+                return _tidy_name(lines[idx])
+    for line in lines:
+        if _valid_name_line(line):
+            return _tidy_name(line)
+    return None
+
+
+def _guess_dob(front_lines: list[str], back_lines: list[str]) -> str | None:
+    """Date of birth as YYYY-MM-DD. A labelled date wins; otherwise an
+    unlabelled date from the FRONT only. Cards and letters print other dates
+    too (issue, download, details-as-on) -- those are never taken, and dates
+    that make the person younger than 10 are treated as OCR/other-date noise."""
+    today = date.today()
+    candidates = []
+    for side, lines in ((0, front_lines), (1, back_lines)):
+        for i, line in enumerate(lines):
+            up = line.upper()
+            labelled = bool(DOB_LABEL.search(up)) or (i > 0 and bool(DOB_LABEL.search(lines[i - 1].upper())))
+            if not labelled:
+                if side == 1 or any(word in up for word in NON_DOB_DATE_WORDS):
+                    continue
+            for m in DATE_PATTERN.finditer(line):
+                day, month, year = (int(g) for g in m.groups())
+                try:
+                    parsed = date(year, month, day)
+                except ValueError:
+                    continue
+                if parsed.year < 1900 or parsed.year > today.year - 10:
+                    continue
+                candidates.append((0 if labelled else 1, side, i, parsed))
+    return min(candidates)[3].isoformat() if candidates else None
 
 
 def _looks_like_clean_address_line(line: str) -> bool:
@@ -362,6 +542,34 @@ def _guess_address(lines: list[str]) -> str | None:
     return ", ".join(collected)
 
 
+def _guess_aadhaar(lines: list[str]) -> str | None:
+    """The 12-digit Aadhaar number. A number passing the Verhoeff check
+    beats one that doesn't, and a line carrying the 16-digit VID is skipped
+    (its first 12 digits look just like an Aadhaar number)."""
+    candidates: list[str] = []
+    for line in lines:
+        if "VID" in line.upper():
+            continue
+        for m in AADHAAR_PATTERN.finditer(line):
+            # part of a longer digit run (a VID split across lines)? skip
+            tail = line[m.end():].lstrip()
+            if tail[:1].isdigit():
+                continue
+            candidates.append("".join(m.groups()))
+    if not candidates:
+        # OCR often splits the number oddly ("1234 56 789012") -- accept a
+        # line that is exactly 12 digits once spaces/noise are stripped
+        # (VID lines are 16 digits, so they never match).
+        for line in lines:
+            digits = re.sub(r"\D", "", line)
+            if len(digits) == 12 and len(re.sub(r"[\d\s]", "", line)) <= 2 and "VID" not in line.upper():
+                candidates.append(digits)
+    for digits in candidates:
+        if validate_verhoeff(digits):
+            return digits
+    return candidates[0] if candidates else None
+
+
 def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = None) -> dict:
     """Returns whatever fields could be confidently identified; missing
     keys mean "OCR didn't find this, the owner enters it manually" -- not
@@ -377,23 +585,13 @@ def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = No
     joined = " ".join(all_lines)
     fields: dict = {}
 
-    aadhaar_match = AADHAAR_PATTERN.search(joined)
-    if aadhaar_match:
-        fields["aadhaar_number"] = "".join(aadhaar_match.groups())
-    else:
-        # OCR often splits the number oddly ("1234 56 789012") -- accept a
-        # line that is exactly 12 digits once spaces/noise are stripped
-        # (VID lines are 16 digits, so they never match).
-        for line in all_lines:
-            digits = re.sub(r"\D", "", line)
-            if len(digits) == 12 and len(re.sub(r"[\d\s]", "", line)) <= 2:
-                fields["aadhaar_number"] = digits
-                break
+    aadhaar = _guess_aadhaar(all_lines)
+    if aadhaar:
+        fields["aadhaar_number"] = aadhaar
 
-    dob_match = DOB_PATTERN.search(joined)
-    if dob_match:
-        day, month, year = dob_match.groups()
-        fields["dob"] = f"{year}-{int(month):02d}-{int(day):02d}"
+    dob = _guess_dob(front_lines, back_lines)
+    if dob:
+        fields["dob"] = dob
 
     upper_joined = joined.upper()
     for pattern, normalized in GENDER_PATTERNS:
@@ -401,7 +599,7 @@ def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = No
             fields["gender"] = normalized
             break
 
-    name = _guess_name(front_lines)
+    name = _guess_name(front_lines, _find_dob_line(front_lines))
     if name:
         fields["name"] = name
 

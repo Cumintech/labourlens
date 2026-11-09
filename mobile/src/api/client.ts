@@ -460,13 +460,24 @@ async function appendImagePart(formData: FormData, field: string, uri: string, f
   }
 }
 
+// Fire-and-forget, when Add Worker opens: wakes a sleeping host and loads the
+// scan engine on the server so the first scan doesn't pay for it.
+export function warmUpScanner(token: string): void {
+  apiFetch(`${API_BASE_URL}/workers/ocr/warm`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  }, LONG_TIMEOUT_MS).catch(() => {});
+}
+
+// Either side can be sent alone: the app scans the front as soon as it is
+// captured (while the owner photographs the back), then the back.
 export async function scanAadhaar(
   token: string,
-  frontUri: string,
+  frontUri: string | null,
   backUri: string | null,
 ): Promise<OcrFields> {
   const formData = new FormData();
-  await appendImagePart(formData, "front_image", frontUri, "front.jpg");
+  if (frontUri) await appendImagePart(formData, "front_image", frontUri, "front.jpg");
   if (backUri) await appendImagePart(formData, "back_image", backUri, "back.jpg");
 
   const res = await apiFetch(`${API_BASE_URL}/workers/ocr`, {

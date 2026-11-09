@@ -42,6 +42,7 @@ import os
 import re
 from datetime import date
 import threading
+import time
 import unicodedata
 
 from PIL import Image, ImageOps
@@ -289,44 +290,63 @@ def _vertical_share(lines: list[tuple[str, float, bool]]) -> float:
     return sum(real) / len(real) if real else 0.0
 
 
+PROBE_SIDE = 512
+
+
+def _probe_vertical_share(img: Image.Image) -> float | None:
+    """Cheap check of whether the card is sideways: run only the text
+    *detector* on a small copy (about a quarter of a full pass) and look at
+    the shape of the boxes. None when it can't tell (other engine, or too few
+    boxes found)."""
+    if OCR_ENGINE == "easyocr":
+        return None
+    import numpy as np
+
+    engine = _get_engine()
+    scale = PROBE_SIDE / max(img.size)
+    thumb = img.resize((int(img.width * scale), int(img.height * scale)), Image.BILINEAR) if scale < 1 else img
+    with _ocr_lock:
+        boxes, _elapsed = engine.text_detector(np.array(thumb))
+    if boxes is None or len(boxes) < 3:
+        return None
+    return sum(_box_is_vertical(b) for b in boxes) / len(boxes)
+
+
 def _extract_text_lines(image_bytes: bytes) -> list[str]:
     """Reads a card photo and returns its lines top to bottom, whatever way up
     the photo is. People photograph a landscape card with the phone held
-    upright, so the text runs sideways (tall text boxes): the engine can still
-    read that text but returns the lines in scrambled order, so the image is
-    turned upright first. An upside-down page is detected from where the
-    header/footer words fall, and flipped."""
+    upright, so the text runs sideways (tall text boxes): the engine can read
+    that but returns the lines in scrambled order, so such a page is turned
+    upright first -- decided by a cheap detector-only probe so the (slow) full
+    pass runs once, not once per rotation. An upside-down page reads correctly
+    line by line but comes back in reverse order, which is fixed by reversing
+    the list (identical to re-running it flipped, without the second pass)."""
     img = _prepare_image(image_bytes)
-    best_img = img
-    best = _run_engine(img)
-    sideways = _vertical_share(best) >= 0.5
+    share = _probe_vertical_share(img)
+    turned = share is not None and share >= 0.5
+    if turned:
+        img = img.transpose(Image.Transpose.ROTATE_90)
+    lines = _run_engine(img)
 
-    if sideways:
-        # Turn it 90 degrees one way or the other; the right one reads upright
-        # (not reversed), the wrong one upside-down.
-        trials = []
+    if share is None and not turned and _vertical_share(lines) >= 0.5:
+        # No probe available: the page's own boxes say it is sideways.
+        img = img.transpose(Image.Transpose.ROTATE_90)
+        lines = _run_engine(img)
+        turned = True
+
+    anchors = sum(1 for t, _c, _v in lines if any(w in t.upper() for w in ORIENTATION_ANCHORS))
+    if anchors < 2 and not turned:
+        # Nothing card-like read at all (blurry / odd angle): try the other turns
+        best_score = _orientation_score(lines)
         for rotation in (Image.Transpose.ROTATE_90, Image.Transpose.ROTATE_270):
-            rotated = img.transpose(rotation)
-            trials.append((rotated, _run_engine(rotated)))
-        upright = [t for t in trials if not _looks_reversed(t[1])] or trials
-        best_img, best = max(upright, key=lambda t: _orientation_score(t[1]))
-    else:
-        anchors_found = sum(1 for t, _c, _v in best if any(w in t.upper() for w in ORIENTATION_ANCHORS))
-        if anchors_found < ORIENTATION_GOOD_ENOUGH:
-            best_score = _orientation_score(best)
-            for rotation in (Image.Transpose.ROTATE_90, Image.Transpose.ROTATE_270):
-                rotated = img.transpose(rotation)
-                lines = _run_engine(rotated)
-                score = _orientation_score(lines)
-                if score > best_score + 1.0:  # a clear win, not noise
-                    best_img, best, best_score = rotated, lines, score
+            candidate = _run_engine(img.transpose(rotation))
+            score = _orientation_score(candidate)
+            if score > best_score + 1.0:  # a clear win, not noise
+                lines, best_score = candidate, score
 
-    if _looks_reversed(best):
-        flipped = best_img.transpose(Image.Transpose.ROTATE_180)
-        lines = _run_engine(flipped)
-        if not _looks_reversed(lines) and _orientation_score(lines) >= _orientation_score(best) - 1.0:
-            best = lines
-    return [text for text, _c, _v in best]
+    if _looks_reversed(lines):
+        lines = lines[::-1]
+    return [text for text, _c, _v in lines]
 
 
 def _is_mostly_latin(line: str) -> bool:
@@ -570,13 +590,14 @@ def _guess_aadhaar(lines: list[str]) -> str | None:
     return candidates[0] if candidates else None
 
 
-def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = None) -> dict:
+def extract_fields(front_image_bytes: bytes | None, back_image_bytes: bytes | None = None) -> dict:
     """Returns whatever fields could be confidently identified; missing
     keys mean "OCR didn't find this, the owner enters it manually" -- not
     an error. Front card carries name/DOB/gender/Aadhaar number; back
     typically carries the address, so both are scanned when available and
     merged."""
-    front_lines = _extract_text_lines(front_image_bytes)
+    started = time.monotonic()
+    front_lines = _extract_text_lines(front_image_bytes) if front_image_bytes else []
     back_lines = _extract_text_lines(back_image_bytes) if back_image_bytes else []
     all_lines = front_lines + back_lines
 
@@ -609,4 +630,8 @@ def extract_fields(front_image_bytes: bytes, back_image_bytes: bytes | None = No
     if address:
         fields["current_address"] = address
 
+    # Timing only -- never any card text.
+    logging.getLogger("uvicorn.error").info(
+        "ocr scan: %.1fs, sides=%d, fields=%d", time.monotonic() - started, bool(front_image_bytes) + bool(back_image_bytes), len(fields)
+    )
     return fields

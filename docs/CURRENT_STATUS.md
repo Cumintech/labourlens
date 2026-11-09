@@ -43,6 +43,11 @@
 ## OCR scan fix (2026-11-09, fix/ocr-formdata-sdk57)
 - Aadhaar scan sent `{uri,name,type}` parts, which SDK 57's fetch rejects ("Unsupported FormDataPart") -> generic network-error popup, Continue stayed disabled. scanAadhaar now uses expo-file-system File like uploadWorkerPhoto. Not yet verified on device; if scan still fails, check Render memory (EasyOCR).
 
+## OCR engine swap (2026-11-09, fix/ocr-lightweight-engine)
+- Scan returned 502: EasyOCR (PyTorch, ~1GB) ran the 512MB Render instance out of memory. ocr.py now defaults to RapidOCR (ONNX, no torch; requirements.txt: rapidocr-onnxruntime). Real-server (uvicorn) peak 432MB at OCR_DET_LIMIT_SIDE=960 (default), 354MB at 640; idle 270MB. EasyOCR still works locally: pip install easyocr + OCR_ENGINE=easyocr.
+- Engine failure -> 503 "enter manually" (not 502); cause is logged (no card data). Verified only on synthetic cards -- re-test with real cards on device. Render may need opencv-python-headless instead of opencv-python if the log shows libGL.so.1 missing.
+- Test: verify_ocr_resilience.py (+ verify_registration / verify_ocr_refinements now run real OCR without torch).
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

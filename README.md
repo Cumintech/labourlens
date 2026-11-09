@@ -26,7 +26,7 @@ Store submission is deliberately deferred to Day 3 so Days 1–2 can focus on fu
 
 **Known deploy gotchas (already fixed, documented here in case they recur elsewhere):**
 - Render's default Python image was 3.14, which has no prebuilt wheel yet for `pydantic-core` — pinned via a `PYTHON_VERSION=3.12.7` env var.
-- The backend eagerly downloaded EasyOCR's PyTorch model at startup, which OOMs a 512MB free-tier instance before the app can even boot — made skippable via `OCR_WARM_UP=false`. The Aadhaar-scan feature itself may still be memory-tight on the free tier when actually invoked; revisit if that becomes a real blocker.
+- The backend eagerly downloaded EasyOCR's PyTorch model at startup, which OOMs a 512MB free-tier instance before the app can even boot — made skippable via `OCR_WARM_UP=false`. The Aadhaar scan itself then ran out of memory (every scan 502'd), so OCR now uses RapidOCR (ONNX, ~430MB peak per scan) instead of EasyOCR/PyTorch -- see docs/CURRENT_STATUS.md.
 
 ### Day 2 — Observability, support, billing groundwork, localization, push, test coverage
 

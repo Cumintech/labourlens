@@ -21,14 +21,17 @@ async def lifespan(app: FastAPI):
         # Production gets this reference data from the Alembic migration.
         with SessionLocal() as _db:
             minimum_wage.seed_reference_data(_db)
-    # Skippable via OCR_WARM_UP=false -- loading EasyOCR's PyTorch models
+    # Skippable via OCR_WARM_UP=false -- loading the OCR models (see ocr.py)
     # at startup needs real memory headroom a free-tier host (e.g.
     # Render's 512MB web service) doesn't have, and an OOM here takes
     # the whole app down before it can even start serving requests, not
     # just the OCR feature. Defaults to on (unchanged local-dev
     # behavior: the first real Aadhaar scan stays fast).
     if os.environ.get("OCR_WARM_UP", "true").lower() != "false":
-        ocr.warm_up()
+        try:
+            ocr.warm_up()
+        except ocr.OcrUnavailable:
+            pass  # the app still serves everything else; scans answer 503 until OCR loads
 
     # One-time admin account bootstrap via env vars -- the other half of
     # seed_admin.py's "seeded via a one-time script or environment

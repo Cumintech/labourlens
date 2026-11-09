@@ -76,6 +76,13 @@ for label, (turn, tag) in cases.items():
     assert "Anna Nagar" in (out.get("current_address") or "") and "625020" in out["current_address"], (label, out)
     print(f"  {label}: PASSED")
 
+# front and back scanned separately (as the app now does) give the same fields as one combined call
+front_only = ocr.extract_fields(jpeg(f), None)
+back_only = ocr.extract_fields(None, jpeg(b))
+assert front_only.get("name") == "Ganesh Prabu" and front_only.get("dob") == "1984-06-15" and front_only.get("aadhaar_number") == "555511112225", front_only
+assert "Anna Nagar" in (back_only.get("current_address") or "") and back_only.get("aadhaar_number") == "555511112225" and "dob" not in back_only, back_only
+print("  front-only / back-only: PASSED")
+
 # --- parsing rules, no OCR involved ---
 back = ["Unique Identification Authority of India", "Aadhaar issued: 07/04/2017", "Address:", "12, Gandhi Street", "Madurai 625020", "VID: 9123 4567 8901 2345"]
 # a garbled "Authority" line must not become the name; the line above DOB is the name

@@ -12,14 +12,18 @@ router = APIRouter()
 
 @router.post("/workers/ocr", response_model=OcrFieldsOut)
 async def scan_aadhaar(
-    front_image: UploadFile = File(...),
+    front_image: UploadFile | None = File(None),
     back_image: UploadFile | None = File(None),
     owner: models.Owner = Depends(get_current_owner),
 ):
+    # Either side can be sent alone: the app scans the front as soon as it is
+    # captured (while the owner photographs the back), then the back.
+    if front_image is None and back_image is None:
+        raise HTTPException(status_code=422, detail="Send the front and/or back image")
     # Bounded reads so an oversized upload can't exhaust memory.
-    front_bytes = await front_image.read(MAX_OCR_UPLOAD_BYTES + 1)
+    front_bytes = await front_image.read(MAX_OCR_UPLOAD_BYTES + 1) if front_image else None
     back_bytes = await back_image.read(MAX_OCR_UPLOAD_BYTES + 1) if back_image else None
-    if len(front_bytes) > MAX_OCR_UPLOAD_BYTES or (back_bytes is not None and len(back_bytes) > MAX_OCR_UPLOAD_BYTES):
+    if any(b is not None and len(b) > MAX_OCR_UPLOAD_BYTES for b in (front_bytes, back_bytes)):
         raise HTTPException(status_code=413, detail="Image too large (max 8 MB per side)")
     try:
         # OCR is CPU-bound and synchronous -- run it off the event loop so
@@ -32,6 +36,17 @@ async def scan_aadhaar(
     except MemoryError:
         raise HTTPException(status_code=503, detail="ID scanning is busy. Please try again, or enter the details manually.")
     return OcrFieldsOut(**fields)
+
+
+@router.post("/workers/ocr/warm", status_code=204)
+async def warm_scanner(owner: models.Owner = Depends(get_current_owner)):
+    """Called when the Add Worker screen opens: wakes a sleeping host and
+    loads the scan engine now, so the first scan doesn't pay for it."""
+    try:
+        await run_in_threadpool(ocr.warm_up)
+    except ocr.OcrUnavailable:
+        pass  # the scan itself will answer 503 with a clear message
+    return Response(status_code=204)
 
 
 @router.post("/workers", response_model=WorkerOut, status_code=201)

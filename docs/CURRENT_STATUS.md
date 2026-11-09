@@ -52,6 +52,10 @@
 - Real-phone scan read only the Aadhaar number: card photographed sideways (tall text boxes), DOB took another printed date (issue date), name took garbled "Authority". ocr.py now: applies EXIF rotation; detects sideways pages from box shape and turns them upright, flips upside-down pages (lines come back reversed); DOB only from a DOB/Date-of-Birth line (never back-side/issue dates, must be a real date and age >= 10); name = line above the DOB line, with garbled-boilerplate prefixes excluded; Aadhaar number prefers a Verhoeff-valid number and skips the VID.
 - Test: verify_ocr_orientation.py (synthetic cards: upright, rot90/270, upside-down, EXIF; real OCR). Real server: sideways 3000px pair ~2s, peak ~393MB. Still unverified on the owner's real cards.
 
+## Aadhaar scan speed (2026-11-09, perf/aadhaar-scan-speed)
+- App: each side is scanned as soon as it is captured (front is read while the back is photographed), photos are shrunk to 1280px/q0.8 before upload, and Add Worker pings POST /workers/ocr/warm to wake the host and load the engine. Server: sideways cards use a cheap detector-only probe + one full pass (was ~3), upside-down pages are fixed by reversing the line list (no second pass); POST /workers/ocr accepts front and/or back; scan time logged ("ocr scan: Ns", no card text).
+- Measured on 1 CPU core, dense test card: sideways 2.4s -> 0.9s, upside-down 2.5s -> 0.8s, upright unchanged (~0.9s); peak ~369MB. Not measurable here: the phone's upload time and Render's real CPU. If still slow on Render, the free/starter CPU share is the limit -- check the "ocr scan" log lines.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

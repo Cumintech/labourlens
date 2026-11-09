@@ -3,7 +3,7 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Camera, Images } from "lucide-react-native";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
@@ -33,6 +33,7 @@ import {
   generateIdCard,
   listWorkerTypes,
   scanAadhaar,
+  warmUpScanner,
   uploadWorkerPhoto,
 } from "../api/client";
 import DateField, { addYearsIso, isoDate } from "../components/DateField";
@@ -70,6 +71,9 @@ type Step = 1 | 2 | 3 | 4;
 const ID_PHOTO_WIDTH = 400;
 const ID_PHOTO_HEIGHT = 500;
 const ID_PHOTO_JPEG_QUALITY = 0.65;
+// Aadhaar scan photos are shrunk to this long side before upload (the server reads at ~1280px anyway).
+const SCAN_MAX_DIMENSION = 1280;
+const SCAN_JPEG_QUALITY = 0.8;
 
 // Matches the backend's MINIMUM_WORKING_AGE (main.py) -- the Factories
 // Act's actual minimum working age, used both for the under-age warning
@@ -120,7 +124,11 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [scanMode, setScanMode] = useState(true);
   const [frontUri, setFrontUri] = useState<string | null>(null);
   const [backUri, setBackUri] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(false);
+  const [frontScanning, setFrontScanning] = useState(false);
+  const [backScanning, setBackScanning] = useState(false);
+  const scanning = frontScanning || backScanning;
+  // Bumped on every capture so a slow scan of a photo that was since retaken is ignored.
+  const scanSeq = useRef({ front: 0, back: 0 });
   const [autoFilled, setAutoFilled] = useState({ name: false, dob: false, gender: false, aadhaar_number: false, current_address: false });
   // Worker Details starts hidden -- showing empty Name/DOB/etc. fields
   // above an unstarted scan implied they should be filled in manually
@@ -211,6 +219,12 @@ export default function AddWorkerScreen({ navigation }: Props) {
     }, [token]),
   );
 
+  // Wake the server and load its scan engine while the owner fills in the
+  // first screen, so the first scan doesn't pay for a cold start.
+  useEffect(() => {
+    if (token) warmUpScanner(token);
+  }, [token]);
+
   async function captureImage(side: "front" | "back") {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
@@ -219,42 +233,61 @@ export default function AddWorkerScreen({ navigation }: Props) {
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.9, base64: false });
     if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
-    if (side === "front") {
-      setFrontUri(uri);
-      if (backUri) await runScan(uri, backUri);
-    } else {
-      setBackUri(uri);
-      if (frontUri) await runScan(frontUri, uri);
+    const asset = result.assets[0];
+    if (side === "front") setFrontUri(asset.uri);
+    else setBackUri(asset.uri);
+    // Each side is scanned the moment it is captured, so the front is being
+    // read while the owner photographs the back.
+    void scanSide(side, asset.uri, asset.width, asset.height);
+  }
+
+  // A phone photo is several MB; the server only needs ~1280px. Sending the
+  // smaller JPEG cuts upload time on a mobile connection a lot.
+  async function shrinkForScan(uri: string, width: number, height: number): Promise<string> {
+    if (Math.max(width, height) <= SCAN_MAX_DIMENSION) return uri;
+    try {
+      const resize = width >= height ? { width: SCAN_MAX_DIMENSION } : { height: SCAN_MAX_DIMENSION };
+      const rendered = await ImageManipulator.manipulate(uri).resize(resize).renderAsync();
+      const saved = await rendered.saveAsync({ compress: SCAN_JPEG_QUALITY, format: SaveFormat.JPEG });
+      return saved.uri;
+    } catch {
+      return uri; // resizing is only an optimisation; send the original
     }
   }
 
-  // Fires automatically once both sides are captured -- both are
-  // required before Continue enables anyway, so there's no useful
-  // intermediate "scan now" step to gate behind a separate button.
-  async function runScan(front: string, back: string) {
+  async function scanSide(side: "front" | "back", uri: string, width: number, height: number) {
     if (!token) return;
-    setScanning(true);
+    const seq = ++scanSeq.current[side];
+    const setBusy = side === "front" ? setFrontScanning : setBackScanning;
+    setBusy(true);
     try {
-      const fields = await scanAadhaar(token, front, back);
-      setName(fields.name ?? "");
-      setDob(fields.dob ?? "");
-      setGender(normalizeGender(fields.gender));
+      const small = await shrinkForScan(uri, width, height);
+      const fields = side === "front" ? await scanAadhaar(token, small, null) : await scanAadhaar(token, null, small);
+      if (seq !== scanSeq.current[side]) return; // retaken since; a newer scan owns the fields
       // Stripped the same way manual typing is -- OCR noise (stray
       // spaces, a misread letter) shouldn't bypass the digits-only rule;
       // an invalid result is kept in the field (not cleared) so the
       // inline error below tells the owner to correct it.
-      setAadhaarNumber(stripToDigits(fields.aadhaar_number ?? "", 12));
-      setCurrentAddress(fields.current_address ?? "");
-      setAutoFilled({
-        name: !!fields.name,
-        dob: !!fields.dob,
-        gender: !!fields.gender,
-        aadhaar_number: !!fields.aadhaar_number,
-        current_address: !!fields.current_address,
-      });
+      const digits = stripToDigits(fields.aadhaar_number ?? "", 12);
+      if (side === "front") {
+        setName(fields.name ?? "");
+        setDob(fields.dob ?? "");
+        setGender(normalizeGender(fields.gender));
+        setAadhaarNumber((prev) => digits || prev);
+        setAutoFilled((a) => ({ ...a, name: !!fields.name, dob: !!fields.dob, gender: !!fields.gender, aadhaar_number: a.aadhaar_number || !!digits }));
+        if (fields.current_address) {
+          setCurrentAddress((prev) => prev || fields.current_address!);
+          setAutoFilled((a) => ({ ...a, current_address: true }));
+        }
+      } else {
+        setCurrentAddress(fields.current_address ?? "");
+        // The number is printed on the back too -- only a fallback if the front missed it
+        setAadhaarNumber((prev) => prev || digits);
+        setAutoFilled((a) => ({ ...a, current_address: !!fields.current_address, aadhaar_number: a.aadhaar_number || !!digits }));
+      }
       setDetailsRevealed(true);
     } catch (e) {
+      if (seq !== scanSeq.current[side]) return;
       // A 5xx / timeout means the scan service itself is down or overloaded,
       // not that this card was unreadable: point the owner at manual entry.
       const serviceDown = e instanceof ApiError && (e.status >= 500 || e.status === 0);
@@ -265,7 +298,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
           : "Couldn't reach the server. Check your connection.";
       Alert.alert("Scan failed", message);
     } finally {
-      setScanning(false);
+      if (seq === scanSeq.current[side]) setBusy(false);
     }
   }
 
@@ -494,7 +527,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
     navigation.navigate("Home");
   }
 
-  const step1Continueable = detailsRevealed && identityValid;
+  const step1Continueable = detailsRevealed && identityValid && !scanning;
   const progress = complianceProgress(employmentType, {
     father: fatherOrSpouseName,
     nature: designation,
@@ -575,7 +608,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.hint}>
-                  {scanning ? "Reading the card…" : "Both front and back are required -- scanning fills in the fields below automatically. For best results, lay the card flat in good light, fill the frame and hold steady until it is sharp."}
+                  {scanning ? "Reading the card…" : "Scan the front, then the back -- each is read as soon as you take it and fills in the fields below. Lay the card flat in good light, fill the frame and hold steady until it is sharp."}
                 </Text>
               </>
             )}

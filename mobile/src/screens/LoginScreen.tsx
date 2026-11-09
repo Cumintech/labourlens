@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Eye, EyeOff } from "lucide-react-native";
+import { Eye, EyeOff } from "../icons";
 import React, { useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ApiError } from "../api/client";

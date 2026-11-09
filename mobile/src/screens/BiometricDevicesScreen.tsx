@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Fingerprint, Plus, RefreshCw, UserPlus } from "lucide-react-native";
+import { Fingerprint, Plus, RefreshCw, UserPlus } from "../icons";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";

@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { ChevronRight, Fingerprint, ListChecks, Search, ShieldAlert, UserPlus, Users } from "lucide-react-native";
+import { ChevronRight, Fingerprint, ListChecks, Search, ShieldAlert, UserPlus, Users } from "../icons";
 import React, { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";

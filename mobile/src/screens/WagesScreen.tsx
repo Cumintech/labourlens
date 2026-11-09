@@ -1,6 +1,6 @@
 import { useFocusEffect, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Briefcase, Check, ChevronLeft, ChevronRight } from "lucide-react-native";
+import { Briefcase, Check, ChevronLeft, ChevronRight } from "../icons";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,

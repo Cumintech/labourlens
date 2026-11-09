@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react-native";
+import { ChevronDown } from "../icons";
 import React, { useState } from "react";
 import { FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";

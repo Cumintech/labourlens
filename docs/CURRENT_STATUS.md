@@ -61,6 +61,10 @@
 - Add Worker compliance step: only Salary type and Father/Spouse name are required (red *); Nature of work, joining date, EPF/UAN, ESIC are optional.
 - Minimum wage is now enforced: Add Worker step 3 blocks Continue when Basic+DA is below the class minimum (and requires a class when the factory has an employment set); POST /workers/{id}/wage-profile returns 422 for a below-minimum rate (class assigned, rate in force on the effective date). Workers without a class, or dates before any DA version, are not checked. Auto-created rates from a Worker Type default are not checked.
 
+## OCR 502 hardening (2026-11-10, fix/ocr-memory-guard)
+- Could not reproduce a 502 in a cgroup-limited sandbox (0.1/0.5 CPU, 512MB, lazy engine) -- scans passed (front 1.2s/back 3.3s at 0.5 CPU, peak ~413MB). Hardened anyway: per-scan memory guard (shrinks detector to 640px or answers 503 "busy" when free memory is short, instead of the host killing the service), gc + malloc_trim after each scan (steady memory 345-388MB -> ~255MB), one scan at a time end to end, thread pool defaults to 2 when no CPU quota is visible, logs "memory used/limit" per scan, app retries 502/503/504 twice (3s, 8s).
+- If 502 persists: Render > Events (look for "Ran out of memory") and Logs ("ocr scan:", "OCR engine ready:", "ocr scan refused") are the evidence still missing.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

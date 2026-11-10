@@ -105,7 +105,7 @@ OCR_DET_LIMIT_SIDE = int(os.environ.get("OCR_DET_LIMIT_SIDE", "960"))
 _engine = None
 _engine_lock = threading.Lock()
 # One scan at a time: two concurrent scans would double peak memory.
-_ocr_lock = threading.Lock()
+_ocr_lock = threading.RLock()
 
 
 def _limit_malloc_arenas() -> None:
@@ -162,6 +162,12 @@ def _container_cpu_limit() -> int | None:
     return None
 
 
+# When no CPU quota is visible (some hosts hide it), do NOT fall back to the
+# host's core count: a pool sized for a big machine on a fractional CPU made a
+# scan 13x slower in testing. Two threads is plenty for one card.
+DEFAULT_OCR_THREADS = 2
+
+
 class _ThreadLimit:
     """While the engine is built, size its thread pools to the container's
     real CPU count. ONNX Runtime sizes them from the cores it can see, and a
@@ -173,9 +179,8 @@ class _ThreadLimit:
 
     def __enter__(self):
         self.restore = None
-        self.limit = _container_cpu_limit()
-        if self.limit is None:
-            return self
+        self.detected = _container_cpu_limit()
+        self.limit = self.detected or DEFAULT_OCR_THREADS
         try:
             import cv2
 
@@ -237,7 +242,7 @@ def _get_engine():
                         _limit_malloc_arenas()
                         _engine = RapidOCR(det_limit_side_len=OCR_DET_LIMIT_SIDE, det_limit_type="max", det_model_path=None)
                 logging.getLogger("uvicorn.error").info(
-                    "OCR engine ready: %s, cpu limit %s", OCR_ENGINE, limiter.limit if limiter.limit else "none detected"
+                    "OCR engine ready: %s, threads %s (%s)", OCR_ENGINE, limiter.limit, "from cpu quota" if limiter.detected else "default, no cpu quota visible"
                 )
             except Exception as exc:  # ImportError, onnx/torch load failure, MemoryError
                 # The error text names a missing library or model, never card data,
@@ -319,6 +324,93 @@ ADDRESS_SCAN_WINDOW = 25
 # generous cap from the scan window so a genuinely long bilingual block
 # doesn't get truncated right before its own PIN code.
 ADDRESS_MAX_LINES = 15
+
+
+# --- memory guard ---------------------------------------------------------
+# A scan needs about this much on top of what the process already holds
+# (measured: ~190 MB at the default detector size, ~85 MB at the reduced one).
+SCAN_NEEDS_MB = 200
+REDUCED_SCAN_NEEDS_MB = 110
+REDUCED_DET_LIMIT_SIDE = 640
+
+
+def _read_int(path: str) -> int | None:
+    try:
+        raw = open(path).read().strip()
+        return int(raw) if raw.isdigit() else None
+    except Exception:
+        return None
+
+
+def _stat_value(path: str, key: str) -> int:
+    try:
+        for line in open(path).read().splitlines():
+            name, _, value = line.partition(" ")
+            if name == key:
+                return int(value)
+    except Exception:
+        pass
+    return 0
+
+
+def _memory_usage_limit_mb() -> tuple[int, int] | None:
+    """(in use, limit) in MB for this container, from its cgroup, counting
+    reclaimable page cache as free (it is what the OOM killer ignores). None when
+    there is no limit or it can't be read."""
+    roots = ["/sys/fs/cgroup", "/sys/fs/cgroup/memory"]
+    try:
+        for line in open("/proc/self/cgroup").read().splitlines():
+            _num, controllers, path = line.split(":", 2)
+            path = path.strip("/")
+            if controllers == "":
+                roots.append(f"/sys/fs/cgroup/{path}")
+            elif "memory" in controllers.split(","):
+                roots.append(f"/sys/fs/cgroup/memory/{path}")
+    except Exception:
+        pass
+    for root in roots:
+        limit = _read_int(f"{root}/memory.max") or _read_int(f"{root}/memory.limit_in_bytes")
+        used = _read_int(f"{root}/memory.current") or _read_int(f"{root}/memory.usage_in_bytes")
+        if limit is None or used is None or limit >= 1 << 50:  # "max" / unlimited
+            continue
+        inactive = _stat_value(f"{root}/memory.stat", "inactive_file") or _stat_value(f"{root}/memory.stat", "total_inactive_file")
+        return max(used - inactive, 0) // 1048576, limit // 1048576
+    return None
+
+
+def _free_memory() -> None:
+    """Hand freed memory back to the OS (Python/glibc keep it otherwise)."""
+    import gc
+
+    gc.collect()
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
+
+
+def _prepare_for_scan() -> None:
+    """Called at the start of every scan: if the container is short of memory,
+    scan at a smaller detector size, or refuse (503 'busy') -- instead of
+    letting the host kill the whole service mid-scan, which every user sees as
+    a 502."""
+    state = _memory_usage_limit_mb()
+    engine = _get_engine()
+    full = OCR_DET_LIMIT_SIDE
+    if state is not None:
+        used, limit = state
+        if limit - used < SCAN_NEEDS_MB:
+            _free_memory()
+            used, limit = _memory_usage_limit_mb() or (used, limit)
+        free = limit - used
+        if free < REDUCED_SCAN_NEEDS_MB:
+            logging.getLogger("uvicorn.error").error("ocr scan refused: %d MB free of %d MB", free, limit)
+            raise MemoryError("not enough free memory for a scan")
+        full = OCR_DET_LIMIT_SIDE if free >= SCAN_NEEDS_MB else min(OCR_DET_LIMIT_SIDE, REDUCED_DET_LIMIT_SIDE)
+    if OCR_ENGINE != "easyocr":
+        engine.text_detector.preprocess_op[0].limit_side_len = full
 
 
 def _box_is_vertical(box) -> bool:
@@ -696,8 +788,13 @@ def extract_fields(front_image_bytes: bytes | None, back_image_bytes: bytes | No
     typically carries the address, so both are scanned when available and
     merged."""
     started = time.monotonic()
-    front_lines = _extract_text_lines(front_image_bytes) if front_image_bytes else []
-    back_lines = _extract_text_lines(back_image_bytes) if back_image_bytes else []
+    with _ocr_lock:  # one scan at a time, end to end
+        _prepare_for_scan()
+        try:
+            front_lines = _extract_text_lines(front_image_bytes) if front_image_bytes else []
+            back_lines = _extract_text_lines(back_image_bytes) if back_image_bytes else []
+        finally:
+            _free_memory()
     all_lines = front_lines + back_lines
 
     # Raw OCR text (Aadhaar, name, address) must never be printed or logged.
@@ -730,7 +827,12 @@ def extract_fields(front_image_bytes: bytes | None, back_image_bytes: bytes | No
         fields["current_address"] = address
 
     # Timing only -- never any card text.
+    mem = _memory_usage_limit_mb()
     logging.getLogger("uvicorn.error").info(
-        "ocr scan: %.1fs, sides=%d, fields=%d", time.monotonic() - started, bool(front_image_bytes) + bool(back_image_bytes), len(fields)
+        "ocr scan: %.1fs, sides=%d, fields=%d, memory %s",
+        time.monotonic() - started,
+        bool(front_image_bytes) + bool(back_image_bytes),
+        len(fields),
+        f"{mem[0]}/{mem[1]}MB" if mem else "n/a",
     )
     return fields

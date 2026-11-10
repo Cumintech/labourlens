@@ -79,27 +79,43 @@ export default function MinimumWageClassSelect({ token, employmentId, value, onC
   const selected = employment.classes.find((c) => c.id === value);
   const unit = selected?.rate_type === "monthly" ? "month" : "day";
 
+  // Classes are listed under the notification's own headings (Group I - Skilled, ...)
+  const options: { label: string; value: string; header?: boolean }[] = [
+    { label: "No class -- skip minimum-wage check", value: NONE },
+  ];
+  let lastGroup: string | null | undefined;
+  for (const c of employment.classes) {
+    if (c.group_name && c.group_name !== lastGroup) options.push({ label: c.group_name, value: `__group_${c.group_name}`, header: true });
+    lastGroup = c.group_name;
+    options.push({ label: c.piece_rate ? `${c.name} (per ${c.unit})` : c.name, value: String(c.id) });
+  }
+
   return (
     <View>
       <SelectField
         label="Minimum-wage class"
         value={value != null ? String(value) : NONE}
-        options={[
-          { label: "No class -- skip minimum-wage check", value: NONE },
-          ...employment.classes.map((c) => ({ label: c.name, value: String(c.id) })),
-        ]}
+        options={options}
         onChange={(v) => onChange(v === NONE ? null : Number(v))}
       />
+      {selected?.piece_rate && (
+        <Text style={styles.hint}>
+          Piece-rate work: published at {formatRupees(selected.basic ?? 0)} per {selected.unit}. The minimum wage is not checked
+          automatically for piece rates.
+        </Text>
+      )}
       {selected?.minimum != null && (
         <Text style={styles.hint}>
           Statutory minimum: {formatRupees(selected.minimum)}/{unit} (Basic {formatRupees(selected.basic ?? 0)} + DA)
           {employment.da_verified === false ? " -- DA pending official verification" : ""}
+          {employment.da_stale ? " -- DA is for the period ending " + (employment.da_valid_to ?? "") + "; the next revision is not entered yet" : ""}
         </Text>
       )}
       {check?.available && check.meets === false && (
-        <Text style={styles.warn}>
-          Below minimum wage: {formatRupees(check.proposed ?? 0)}/{check.unit} vs {formatRupees(check.minimum ?? 0)}/
-          {check.unit} (short by {formatRupees(check.shortfall ?? 0)}). Basic + DA are compared, and a rate below the minimum can't be saved.
+        <Text style={styles.error}>
+          Minimum wage not met:
+          {" "}{formatRupees(check.proposed ?? 0)}/{check.unit} offered vs {formatRupees(check.minimum ?? 0)}/
+          {check.unit} required (short by {formatRupees(check.shortfall ?? 0)}). Basic + DA are compared, and a rate below the minimum can't be saved.
         </Text>
       )}
       {check?.available && check.meets === true && <Text style={styles.ok}>Meets the statutory minimum wage.</Text>}
@@ -109,11 +125,11 @@ export default function MinimumWageClassSelect({ token, employmentId, value, onC
 
 const styles = StyleSheet.create({
   hint: { fontSize: 12, color: colors.muted, marginBottom: spacing.sm },
-  warn: {
+  error: {
     fontSize: 12,
     fontWeight: "700",
-    color: colors.warningTintText,
-    backgroundColor: colors.warningTint,
+    color: colors.absentTintText,
+    backgroundColor: colors.absentTint,
     padding: spacing.sm,
     borderRadius: radius.sm,
     marginBottom: spacing.sm,

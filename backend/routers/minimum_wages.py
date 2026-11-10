@@ -38,13 +38,17 @@ def list_minimum_wage_employments(
         classes = []
         for cls in sorted((c for c in resolver.classes.values() if c.employment_id == emp.id), key=lambda c: c.sl_no):
             m = resolver.minimum_as_of(cls.id, day)
+            basic_v = mw._as_of_version(resolver._basics.get(cls.id, []), day)
             classes.append(
                 MinimumWageClassOut(
                     id=cls.id,
                     sl_no=cls.sl_no,
                     name=cls.name,
                     rate_type=cls.rate_type,
-                    basic=m["basic"] if m else None,
+                    group_name=cls.group_name,
+                    unit=cls.unit,
+                    piece_rate=cls.rate_type == "piece",
+                    basic=m["basic"] if m else (basic_v.basic if basic_v else None),
                     minimum=m["minimum"] if m else None,
                 )
             )
@@ -60,6 +64,8 @@ def list_minimum_wage_employments(
                 da_value=da_v.da_value if da_v else None,
                 da_effective_from=da_v.effective_from if da_v else None,
                 da_verified=da_v.verified if da_v else None,
+                da_valid_to=da_v.valid_to if da_v else None,
+                da_stale=bool(da_v and da_v.valid_to is not None and day > da_v.valid_to),
                 classes=classes,
             )
         )
@@ -98,6 +104,9 @@ def set_owner_minimum_wage_employment(
             models.Worker.owner_id == owner.id,
             models.Worker.min_wage_class_id.isnot(None),
         ).update({models.Worker.min_wage_class_id: None}, synchronize_session=False)
+    if body.employment_id is not None:
+        # every class of the employment becomes one of this factory's worker types
+        mw.ensure_worker_types(db, owner.id, body.employment_id)
     db.commit()
     db.refresh(owner)
     return _owner_out(db, owner)

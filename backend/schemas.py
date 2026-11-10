@@ -324,6 +324,14 @@ class WorkerTypeOut(BaseModel):
     name: str
     default_rate_type: str
     default_rate: float
+    # Types created from a minimum-wage class: the class, and the Basic / DA the
+    # default rate is made of (current, so a DA revision is reflected). piece_rate
+    # types have no default rate: they are paid per quantity, not per day.
+    min_wage_class_id: int | None = None
+    default_basic: float | None = None
+    default_da: float | None = None
+    piece_rate: bool = False
+    unit: str | None = None
 
 
 class WorkerTypeAssignIn(BaseModel):
@@ -809,7 +817,10 @@ class MinimumWageClassOut(BaseModel):
     id: int
     sl_no: int
     name: str
-    rate_type: str  # "daily" | "monthly"
+    rate_type: str  # "daily" | "monthly" | "piece"
+    group_name: str | None = None
+    unit: str | None = None
+    piece_rate: bool = False  # published per quantity: no automatic minimum
     basic: float | None = None  # in force today
     minimum: float | None = None  # Basic + DA in force today, per rate_type
 
@@ -825,6 +836,8 @@ class MinimumWageEmploymentOut(BaseModel):
     da_value: float | None = None  # per day, in force today
     da_effective_from: date | None = None
     da_verified: bool | None = None
+    da_valid_to: date | None = None
+    da_stale: bool = False  # the DA in force was published for a period that has ended
     classes: list[MinimumWageClassOut]
 
 
@@ -846,6 +859,8 @@ class MinimumWageCheckOut(BaseModel):
     proposed_per_day: float | None = None
     da_effective_from: date | None = None
     da_verified: bool | None = None
+    da_stale: bool | None = None
+    piece_rate: bool | None = None
 
 
 class MinimumWageEmploymentIn(BaseModel):

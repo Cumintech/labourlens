@@ -24,7 +24,8 @@ export function autofillFromWorkerType(
 ): { rateType: "daily" | "monthly"; basic: string; pfRate: string } {
   return {
     rateType: type.default_rate_type,
-    basic: !current.basic.trim() || toNumber(current.basic) === 0 ? String(type.default_rate) : current.basic,
+    // a piece-rate type has no daily/monthly rate to fill in
+    basic: type.piece_rate ? current.basic : !current.basic.trim() || toNumber(current.basic) === 0 ? String(type.default_rate) : current.basic,
     pfRate: !current.pfRate.trim() || toNumber(current.pfRate) === 0 ? DEFAULT_PF_RATE_PERCENT : current.pfRate,
   };
 }

@@ -2,9 +2,18 @@
 
 from fastapi import APIRouter
 
+import minimum_wage
 from common import *  # noqa: F401,F403
 
 router = APIRouter()
+
+
+def _employment_for_industry(db: Session, industry: str | None):
+    """The scheduled employment an industry choice maps to (rice mill, brick and tiles), if any."""
+    code = minimum_wage.INDUSTRY_TO_EMPLOYMENT.get(industry or "")
+    if code is None:
+        return None
+    return db.query(models.MinimumWageEmployment).filter_by(code=code).first()
 
 
 @router.post("/owners/signup", response_model=TokenOut, status_code=201)
@@ -53,8 +62,15 @@ def signup(request: Request, body: OwnerSignupIn, db: Session = Depends(get_db))
     # editable/removable like any owner-created type, seeded once at
     # signup (not lazily whenever the list is empty) so a deliberate
     # delete-all by the owner later is respected, not silently reappearing.
-    for name, default_rate in (("Plumber", 1000), ("Electrician", 1000), ("Helper", 500)):
-        db.add(models.WorkerType(owner_id=owner.id, name=name, default_rate_type="daily", default_rate=default_rate))
+    # A factory in a scheduled employment (rice mill, brick and tiles) gets that employment's
+    # classes as its worker types instead -- the generic ones below would sit under the minimum.
+    employment = _employment_for_industry(db, body.industry)
+    if employment is not None:
+        owner.min_wage_employment_id = employment.id
+        minimum_wage.ensure_worker_types(db, owner.id, employment.id)
+    else:
+        for name, default_rate in (("Plumber", 1000), ("Electrician", 1000), ("Helper", 500)):
+            db.add(models.WorkerType(owner_id=owner.id, name=name, default_rate_type="daily", default_rate=default_rate))
 
     # Every Owner is one factory for admin-portal purposes -- auto-create
     # the matching Factory row here rather than requiring the admin to
@@ -180,6 +196,12 @@ def update_factory_profile(
     owner.factory_licence_no = body.factory_licence_no
     owner.state = body.state
     owner.industry = body.industry
+    # Choosing a rice mill / brick and tiles industry sets the matching minimum-wage employment
+    # (only if none is chosen yet -- never silently re-classifies an existing factory).
+    employment = _employment_for_industry(db, body.industry)
+    if employment is not None and owner.min_wage_employment_id is None:
+        owner.min_wage_employment_id = employment.id
+        minimum_wage.ensure_worker_types(db, owner.id, employment.id)
     db.commit()
     db.refresh(owner)
     return _owner_out(db, owner)

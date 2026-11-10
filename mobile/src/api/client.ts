@@ -311,6 +311,14 @@ export type WorkerType = {
   name: string;
   default_rate_type: "daily" | "monthly";
   default_rate: number;
+  // Types created from a minimum-wage class (every factory in a scheduled employment gets one per class):
+  // picking one gives the worker that class, with the rate made of the class's current Basic + DA.
+  min_wage_class_id?: number | null;
+  default_basic?: number | null;
+  default_da?: number | null;
+  // Piece-rate work (per 1,000 bricks, per ton): paid per quantity, so there is no daily/monthly default rate.
+  piece_rate?: boolean;
+  unit?: string | null;
 };
 
 export function listWorkerTypes(token: string): Promise<WorkerType[]> {
@@ -349,7 +357,10 @@ export type MinimumWageClass = {
   id: number;
   sl_no: number;
   name: string;
-  rate_type: "daily" | "monthly";
+  rate_type: "daily" | "monthly" | "piece";
+  group_name?: string | null;
+  unit?: string | null;
+  piece_rate?: boolean;
   basic: number | null;
   minimum: number | null;
 };
@@ -361,6 +372,9 @@ export type MinimumWageEmployment = {
   jurisdiction: string;
   da_value: number | null;
   da_verified: boolean | null;
+  da_valid_to?: string | null;
+  // The DA in force was published for a period that has ended (a revision is pending)
+  da_stale?: boolean;
   classes: MinimumWageClass[];
 };
 
@@ -374,6 +388,8 @@ export type MinimumWageCheck = {
   meets: boolean | null;
   shortfall: number | null;
   da_verified: boolean | null;
+  da_stale?: boolean | null;
+  piece_rate?: boolean | null;
 };
 
 export function listMinimumWageEmployments(token: string): Promise<MinimumWageEmployment[]> {

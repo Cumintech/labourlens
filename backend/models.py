@@ -89,6 +89,9 @@ class WorkerType(Base, TenantScoped):
     # "daily" | "monthly" -- same convention as WageProfile.rate_type
     default_rate_type: Mapped[str] = mapped_column(String, default="daily", nullable=False)
     default_rate: Mapped[float] = mapped_column(nullable=False)
+    # Set for types created from a minimum-wage class: picking the type gives the worker
+    # that class, and the default rate follows the class's current Basic + DA
+    min_wage_class_id: Mapped[int | None] = mapped_column(ForeignKey("minimum_wage_classes.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -587,8 +590,13 @@ class MinimumWageClass(Base):
     employment_id: Mapped[int] = mapped_column(ForeignKey("minimum_wage_employments.id"), nullable=False, index=True)
     sl_no: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    # "daily" | "monthly" -- the unit the class's Basic is fixed in
+    # "daily" | "monthly" -- the unit the class's Basic is fixed in; "piece" for
+    # piece-rate work (per 1,000 bricks, per ton ...), which has no automatic minimum
     rate_type: Mapped[str] = mapped_column(String, nullable=False)
+    # Heading the class is listed under in the notification (e.g. "Group II - Grade I")
+    group_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # What the Basic is quoted per: "day", "month", "1,000 bricks", "ton" ...
+    unit: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class MinimumWageBasicVersion(Base):
@@ -616,3 +624,6 @@ class MinimumWageDaVersion(Base):
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
     verified: Mapped[bool] = mapped_column(default=False, nullable=False)
     source: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Last day this DA was published for (notifications state a period, e.g. to 31 March).
+    # Past it, the rate keeps applying until a revision is added, but is flagged as pending.
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)

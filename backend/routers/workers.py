@@ -550,7 +550,27 @@ def list_worker_types(
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
-    return db.query(models.WorkerType).filter(models.WorkerType.owner_id == owner.id).order_by(models.WorkerType.name).all()
+    types = db.query(models.WorkerType).filter(models.WorkerType.owner_id == owner.id).order_by(models.WorkerType.name).all()
+    resolver = minimum_wage.MinimumWageResolver(db)
+    today = date_.today()
+    out = []
+    for t in types:
+        d = minimum_wage.type_defaults(resolver, t, today)
+        linked = t.min_wage_class_id is not None
+        out.append(
+            WorkerTypeOut(
+                id=t.id,
+                name=t.name,
+                default_rate_type=d["rate_type"],
+                default_rate=d["rate"],
+                min_wage_class_id=t.min_wage_class_id,
+                default_basic=d["basic"] if linked else None,
+                default_da=d["da"] if linked else None,
+                piece_rate=d["piece_rate"],
+                unit=d["unit"],
+            )
+        )
+    return out
 
 
 @router.post("/worker-types", response_model=WorkerTypeOut, status_code=201)
@@ -638,14 +658,24 @@ def assign_worker_type(
         )
         if not worker_type:
             raise HTTPException(status_code=404, detail="Worker type not found")
+        resolver = minimum_wage.MinimumWageResolver(db)
+        defaults = minimum_wage.type_defaults(resolver, worker_type, date_.today())
+        # A type made from a minimum-wage class gives the worker that class (only if it
+        # belongs to the factory's employment).
+        if worker_type.min_wage_class_id is not None:
+            cls = resolver.classes.get(worker_type.min_wage_class_id)
+            if cls is not None and cls.employment_id == owner.min_wage_employment_id:
+                worker.min_wage_class_id = cls.id
         has_rate = db.query(models.WageProfile).filter(models.WageProfile.worker_id == worker_id).first()
-        if not has_rate:
+        # Piece-rate types have no daily/monthly rate to default to
+        if not has_rate and not defaults["piece_rate"]:
             db.add(
                 models.WageProfile(
                     worker_id=worker_id,
                     created_by=owner.id,
-                    rate_type=worker_type.default_rate_type,
-                    basic=worker_type.default_rate,
+                    rate_type=defaults["rate_type"],
+                    basic=defaults["basic"],
+                    da=defaults["da"],
                     # EPF's statutory employee contribution rate -- WageProfile.pf_rate
                     # defaults to 0 otherwise, silently leaving PF unset on every
                     # auto-created profile. Still just a default: the owner can
@@ -660,7 +690,7 @@ def assign_worker_type(
                     owner_id=owner.id,
                     worker_id=worker_id,
                     action="wage_rate_set",
-                    reason=f"auto-created from worker type '{worker_type.name}' default ({worker_type.default_rate_type} {worker_type.default_rate})",
+                    reason=f"auto-created from worker type '{worker_type.name}' default ({defaults['rate_type']} {defaults['rate']})",
                 )
             )
     worker.worker_type_id = body.worker_type_id

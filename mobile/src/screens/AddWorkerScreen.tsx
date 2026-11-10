@@ -316,6 +316,16 @@ export default function AddWorkerScreen({ navigation }: Props) {
       setBasic(filled.basic);
       setPfRate(filled.pfRate);
       setTypeAutoFilled(true);
+      // A type made from a minimum-wage class carries the class and its Basic + DA: set them, so the
+      // rate starts at the statutory minimum and the minimum-wage check is on for this worker.
+      if (type.min_wage_class_id != null) {
+        setMinWageClassId(type.min_wage_class_id);
+        if (type.default_da != null && type.default_basic != null && !type.piece_rate) {
+          setBasic(String(type.default_basic));
+          setDa(String(type.default_da));
+          setMorePayOpen(true);
+        }
+      }
     } else {
       setTypeAutoFilled(false);
     }
@@ -777,6 +787,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   autoFilled={typeAutoFilled}
                   autoFilledLabel="Auto-filled from type"
                   keyboardType="numeric"
+                  error={belowMinimumWage ? "Below the minimum wage for the selected class -- raise Basic or add DA" : undefined}
                 />
                 <Field
                   label="PF rate (%)"

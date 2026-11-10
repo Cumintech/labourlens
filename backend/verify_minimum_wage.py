@@ -20,9 +20,9 @@ Base.metadata.create_all(bind=engine)
 with SessionLocal() as db:
     mw.seed_reference_data(db)
     mw.seed_reference_data(db)  # idempotent
-    assert db.query(models.MinimumWageClass).count() == 33
-    assert db.query(models.MinimumWageBasicVersion).count() == 33
-    assert db.query(models.MinimumWageDaVersion).count() == 1
+    assert db.query(models.MinimumWageClass).count() == 33 + 73  # rice mills + brick and tiles
+    assert db.query(models.MinimumWageBasicVersion).count() == 33 + 73
+    assert db.query(models.MinimumWageDaVersion).count() == 3  # rice 2025-26 and 2026-27, brick 2025-26
 
 # --- pure maths -----------------------------------------------------------
 assert mw.minimum_for("daily", 270.50, 292.80) == 563.30
@@ -36,7 +36,8 @@ assert mw.convert_amount(100, "daily", "daily") == 100
 TODAY = date(2026, 11, 7)
 with SessionLocal() as db:
     r = mw.MinimumWageResolver(db)
-    by_name = {c.name: c for c in r.classes.values()}
+    rice_id = next(e.id for e in r.employments.values() if e.code == mw.TN_RICE_FLOUR_DHALL)
+    by_name = {c.name: c for c in r.classes.values() if c.employment_id == rice_id}  # ("Clerk", "Mechanic" ... also exist in other employments)
     for _sl, name, rate_type, basic in mw.TN_RICE_FLOUR_DHALL_CLASSES:
         m = r.minimum_as_of(by_name[name].id, TODAY)
         want = round(basic + (292.80 if rate_type == "daily" else 8784), 2)
@@ -46,7 +47,8 @@ with SessionLocal() as db:
     assert r.minimum_as_of(by_name["Clerk"].id, TODAY)["minimum"] == 16416
     assert r.minimum_as_of(by_name["Attenders"].id, TODAY)["minimum"] == 16147
     # before any DA version existed -> no minimum (never a guess)
-    assert r.minimum_as_of(by_name["Clerk"].id, date(2026, 3, 31)) is None
+    assert r.minimum_as_of(by_name["Clerk"].id, date(2025, 3, 31)) is None
+    assert r.minimum_as_of(by_name["Clerk"].id, date(2026, 3, 31))["minimum"] == 7632 + 291.20 * 30  # 2025-26 DA
     hamali = by_name["Hamalis (Bag Carriers)"].id
     clerk = by_name["Clerk"].id
 
@@ -67,7 +69,7 @@ with SessionLocal() as db:
 
 # --- Basic and DA versioned separately: a DA revision never touches Basic ---
 with SessionLocal() as db:
-    emp = db.query(models.MinimumWageEmployment).one()
+    emp = db.query(models.MinimumWageEmployment).filter_by(code=mw.TN_RICE_FLOUR_DHALL).one()
     db.add(models.MinimumWageDaVersion(employment_id=emp.id, da_value=300.0, effective_from=date(2027, 4, 1), verified=True, source="test"))
     db.commit()
     basics_before = db.query(models.MinimumWageBasicVersion).count()
@@ -92,10 +94,12 @@ h2 = signup("9000000912", "MinWage B")
 assert client.get("/minimum-wages/employments").status_code in (401, 403)
 
 emps = client.get("/minimum-wages/employments", headers=h).json()
-assert len(emps) == 1 and len(emps[0]["classes"]) == 33 and emps[0]["jurisdiction"] == "Tamil Nadu", emps
-assert emps[0]["da_value"] == 292.80 and emps[0]["da_verified"] is False
-emp_id = emps[0]["id"]
-classes = {c["name"]: c for c in emps[0]["classes"]}
+assert len(emps) == 2 and {e["code"] for e in emps} == {"tn_rice_flour_dhall_mills", "tn_brick_tiles"}, emps
+rice = next(e for e in emps if e["code"] == "tn_rice_flour_dhall_mills")
+assert len(rice["classes"]) == 33 and rice["jurisdiction"] == "Tamil Nadu", rice
+assert rice["da_value"] == 292.80 and rice["da_stale"] is False
+emp_id = rice["id"]
+classes = {c["name"]: c for c in rice["classes"]}
 hamali_id, clerk_id = classes["Hamalis (Bag Carriers)"]["id"], classes["Clerk"]["id"]
 assert classes["Hamalis (Bag Carriers)"]["minimum"] == 563.30 and classes["Clerk"]["minimum"] == 16416
 
@@ -123,7 +127,7 @@ assert client.put(f"/workers/{wid}/minimum-wage-class", headers=h2, json={"class
 # the legacy 400/day rate (saved before the class existed) now shows as below the minimum
 g = client.get(f"/workers/{wid}/wage-computation", headers=h, params={"month": 11, "year": 2026}).json()
 assert g["meets_min_wage"] is False and g["min_daily_wage"] == 563.3 and g["min_wage_class"] == "Hamalis (Bag Carriers)", g
-assert g["min_wage_amount"] == 563.3 and g["min_wage_unit"] == "day" and g["min_wage_da_verified"] is False, g
+assert g["min_wage_amount"] == 563.3 and g["min_wage_unit"] == "day" and g["min_wage_da_verified"] is True, g  # owner confirmed the 2026-27 DA
 def rate_raw(basic, da, rate_type="daily", eff="2026-01-01"):
     return client.post(f"/workers/{wid}/wage-profile", headers=h, json={"rate_type": rate_type, "basic": basic, "hra": 0, "da": da, "other_allowances": 0, "pf_rate": 0, "esi_rate": 0, "lwf_amount": 0, "effective_from": eff})
 def rate(basic, da, rate_type="daily", eff="2026-01-01"):
@@ -136,7 +140,7 @@ assert bad.status_code == 422 and "Below the minimum wage for Hamalis" in bad.js
 assert rate_raw(270.50, 0, eff="2026-11-01").status_code == 422          # forgot the DA: 270.5 < 563.3
 assert rate_raw(14000, 0, "monthly", eff="2026-11-01").status_code == 422  # 14000/26 = 538.5/day
 assert rate_raw(270.50, 292.80, eff="2026-11-01").status_code == 201       # exactly the minimum
-assert rate_raw(127, 0, eff="2026-03-01").status_code == 201               # no DA in force that early: nothing to compare against
+assert rate_raw(127, 0, eff="2025-03-01").status_code == 201               # no DA in force that early: nothing to compare against
 assert len(client.get(f"/workers/{wid}/wage-profile/history", headers=h).json()) == 3  # legacy + the two accepted; refused rates were not saved
 # a worker with no class is not checked
 nw = client.post("/workers", headers=h, json={"name": "No Class Worker", "aadhaar_number": "555511117003"}).json()
@@ -145,7 +149,7 @@ rate(270.50, 292.80, eff="2026-06-01")
 g = client.get(f"/workers/{wid}/wage-computation", headers=h, params={"month": 11, "year": 2026}).json()
 assert g["meets_min_wage"] is True and g["daily_equivalent_rate"] == 563.3, g
 # a month before any DA existed: no comparison rather than a wrong one
-g = client.get(f"/workers/{wid}/wage-computation", headers=h, params={"month": 2, "year": 2026}).json()
+g = client.get(f"/workers/{wid}/wage-computation", headers=h, params={"month": 2, "year": 2025}).json()
 assert g["meets_min_wage"] is None and g["min_wage_class"] is None, g
 s = client.get("/wage-summary", headers=h, params={"month": 11, "year": 2026}).json()
 assert s["workers"][0]["meets_min_wage"] is True, s

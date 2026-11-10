@@ -69,6 +69,11 @@
 - POST /workers/{id}/id-card uses it for workers created on/after ID_CARD_NEW_FORMAT_FROM (env, default 2026-11-10); earlier workers keep the one-sided card; ?layout=new|classic forces either.
 - New optional Worker.blood_group (migration f4c8b2d6a1e3: BACK UP, run `alembic upgrade head` manually) set in Add Worker step 2; blank line on the card if unset. No edit screen for it yet.
 
+## Brick & Tiles employment + worker types (2026-11-10, feat/brick-employment-worker-types)
+- Second scheduled employment: Brick and Tiles Manufacturing (73 classes, DA 236.60/day published for 2025-26 -- flagged "pending" after 31 Mar 2026 until a revision row is added; still used meanwhile). Rice Mills gets its 2025-26 DA (291.20). Data: backend/minimum_wage_data.py (+ migration a5d7c9e1f3b2: BACK UP, run `alembic upgrade head` manually).
+- Piece-rate brick lines (per 1,000 bricks / per ton) are stored with their unit and NOT checked automatically (no confirmed rule for DA on piece rates). "Fireman, kiln" is daily and checked. Mixing allowance Rs 32.50 is a note only. Figures come from owner-supplied notification text -- verify against the screenshots (two Chamber-bricks lines; 457.98 vs 457.96; "sand to kiln" unit unclear).
+- Every factory in a scheduled employment gets one worker type per class (ensure_worker_types): at signup via industry rice_mill/brick_tiles, or when the employment is picked in Factory Profile (idempotent; a same-named hand-made type is linked, not duplicated). Picking a type gives the worker the class and Basic+DA rate; below-minimum is a red error in Add Worker and a 422 from the server. Generic starter types (Plumber/Electrician/Helper) are skipped for these factories.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

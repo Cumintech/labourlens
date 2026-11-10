@@ -77,6 +77,9 @@
 ## Appointment letter format (2026-11-10, feat/appointment-letter-format)
 - forms.build_appointment_letter now prints the 16-item format (name ... any other information, employer signature) as a one-page A4 form with ruled values; Tamil-safe. Values come from what is on file; unknown items are blank ruled lines. Aadhaar is printed MASKED (XXXX XXXX last4) because worker consent isn't recorded. "Labour Identification Number of the establishment" is blank: the app stores the factory licence/registration no., not the LIN -- add an owner field if wanted. "Category of skill" shows the minimum-wage class group (e.g. Group I - Skilled) when set. Applies to every letter generated from now on (it is generated on demand, nothing stored).
 
+## Profile save blocked for numeric usernames (2026-11-10, fix/profile-save-numeric-username)
+- Accounts from before usernames existed use their mobile number as the username (starts with a digit). ProfileScreen re-validated it on every save ("starts with a letter") and re-sent it to PUT /owners/me/account, so saving the profile (or adding an email) failed. Now only a CHANGED username/email is validated and sent. New usernames still must start with a letter. Test: verify_legacy_username.py.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

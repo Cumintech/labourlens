@@ -65,19 +65,29 @@ export default function ProfileScreen({}: Props) {
       Alert.alert("Factory name required", "This is the name shown on your Home screen and every statutory form.");
       return;
     }
-    if (username.trim() && !isValidUsername(username)) {
+    // Only what the owner actually changed is checked and sent. Accounts created before usernames existed
+    // use their mobile number as the username (it starts with a digit), which is valid to log in with but
+    // would fail the "starts with a letter" rule for NEW usernames -- re-validating it on every save blocked
+    // saving the profile at all.
+    const usernameChanged = username.trim().toLowerCase() !== (owner?.username ?? "").toLowerCase();
+    const emailChanged = email.trim() !== (owner?.email ?? "");
+    if (usernameChanged && username.trim() && !isValidUsername(username)) {
       Alert.alert("Check your username", "3-30 characters, starting with a letter (letters, numbers, \".\" or \"_\" only).");
       return;
     }
-    if (email.trim() && !isValidEmail(email)) {
+    if (emailChanged && email.trim() && !isValidEmail(email)) {
       Alert.alert("Check your email", "Enter a valid email address.");
       return;
     }
     setSaving(true);
     try {
       let updated = owner!;
-      if (username.trim() !== (owner?.username ?? "") || email.trim() !== (owner?.email ?? "")) {
-        updated = await updateAccount(token, username.trim() || undefined, email.trim() || undefined);
+      if (usernameChanged || emailChanged) {
+        updated = await updateAccount(
+          token,
+          usernameChanged ? username.trim() || undefined : undefined,
+          emailChanged ? email.trim() || undefined : undefined,
+        );
       }
       updated = await updateFactoryProfile(
         token,

@@ -142,6 +142,8 @@ class Worker(Base, TenantScoped):
     employment_type: Mapped[str | None] = mapped_column(String, nullable=True)
     is_ism: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
     home_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Printed on the ID card (optional): A+, A-, B+, B-, AB+, AB-, O+, O-
+    blood_group: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # "active" | "deactivated"
     status: Mapped[str] = mapped_column(String, default="active", nullable=False)

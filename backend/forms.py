@@ -1832,6 +1832,238 @@ def build_id_card(owner: models.Owner, worker: models.Worker, photo_bytes: bytes
     return buf.getvalue(), "application/pdf", f"id_card_{worker.id}.pdf"
 
 
+# ---------------------------------------------------------------------------
+# ID card, new two-sided portrait layout (front + back), used for workers added
+# from ID_CARD_NEW_FORMAT_FROM on; earlier workers keep the one-sided card above.
+# ---------------------------------------------------------------------------
+ID_CARD_PORTRAIT = (54 * mm, 85.6 * mm)  # CR80 (standard card), portrait
+_ID_BLUE = "#0E5BAA"
+_ID_TEXT = "#1F2937"
+_ID_LINE = "#7A8599"
+_ID_NOTES = (
+    "This card is non-transferable.",
+    "This card must be produced on demand.",
+    "Loss of card must be reported immediately to the issuing authority.",
+    "If found, please return to the above address.",
+)
+
+
+class _IdCardPen:
+    """Text/line drawing on the card canvas. Tamil goes through the same
+    shape-and-rasterize path as the rest of the app's PDFs (ReportLab can't
+    draw Tamil itself); everything is positioned from the TOP of the card."""
+
+    def __init__(self, c: pdf_canvas.Canvas, height: float):
+        self.c, self.h = c, height
+
+    def y(self, top_mm: float) -> float:
+        return self.h - top_mm * mm
+
+    def width(self, text: str, font: str, size: float) -> float:
+        if _contains_tamil(text):
+            rendered = _shape_and_rasterize_tamil_line(text, "#000000")
+            if rendered is not None:
+                return rendered[1] * (size / _TAMIL_RENDER_PX)
+        return self.c.stringWidth(text, font, size)
+
+    def fit(self, text: str, font: str, size: float, max_w: float, min_size: float = 3.6) -> tuple[str, float]:
+        """Shrinks the font to fit, then truncates as a last resort."""
+        while self.width(text, font, size) > max_w and size > min_size:
+            size -= 0.2
+        if self.width(text, font, size) > max_w:
+            while self.width(text + "...", font, size) > max_w and len(text) > 1:
+                text = text[:-1]
+            text += "..."
+        return text, size
+
+    def wrap_fit(self, text: str, font: str, size: float, max_w: float, max_lines: int) -> list[str]:
+        """Wraps to at most max_lines; the last line ends in "..." if the text
+        still doesn't fit, so nothing is dropped silently."""
+        lines = self.wrap(text, font, size, max_w)
+        if len(lines) <= max_lines:
+            return lines
+        kept = lines[: max_lines - 1]
+        tail = " ".join(lines[max_lines - 1 :])
+        kept.append(self.fit(tail, font, size, max_w, min_size=size)[0])
+        return kept
+
+    def wrap(self, text: str, font: str, size: float, max_w: float) -> list[str]:
+        if _contains_tamil(text):
+            return _wrap_tamil_lines(text, size, max_width_pt=max_w)
+        lines, line = [], ""
+        for word in text.split():
+            candidate = f"{line} {word}".strip()
+            if self.c.stringWidth(candidate, font, size) > max_w and line:
+                lines.append(line)
+                line = word
+            else:
+                line = candidate
+        if line:
+            lines.append(line)
+        return lines
+
+    def text(self, x: float, top_mm: float, text: str, font: str, size: float, color: str, align: str = "left") -> None:
+        y = self.y(top_mm)
+        if _contains_tamil(text):
+            rendered = _shape_and_rasterize_tamil_line(text, color)
+            if rendered is not None:
+                png_bytes, px_w, px_h = rendered
+                scale = size / _TAMIL_RENDER_PX
+                w, h = px_w * scale, px_h * scale
+                left = x - w / 2 if align == "centre" else x - w if align == "right" else x
+                self.c.drawImage(ImageReader(io.BytesIO(png_bytes)), left, y - h * 0.2, width=w, height=h, mask="auto")
+                return
+        self.c.setFont(font, size)
+        self.c.setFillColor(pdf_colors.HexColor(color))
+        {"left": self.c.drawString, "centre": self.c.drawCentredString, "right": self.c.drawRightString}[align](x, y, text)
+
+    def hline(self, x1: float, x2: float, top_mm: float, color: str = _ID_LINE, width: float = 0.35) -> None:
+        self.c.setStrokeColor(pdf_colors.HexColor(color))
+        self.c.setLineWidth(width)
+        self.c.line(x1, self.y(top_mm), x2, self.y(top_mm))
+
+
+def _id_card_frame(pen: _IdCardPen, owner: models.Owner) -> None:
+    """Border, blue header (factory name / address / registration no.) and the
+    wave at the bottom -- identical on both sides."""
+    c = pen.c
+    w, h = ID_CARD_PORTRAIT
+    inset = 0.7 * mm
+    # everything below is clipped to the rounded card outline
+    clip = c.beginPath()
+    clip.roundRect(inset, inset, w - 2 * inset, h - 2 * inset, 3 * mm)
+    c.saveState()
+    c.clipPath(clip, stroke=0, fill=0)
+    c.setFillColor(pdf_colors.HexColor(_ID_BLUE))
+    c.rect(0, h - 15.5 * mm, w, 15.5 * mm, stroke=0, fill=1)
+    for colour, (y0, y1, y2) in (("#CFE5F8", (8.5, 12, 2.5)), ("#8FC3EE", (5, 8, 0.5))):
+        wave = c.beginPath()
+        wave.moveTo(0, y0 * mm)
+        wave.curveTo(w * 0.28, y1 * mm, w * 0.6, y2 * mm, w, (y0 + 2.5) * mm)
+        wave.lineTo(w, 0)
+        wave.lineTo(0, 0)
+        wave.close()
+        c.setFillColor(pdf_colors.HexColor(colour))
+        c.drawPath(wave, stroke=0, fill=1)
+    c.restoreState()
+    c.setStrokeColor(pdf_colors.HexColor(_ID_BLUE))
+    c.setLineWidth(0.9)
+    c.roundRect(inset, inset, w - 2 * inset, h - 2 * inset, 3 * mm, stroke=1, fill=0)
+
+    max_w = w - 6 * mm
+    name, size = pen.fit(owner.factory_name or "", "Helvetica-Bold", 8, max_w, min_size=5.2)
+    pen.text(w / 2, 5.3, name, "Helvetica-Bold", size, "#FFFFFF", "centre")
+    top = 8.2
+    for line in (pen.wrap(owner.factory_address or "", "Helvetica", 4.2, max_w) or [""])[:2]:
+        pen.text(w / 2, top, line, "Helvetica", 4.2, "#FFFFFF", "centre")
+        top += 2.5
+    reg = f"(Registration No. {owner.factory_licence_no})" if owner.factory_licence_no else "(Registration No. ______________)"
+    pen.text(w / 2, top + 0.4, reg, "Helvetica", 4.2, "#FFFFFF", "centre")
+
+
+def build_id_card_v2(
+    owner: models.Owner,
+    worker: models.Worker,
+    photo_bytes: bytes,
+    father_name: str | None = None,
+    issued_on: date | None = None,
+    employee_no: str | None = None,
+) -> tuple[bytes, str, str]:
+    """Two-page ID card (page 1 front, page 2 back) in the factory's standard
+    layout: header with factory name/address/registration no., photo, name,
+    father's/husband's name, date of birth, blood group, employee no., nature
+    of employment, date of issue; back with permanent/present address, the
+    four conditions and the holder's signature."""
+    width, height = ID_CARD_PORTRAIT
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=ID_CARD_PORTRAIT)
+    pen = _IdCardPen(c, height)
+    issued_on = issued_on or date.today()
+
+    # ----- front -----
+    _id_card_frame(pen, owner)
+    pen.text(width / 2, 20.6, "EMPLOYEE ID CARD", "Helvetica-Bold", 7.2, _ID_BLUE, "centre")
+    photo_w, photo_h = 17.5 * mm, 22 * mm
+    photo_x, photo_top = (width - photo_w) / 2, 23.2
+    photo_y = pen.y(photo_top) - photo_h
+    try:
+        c.drawImage(ImageReader(io.BytesIO(photo_bytes)), photo_x, photo_y, width=photo_w, height=photo_h, preserveAspectRatio=True, anchor="c")
+    except Exception:
+        pass  # an unreadable photo leaves just the frame; re-upload and reprint
+    c.setStrokeColor(pdf_colors.HexColor(_ID_BLUE))
+    c.setLineWidth(0.7)
+    c.rect(photo_x, photo_y, photo_w, photo_h)
+
+    employment = {"permanent": "Permanent", "temporary": "Temporary", "contract": "Contract"}.get(worker.employment_type or "", "")
+    rows = [
+        ("Name", worker.name),
+        ("Father's/Husband's Name", father_name or ""),
+        ("Date of Birth", worker.dob.strftime("%d-%m-%Y") if worker.dob else ""),
+        ("Blood Group", getattr(worker, "blood_group", None) or ""),
+        ("Employee No.", employee_no or worker.numeric_employee_code or ""),
+        ("Nature of Employment", employment),
+        ("Date of Issue", issued_on.strftime("%d-%m-%Y")),
+    ]
+    label_x, colon_x, value_x, right = 3.6 * mm, 25.2 * mm, 26.4 * mm, width - 3.4 * mm
+    top = 49.6
+    # rows whose value is too long for one line take a second line; the others
+    # then close up so the last row never runs into the Issuing Authority line
+    wrapping = sum(
+        1
+        for label, value in rows
+        if label in ("Name", "Father's/Husband's Name") and value and pen.width(value, "Helvetica-Bold", 5.2) > right - value_x
+    )
+    pitch = min(4.15, (74.8 - top - 2.2 * wrapping) / (len(rows) - 1))
+    for label, value in rows:
+        pen.text(label_x, top, label, "Helvetica", 4.6, _ID_TEXT)
+        pen.text(colon_x, top, ":", "Helvetica", 4.6, _ID_TEXT)
+        two_lines = label in ("Name", "Father's/Husband's Name")
+        if value and two_lines and pen.width(value, "Helvetica-Bold", 5.2) > right - value_x:
+            # a long name: two smaller lines rather than cutting it off
+            for k, line in enumerate(pen.wrap_fit(value, "Helvetica-Bold", 4.3, right - value_x, 2)):
+                pen.text(value_x, top - 1.0 + k * 2.3, line, "Helvetica-Bold", 4.3, "#0B1E3F")
+            pen.hline(value_x, right, top + 1.9)
+            top += 2.2  # the extra line pushes the rows below it down
+        else:
+            if value:
+                shown, size = pen.fit(value, "Helvetica-Bold", 5.2, right - value_x)
+                pen.text(value_x, top - 0.25, shown, "Helvetica-Bold", size, "#0B1E3F")
+            pen.hline(value_x, right, top + 0.7)
+        top += pitch
+    pen.hline(width - 22 * mm, width - 3.4 * mm, 79.6, "#0B1E3F", 0.4)
+    pen.text(width - 3.4 * mm, 81.9, "Issuing Authority", "Helvetica-Bold", 4.8, "#0B1E3F", "right")
+    c.showPage()
+
+    # ----- back -----
+    _id_card_frame(pen, owner)
+    pen.text(label_x, 19.4, "Address", "Helvetica", 4.8, _ID_TEXT)
+    addr_x = value_x - 2.6 * mm
+    for label, address, first_top in (("Permanent", worker.native_address, 23.2), ("Present", worker.current_address, 36.9)):
+        pen.text(label_x + 1.5 * mm, first_top, label, "Helvetica", 4.6, _ID_TEXT)
+        pen.text(colon_x - 2.6 * mm, first_top, ":", "Helvetica", 4.6, _ID_TEXT)
+        lines = pen.wrap_fit(address or "", "Helvetica-Bold", 4.4, right - addr_x, 3)
+        for k in range(3):
+            line_top = first_top + k * 3.3
+            if k < len(lines):
+                pen.text(addr_x, line_top - 0.25, lines[k], "Helvetica-Bold", 4.4, "#0B1E3F")
+            pen.hline(addr_x, right, line_top + 0.7)
+    box_top, box_bottom = 47.6, 71.4
+    c.setFillColor(pdf_colors.HexColor("#E3EFFB"))
+    c.roundRect(3 * mm, pen.y(box_bottom), width - 6 * mm, (box_bottom - box_top) * mm, 1.8 * mm, stroke=0, fill=1)
+    top = box_top + 3.5
+    for number, note in enumerate(_ID_NOTES, 1):
+        pen.text(4.6 * mm, top, f"{number}.", "Helvetica", 4.3, _ID_TEXT)
+        for line in pen.wrap(note, "Helvetica", 4.3, width - 15.5 * mm):
+            pen.text(7.2 * mm, top, line, "Helvetica", 4.3, _ID_TEXT)
+            top += 2.9
+        top += 0.8
+    pen.hline(width - 25 * mm, width - 3.4 * mm, 79.6, "#0B1E3F", 0.4)
+    pen.text(width - 3.4 * mm, 81.9, "Signature of the Holder", "Helvetica-Bold", 4.8, "#0B1E3F", "right")
+    c.showPage()
+    c.save()
+    return buf.getvalue(), "application/pdf", f"id_card_{worker.id}.pdf"
+
+
 # --------------------------------------------------------------------------
 # Appointment Letter -- built on the same SimpleDocTemplate/Paragraph
 # machinery as Form 12/15/Wage Slip (reusing _header_elements for the

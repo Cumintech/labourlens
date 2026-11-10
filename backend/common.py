@@ -219,6 +219,7 @@ def _find_owner_by_identifier(db: Session, identifier: str) -> models.Owner | No
 
 RESET_CODE_TTL_MINUTES = 15
 
+ID_CARD_NEW_FORMAT_FROM = date_.fromisoformat(os.environ.get("ID_CARD_NEW_FORMAT_FROM", "2026-11-10"))  # workers added from this day get the new two-sided card
 MAX_OCR_UPLOAD_BYTES = 8 * 1024 * 1024
 
 # The mobile app compresses to ~400x500px JPEG at ~60-70% quality before
@@ -571,6 +572,7 @@ __all__ = [
     "_find_owner_by_identifier",
     "RESET_CODE_TTL_MINUTES",
     "MAX_OCR_UPLOAD_BYTES",
+    "ID_CARD_NEW_FORMAT_FROM",
     "MAX_PHOTO_UPLOAD_BYTES",
     "_generate_worker_code",
     "_compliance_out",

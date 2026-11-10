@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 import calendar
+from typing import Literal
 
 from common import *  # noqa: F401,F403
 from common import _worker_wage_out, date_, minimum_wage  # noqa: F401
@@ -83,6 +84,7 @@ def create_worker(
         employment_type=body.employment_type,
         is_ism=body.is_ism,
         home_state=body.home_state,
+        blood_group=body.blood_group,
     )
     db.add(worker)
     db.commit()
@@ -271,9 +273,13 @@ async def upload_worker_photo(
 @router.post("/workers/{worker_id}/id-card")
 def generate_id_card(
     worker_id: int,
+    layout: Literal["new", "classic"] | None = None,
     owner: models.Owner = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ):
+    """The factory-standard two-sided card (front + back) for workers added on or
+    after ID_CARD_NEW_FORMAT_FROM; earlier workers keep the one-sided classic
+    card. `layout` forces one or the other."""
     worker = _get_owned_worker(worker_id, owner, db)
     if not worker.photo_key:
         raise HTTPException(status_code=400, detail="Upload a photo for this worker before generating an ID card.")
@@ -287,7 +293,18 @@ def generate_id_card(
     # information isn't worth the extra storage for how cheap this is to
     # regenerate (a handful of Canvas draw calls, no per-worker register
     # scan like Form 25).
-    content, media_type, filename = forms.build_id_card(owner, worker, photo_bytes)
+    use_new = layout == "new" or (layout is None and worker.created_at.date() >= ID_CARD_NEW_FORMAT_FROM)
+    if use_new:
+        compliance = db.query(models.WorkerCompliance).filter(models.WorkerCompliance.worker_id == worker.id).first()
+        content, media_type, filename = forms.build_id_card_v2(
+            owner,
+            worker,
+            photo_bytes,
+            father_name=compliance.father_or_spouse_name if compliance else None,
+            employee_no=(worker.numeric_employee_code or (compliance.worker_code if compliance else None)),
+        )
+    else:
+        content, media_type, filename = forms.build_id_card(owner, worker, photo_bytes)
     _log_form_generation(db, owner, "id_card", worker_id, None, None, "generated")
     return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 

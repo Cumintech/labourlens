@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react-native";
+import { Lock } from "../icons";
 import React, { useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useAppLock } from "../context/AppLockContext";

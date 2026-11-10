@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import RateTypeSelect from "../components/RateTypeSelect";
-import { Info } from "lucide-react-native";
+import { Info } from "../icons";
 import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {

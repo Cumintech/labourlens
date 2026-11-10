@@ -61,6 +61,9 @@
 - Add Worker compliance step: only Salary type and Father/Spouse name are required (red *); Nature of work, joining date, EPF/UAN, ESIC are optional.
 - Minimum wage is now enforced: Add Worker step 3 blocks Continue when Basic+DA is below the class minimum (and requires a class when the factory has an employment set); POST /workers/{id}/wage-profile returns 422 for a below-minimum rate (class assigned, rate in force on the effective date). Workers without a class, or dates before any DA version, are not checked. Auto-created rates from a Worker Type default are not checked.
 
+## Metro bundle trim (2026-11-10, fix/master-with-metro-trim)
+- Replaces unmerged PR #12 (conflicted with master). Icons come from src/icons.ts (per-icon paths) and App.tsx imports only the 3 fonts used: dev bundle ~3,963 -> ~2,161 modules. Add new icons to src/icons.ts, never import from the lucide package root.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

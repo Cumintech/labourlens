@@ -1,5 +1,5 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Building2, Clock, Crown, FileText, Fingerprint, HelpCircle, LogOut, Shield, Tag, Trash2 } from "lucide-react-native";
+import { Building2, Clock, Crown, FileText, Fingerprint, HelpCircle, LogOut, Shield, Tag, Trash2 } from "../icons";
 import React, { useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";

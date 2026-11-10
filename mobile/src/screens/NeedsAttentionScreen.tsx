@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import { AlertTriangle, ChevronRight, Fingerprint, ListChecks, ShieldAlert } from "lucide-react-native";
+import { AlertTriangle, ChevronRight, Fingerprint, ListChecks, ShieldAlert } from "../icons";
 import React, { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

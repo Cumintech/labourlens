@@ -1,4 +1,5 @@
-import { ChevronRight, LucideIcon } from "lucide-react-native";
+import { ChevronRight } from "../../icons";
+import type { LucideIcon } from "lucide-react-native";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radius, spacing } from "../../theme";

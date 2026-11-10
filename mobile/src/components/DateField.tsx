@@ -1,4 +1,4 @@
-import { Calendar } from "lucide-react-native";
+import { Calendar } from "../icons";
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { colors, radius, spacing } from "../theme";

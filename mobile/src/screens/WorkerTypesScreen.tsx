@@ -3,7 +3,7 @@ import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Alert, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { ApiError, WorkerType, createWorkerType, deleteWorkerType, listWorkerTypes, updateWorkerType } from "../api/client";
-import { ChevronRight, Plus } from "lucide-react-native";
+import { ChevronRight, Plus } from "../icons";
 import ErrorState from "../components/ErrorState";
 import TradeIcon from "../components/TradeIcon";
 import KeyboardScreen from "../components/KeyboardScreen";

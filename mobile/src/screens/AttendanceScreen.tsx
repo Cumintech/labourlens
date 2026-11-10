@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
-import { Calendar, Check, ChevronLeft, ChevronRight, Copy, Search } from "lucide-react-native";
+import { Calendar, Check, ChevronLeft, ChevronRight, Copy, Search } from "../icons";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,

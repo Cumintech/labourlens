@@ -282,6 +282,7 @@ export type Worker = {
   deactivated_reason: string | null;
   worker_type_id: number | null;
   min_wage_class_id: number | null;
+  blood_group: string | null;
   numeric_employee_code: string | null;
   // A confirmed device mapping, if any -- null means "Not mapped", not
   // an error. Never the direct-employee-code enrollment path (that has
@@ -443,6 +444,7 @@ export type WorkerCreateInput = {
   employment_type?: "permanent" | "temporary" | "contract" | null;
   is_ism?: boolean;
   home_state?: string | null;
+  blood_group?: string | null;
 };
 
 // Multipart upload -- not JSON, so this bypasses the request() helper

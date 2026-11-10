@@ -105,6 +105,42 @@ print(f"Generated ID card PDF size: {len(pdf_bytes)} bytes")
 assert len(pdf_bytes) < 100 * 1024, f"ID card PDF is larger than the ~100KB target: {len(pdf_bytes)} bytes"
 print("ID card PDF generated: valid PDF, under the size target: PASSED")
 
+# --- New two-sided factory layout: page 1 front, page 2 back, with the worker's real details ---
+from pypdf import PdfReader
+
+full = client.post("/workers", headers=headers, json={
+    "name": "Ganesh Prabu", "aadhaar_number": "555511112225", "dob": "1984-06-15", "blood_group": "B+",
+    "employment_type": "permanent", "native_address": "12 Gandhi Street, Madurai", "current_address": "45 Mill Road, Namakkal",
+}).json()
+assert full["blood_group"] == "B+", full
+assert client.post("/workers", headers=headers, json={"name": "Bad Blood", "aadhaar_number": "555511114448", "blood_group": "Z+"}).status_code == 422
+client.post(f"/workers/{full['id']}/compliance", headers=headers, json={"father_or_spouse_name": "Muthu"})
+client.post(f"/workers/{full['id']}/photo", headers=headers, files={"photo": ("p.jpg", photo_bytes, "image/jpeg")})
+new_card = client.post(f"/workers/{full['id']}/id-card?layout=new", headers=headers)
+assert new_card.status_code == 200, new_card.text
+pdf = PdfReader(io.BytesIO(new_card.content))
+assert len(pdf.pages) == 2, len(pdf.pages)
+front, back = (pdf.pages[0].extract_text(), pdf.pages[1].extract_text())
+for text in ("Sunrise Textiles", "EMPLOYEE ID CARD", "Ganesh Prabu", "Muthu", "15-06-1984", "B+", "Permanent", "Date of Issue", "Issuing Authority"):
+    assert text in front, (text, front)
+for text in ("Sunrise Textiles", "Address", "12 Gandhi Street", "45 Mill Road", "non-transferable", "Signature of the Holder"):
+    assert text in back, (text, back)
+w, h = (float(pdf.pages[0].mediabox.width), float(pdf.pages[0].mediabox.height))
+assert h > w, "the new card is portrait"
+classic = client.post(f"/workers/{full['id']}/id-card?layout=classic", headers=headers)
+assert len(PdfReader(io.BytesIO(classic.content)).pages) == 1, "classic card stays one page"
+assert client.post(f"/workers/{full['id']}/id-card?layout=bogus", headers=headers).status_code == 422
+# default layout follows the worker's creation date: workers added from ID_CARD_NEW_FORMAT_FROM get the new card
+import common
+from datetime import date as _d
+common.ID_CARD_NEW_FORMAT_FROM = _d(2099, 1, 1)
+import routers.workers as _rw
+_rw.ID_CARD_NEW_FORMAT_FROM = _d(2099, 1, 1)
+assert len(PdfReader(io.BytesIO(client.post(f"/workers/{full['id']}/id-card", headers=headers).content)).pages) == 1
+_rw.ID_CARD_NEW_FORMAT_FROM = _d(2000, 1, 1)
+assert len(PdfReader(io.BytesIO(client.post(f"/workers/{full['id']}/id-card", headers=headers).content)).pages) == 2
+print("New two-sided ID card (details on both sides) / classic card kept / layout chosen by creation date: PASSED")
+
 # --- Replacing the photo overwrites in place, not a growing history ---
 photo_dir = os.environ.get("PHOTO_STORAGE_DIR", "./worker_photos_dev")
 files_before = set(os.listdir(photo_dir)) if os.path.isdir(photo_dir) else set()

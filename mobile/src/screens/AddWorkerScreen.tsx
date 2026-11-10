@@ -73,6 +73,8 @@ const ID_PHOTO_WIDTH = 400;
 const ID_PHOTO_HEIGHT = 500;
 const ID_PHOTO_JPEG_QUALITY = 0.65;
 // Aadhaar scan photos are shrunk to this long side before upload (the server reads at ~1280px anyway).
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const BLOOD_GROUP_OPTIONS = BLOOD_GROUPS.map((g) => ({ label: g, value: g }));
 const SCAN_MAX_DIMENSION = 1280;
 const SCAN_JPEG_QUALITY = 0.8;
 
@@ -162,6 +164,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   // --- Step 3: Wage, optional ---
   const [wageEnabled, setWageEnabled] = useState(true);
   const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
+  const [bloodGroup, setBloodGroup] = useState<string>("");
   const [minWageClassId, setMinWageClassId] = useState<number | null>(null);
   const [minWageCheck, setMinWageCheck] = useState<MinimumWageCheck | null>(null);
   const [selectedWorkerTypeId, setSelectedWorkerTypeId] = useState<number | null>(null);
@@ -390,6 +393,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
         employment_type: employmentType,
         is_ism: isIsmValue,
         home_state: homeState.trim() || undefined,
+        blood_group: bloodGroup || undefined,
       });
 
       const complianceFilled = [fatherOrSpouseName, designation, epfUanNo, esicNo, dateOfJoining, fitnessCertNo, fitnessCertValidTill].some(
@@ -711,6 +715,13 @@ export default function AddWorkerScreen({ navigation }: Props) {
             />
             <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} required />
             <Field label="Nature of work" value={designation} onChangeText={setDesignation} />
+            <SelectField
+              label="Blood group (printed on the ID card)"
+              value={bloodGroup || null}
+              options={BLOOD_GROUP_OPTIONS}
+              onChange={setBloodGroup}
+              placeholder="Optional"
+            />
             <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} />
             <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} />
             <JoiningDateField

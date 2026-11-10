@@ -64,6 +64,11 @@
 ## Metro bundle trim (2026-11-10, fix/master-with-metro-trim)
 - Replaces unmerged PR #12 (conflicted with master). Icons come from src/icons.ts (per-icon paths) and App.tsx imports only the 3 fonts used: dev bundle ~3,963 -> ~2,161 modules. Add new icons to src/icons.ts, never import from the lucide package root.
 
+## New ID card format (2026-11-10, feat/id-card-new-format)
+- forms.build_id_card_v2: two-page portrait CR80 card (front: factory header/address/registration no., photo, name, father's/husband's name, DOB, blood group, employee no., nature of employment, date of issue, issuing authority; back: permanent/present address, 4 conditions, holder signature). Tamil-safe; long names wrap to 2 lines, addresses to 3 ("..." only if still too long).
+- POST /workers/{id}/id-card uses it for workers created on/after ID_CARD_NEW_FORMAT_FROM (env, default 2026-11-10); earlier workers keep the one-sided card; ?layout=new|classic forces either.
+- New optional Worker.blood_group (migration f4c8b2d6a1e3: BACK UP, run `alembic upgrade head` manually) set in Add Worker step 2; blank line on the card if unset. No edit screen for it yet.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

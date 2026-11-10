@@ -256,6 +256,7 @@ class WorkerCreateIn(BaseModel):
     employment_type: Literal["permanent", "temporary", "contract"] | None = None
     is_ism: bool = False
     home_state: str | None = None
+    blood_group: Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] | None = None
 
     @field_validator("aadhaar_number")
     @classmethod
@@ -301,6 +302,7 @@ class WorkerOut(BaseModel):
     employment_type: str | None = None
     is_ism: bool = False
     home_state: str | None = None
+    blood_group: str | None = None
     created_at: datetime
     # From WorkerCompliance, not a Worker column -- None means either no
     # compliance record yet, or one exists but this field was never

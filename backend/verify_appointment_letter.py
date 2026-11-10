@@ -48,20 +48,39 @@ bare_letter = client.post(f"/workers/{worker['id']}/appointment-letter", headers
 assert bare_letter.status_code == 200, bare_letter.text
 assert bare_letter.headers["content-type"] == "application/pdf", bare_letter.headers
 assert bare_letter.content[:4] == b"%PDF", "response is not a real PDF"
-print(f"Letter generated with no designation/joining-date/wage on file (blanks, not a crash): PASSED ({len(bare_letter.content)} bytes)")
+from pypdf import PdfReader
+import io as _io
+
+def letter_text(content: bytes) -> str:
+    reader = PdfReader(_io.BytesIO(content))
+    assert len(reader.pages) == 1, "the letter fits on one page"
+    return " ".join(reader.pages[0].extract_text().split())  # labels wrap over lines in the PDF
+
+bare_text = letter_text(bare_letter.content)
+# the 16-item format is there even when nothing is on file: every label, the worker's name, blank lines (no dashes)
+for label in ("Appointment Letter", "Name of employee", "Date of birth", "Father's / Mother's name", "Aadhaar number (after obtaining consent)",
+              "Labour Identification Number of the establishment", "Designation", "Type of Employment", "Category of skill", "Date of joining",
+              "Wages / Basic / Pay and Dearness Allowance", "Other allowance including accommodation", "Applicability of social security",
+              "Broad Nature of duties to be performed", "Chapter VI (Maternity Benefit)", "Any other information", "Signature / Digital Signature"):
+    assert label in bare_text, (label, bare_text)
+for numeral in ("(i)", "(v)", "(x)", "(xiii)", "(xvi)"):
+    assert numeral in bare_text, numeral
+assert "Kumar Selvam" in bare_text and "01-06-1995" in bare_text, bare_text
+assert "XXXX XXXX 5556" in bare_text and "222233335556" not in bare_text, "Aadhaar is printed masked, never in full"
+print(f"Letter generated with no designation/joining-date/wage on file (blank ruled lines, 16-item format): PASSED ({len(bare_letter.content)} bytes)")
 
 # --- Add designation + joining date, and a wage rate ---
 compliance = client.post(
     f"/workers/{worker['id']}/compliance",
     headers=headers,
-    json={"designation_or_nature_of_work": "Machine Operator", "date_of_joining": "2026-01-15"},
+    json={"designation_or_nature_of_work": "Machine Operator", "date_of_joining": "2026-01-15", "father_or_spouse_name": "Selvam", "epf_uan_no": "100200300400"},
 )
 assert compliance.status_code == 201, compliance.text
 
 wage = client.post(
     f"/workers/{worker['id']}/wage-profile",
     headers=headers,
-    json={"rate_type": "daily", "basic": 650, "effective_from": date.today().isoformat()},
+    json={"rate_type": "daily", "basic": 650, "da": 100, "other_allowances": 25, "pf_rate": 12, "effective_from": date.today().isoformat()},
 )
 assert wage.status_code == 201, wage.text
 
@@ -69,7 +88,19 @@ full_letter = client.post(f"/workers/{worker['id']}/appointment-letter", headers
 assert full_letter.status_code == 200, full_letter.text
 pdf_bytes = full_letter.content
 assert pdf_bytes[:4] == b"%PDF", "response is not a real PDF"
-print(f"Letter generated with designation/joining-date/wage/address on file: PASSED ({len(pdf_bytes)} bytes)")
+full_text = letter_text(pdf_bytes)
+for expected in ("Selvam", "Machine Operator", "15-01-2026", "UAN 100200300400", "Basic Rs. 650.00 + DA Rs. 100.00 per day",
+                 "Other allowances Rs. 25.00 per day", "EPF: Applicable; ESIC: Not applicable"):
+    assert expected in full_text, (expected, full_text)
+assert "Not applicable" in full_text  # maternity: no gender on file shows nothing; ESIC above is the "Not applicable" present
+print(f"Letter generated with designation/joining-date/wage/address on file, values in the right rows: PASSED ({len(pdf_bytes)} bytes)")
+
+# maternity benefit line: only for women employees
+women = client.post("/workers", headers=headers, json={"name": "Meena Devi", "aadhaar_number": "555511112225", "gender": "Female"}).json()
+assert "Benefits available under Chapter VI of the Code on Social Security, 2020" in letter_text(client.post(f"/workers/{women['id']}/appointment-letter", headers=headers).content)
+man = client.post("/workers", headers=headers, json={"name": "Raju Kumar", "aadhaar_number": "555511114448", "gender": "Male"}).json()
+assert "Not applicable" in letter_text(client.post(f"/workers/{man['id']}/appointment-letter", headers=headers).content)
+print("Maternity-benefit row: women get the Chapter VI line, others 'Not applicable': PASSED")
 
 # --- Reprinting is idempotent -- no state is written that would ever block a second generation ---
 reprint = client.post(f"/workers/{worker['id']}/appointment-letter", headers=headers)

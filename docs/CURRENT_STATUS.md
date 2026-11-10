@@ -74,6 +74,9 @@
 - Piece-rate brick lines (per 1,000 bricks / per ton) are stored with their unit and NOT checked automatically (no confirmed rule for DA on piece rates). "Fireman, kiln" is daily and checked. Mixing allowance Rs 32.50 is a note only. Figures come from owner-supplied notification text -- verify against the screenshots (two Chamber-bricks lines; 457.98 vs 457.96; "sand to kiln" unit unclear).
 - Every factory in a scheduled employment gets one worker type per class (ensure_worker_types): at signup via industry rice_mill/brick_tiles, or when the employment is picked in Factory Profile (idempotent; a same-named hand-made type is linked, not duplicated). Picking a type gives the worker the class and Basic+DA rate; below-minimum is a red error in Add Worker and a 422 from the server. Generic starter types (Plumber/Electrician/Helper) are skipped for these factories.
 
+## Appointment letter format (2026-11-10, feat/appointment-letter-format)
+- forms.build_appointment_letter now prints the 16-item format (name ... any other information, employer signature) as a one-page A4 form with ruled values; Tamil-safe. Values come from what is on file; unknown items are blank ruled lines. Aadhaar is printed MASKED (XXXX XXXX last4) because worker consent isn't recorded. "Labour Identification Number of the establishment" is blank: the app stores the factory licence/registration no., not the LIN -- add an owner field if wanted. "Category of skill" shows the minimum-wage class group (e.g. Group I - Skilled) when set. Applies to every letter generated from now on (it is generated on demand, nothing stored).
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

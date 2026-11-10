@@ -2078,11 +2078,13 @@ def build_id_card_v2(
 
 
 def build_appointment_letter(db: Session, owner: models.Owner, worker: models.Worker) -> tuple[bytes, str, str]:
-    compliance = (
-        db.query(models.WorkerCompliance).filter(models.WorkerCompliance.worker_id == worker.id).first()
-    )
-    designation = (compliance.designation_or_nature_of_work if compliance else None) or "-"
-    joining_date = compliance.date_of_joining if compliance else None
+    """The 16-item appointment letter (Code on Wages / Code on Social Security format):
+    (i) name ... (xvi) any other information, then the employer's signature. Each
+    value comes from what is on file; anything not held (e.g. the establishment's
+    Labour Identification Number, "any other information") is a blank ruled line to
+    fill by hand -- nothing is guessed."""
+    compliance = db.query(models.WorkerCompliance).filter(models.WorkerCompliance.worker_id == worker.id).first()
+    designation = (compliance.designation_or_nature_of_work if compliance else None) or ""
 
     # Latest wage rate effective as of today -- same query used by
     # GET /workers/{id}/wage-profile, not a computed monthly figure like
@@ -2093,60 +2095,114 @@ def build_appointment_letter(db: Session, owner: models.Owner, worker: models.Wo
         .order_by(models.WageProfile.effective_from.desc(), models.WageProfile.id.desc())
         .first()
     )
+    skill_class = db.get(models.MinimumWageClass, worker.min_wage_class_id) if worker.min_wage_class_id else None
+
+    def money(value: float) -> str:
+        return f"Rs. {value:,.2f}"
+
+    wages = other_allowances = ""
     if wage:
-        rate_unit = {"daily": "day", "weekly": "week"}.get(wage.rate_type, "month")
-        wage_line = f"Rs. {wage.basic:.2f} per {rate_unit}"
-    else:
-        wage_line = "-"
+        unit = {"daily": "day", "weekly": "week"}.get(wage.rate_type, "month")
+        wages = f"Basic {money(wage.basic)}" + (f" + DA {money(wage.da)}" if wage.da else "") + f" per {unit}"
+        extras = [f"{name} {money(amount)}" for name, amount in (("HRA", wage.hra), ("Other allowances", wage.other_allowances)) if amount]
+        other_allowances = "; ".join(extras) + (f" per {unit}" if extras else "")
+
+    employment = {"permanent": "Regular", "temporary": "Fixed-term employment", "contract": "Contractual"}.get(worker.employment_type or "", "")
+
+    social_security = ""
+    if wage or compliance:
+        epf = bool(wage and wage.pf_rate > 0) or bool(compliance and compliance.epf_uan_no)
+        esic = bool(wage and wage.esi_rate > 0) or bool(compliance and compliance.esic_no)
+        social_security = f"EPF: {'Applicable' if epf else 'Not applicable'}; ESIC: {'Applicable' if esic else 'Not applicable'}"
+
+    social_ids = []
+    if compliance and compliance.epf_uan_no:
+        social_ids.append(f"UAN {compliance.epf_uan_no}")
+    if compliance and compliance.esic_no:
+        social_ids.append(f"ESIC {compliance.esic_no}")
+
+    maternity = ""
+    if worker.gender:
+        maternity = (
+            "Benefits available under Chapter VI of the Code on Social Security, 2020"
+            if worker.gender.lower() == "female"
+            else "Not applicable"
+        )
+
+    rows = [
+        ("(i)", "Name of employee", worker.name),
+        ("(ii)", "Date of birth", worker.dob.strftime("%d-%m-%Y") if worker.dob else ""),
+        ("(iii)", "Father's / Mother's name", compliance.father_or_spouse_name if compliance else ""),
+        # Printed masked: the full number goes on the letter only after the worker's
+        # consent, which the app does not record
+        ("(iv)", "Aadhaar number (after obtaining consent)", f"XXXX XXXX {worker.aadhaar_last4}" if worker.aadhaar_last4 else ""),
+        ("(v)", "Labour Identification Number of the establishment", ""),
+        ("(vi)", "Universal Account Number and / or Insurance Number (if available)", " / ".join(social_ids)),
+        ("(vii)", "Designation", designation),
+        ("(viii)", "Type of Employment (Regular/Fixed-term employment/Contractual)", employment),
+        ("(ix)", "Category of skill", skill_class.group_name if skill_class and skill_class.group_name else ""),
+        ("(x)", "Date of joining", compliance.date_of_joining.strftime("%d-%m-%Y") if compliance and compliance.date_of_joining else ""),
+        ("(xi)", "Wages / Basic / Pay and Dearness Allowance", wages),
+        ("(xii)", "Other allowance including accommodation whichever is/are applicable", other_allowances),
+        (
+            "(xiii)",
+            "Applicability of social security [Employees' Provident Fund Organisation and Employees State Insurance Corporation] benefits",
+            social_security,
+        ),
+        ("(xiv)", "Broad Nature of duties to be performed", designation),
+        (
+            "(xv)",
+            "Benefits available under Chapter VI (Maternity Benefit) of the Code on Social Security, 2020 (36 of 2020) in case of women employee",
+            maternity,
+        ),
+        ("(xvi)", "Any other information", ""),
+    ]
+
+    navy = pdf_colors.HexColor("#0B2A5B")
+    label_style = ParagraphStyle("al_label", fontName="Helvetica", fontSize=9, leading=11.5, textColor=pdf_colors.HexColor("#1F2937"))
+    value_style = ParagraphStyle("al_value", fontName="Helvetica-Bold", fontSize=9, leading=11.5, textColor=pdf_colors.HexColor("#0B1E3F"))
+    title_style = ParagraphStyle("al_title", fontName="Times-Bold", fontSize=20, leading=24, alignment=1, textColor=navy)
+    head_style = ParagraphStyle("al_head", fontName="Helvetica", fontSize=9, leading=12, alignment=1, textColor=pdf_colors.HexColor("#374151"))
+
+    table_rows = [
+        [
+            Paragraph(number, label_style),
+            Paragraph(_xml_escape(label), label_style),
+            Paragraph(":", label_style),
+            Paragraph(_safe_paragraph_text(value, value_style.fontSize) if value else "", value_style),
+        ]
+        for number, label, value in rows
+    ]
+    table = Table(table_rows, colWidths=[1.3 * cm, 6.4 * cm, 0.5 * cm, 8.8 * cm])
+    table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (1, -1), "TOP"),  # numeral + label start at the top of a wrapped row
+                ("VALIGN", (2, 0), (3, -1), "BOTTOM"),  # colon + ruled value sit on the line
+                ("LINEBELOW", (3, 0), (3, -1), 0.5, pdf_colors.HexColor("#6B7280")),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm, leftMargin=2 * cm, rightMargin=2 * cm)
-    styles = getSampleStyleSheet()
-    body_style = ParagraphStyle("letter_body", parent=styles["Normal"], spaceAfter=10, leading=15)
-
-    elements = _header_elements(owner, styles, "Appointment Letter")
-    elements.append(Paragraph(f"Date: {date.today().isoformat()}", styles["Normal"]))
-    elements.append(Spacer(1, 0.6 * cm))
-
-    # See _safe_paragraph_text's docstring -- a Tamil name/address/
-    # designation/factory-name embedded in these sentences would
-    # otherwise render as broken boxes via ReportLab's own font drawing.
-    body_font_size = body_style.fontSize
-    safe_name = _safe_paragraph_text(worker.name, body_font_size)
-    safe_designation = _safe_paragraph_text(designation, body_font_size)
-    safe_factory_name = _safe_paragraph_text(owner.factory_name, body_font_size)
-
-    elements.append(Paragraph("To,", body_style))
-    elements.append(Paragraph(safe_name, body_style))
-    if worker.current_address:
-        elements.append(Paragraph(_safe_paragraph_text(worker.current_address, body_font_size), body_style))
-    if worker.numeric_employee_code:
-        elements.append(Paragraph(f"Employee ID: {worker.numeric_employee_code}", body_style))
-    elements.append(Spacer(1, 0.4 * cm))
-
-    elements.append(Paragraph(f"Dear {safe_name},", body_style))
-    elements.append(
-        Paragraph(
-            f"We are pleased to appoint you as <b>{safe_designation}</b> at <b>{safe_factory_name}</b>, "
-            f"with effect from <b>{joining_date.isoformat() if joining_date else '-'}</b>. Your wage for this "
-            f"role will be <b>{wage_line}</b>, subject to applicable statutory deductions. This appointment is "
-            "governed by the applicable provisions of labour law and the factory's standing policies.",
-            body_style,
-        )
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.8 * cm, bottomMargin=1.8 * cm, leftMargin=2 * cm, rightMargin=2 * cm)
+    bar = Table([[""]], colWidths=[3.2 * cm], rowHeights=[0.12 * cm], hAlign="CENTER")
+    bar.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), pdf_colors.HexColor("#1F6FD1"))]))
+    signature = Table(
+        [[Paragraph("Signature / Digital Signature<br/>of Employer", ParagraphStyle("al_sig", parent=label_style, alignment=1))]],
+        colWidths=[5.6 * cm],
+        hAlign="RIGHT",
     )
-    elements.append(
-        Paragraph(
-            "Please treat this letter as confirmation of your appointment. We look forward to your valuable "
-            "contribution.",
-            body_style,
-        )
-    )
-    elements.append(Spacer(1, 1.2 * cm))
+    signature.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, 0), 0.6, navy), ("TOPPADDING", (0, 0), (-1, -1), 3)]))
 
-    elements.append(Paragraph(f"For {safe_factory_name},", body_style))
-    elements.append(Spacer(1, 1.4 * cm))
-    elements.append(Paragraph("_________________________", body_style))
-    elements.append(Paragraph("Authorized Signatory", body_style))
-
+    elements = [Paragraph("Appointment Letter", title_style), Spacer(1, 0.15 * cm), bar, Spacer(1, 0.25 * cm)]
+    elements.append(Paragraph(f"<b>{_safe_paragraph_text(owner.factory_name, head_style.fontSize)}</b>", head_style))
+    if owner.factory_address:
+        elements.append(Paragraph(_safe_paragraph_text(owner.factory_address, head_style.fontSize), head_style))
+    elements += [Spacer(1, 0.5 * cm), table, Spacer(1, 1.6 * cm), signature]
     doc.build(elements)
     return buf.getvalue(), "application/pdf", f"appointment_letter_{worker.id}.pdf"

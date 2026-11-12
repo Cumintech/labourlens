@@ -78,6 +78,16 @@ export default function MinimumWageClassSelect({ token, employmentId, value, onC
 
   const selected = employment.classes.find((c) => c.id === value);
   const unit = selected?.rate_type === "monthly" ? "month" : "day";
+  // The same minimum in the unit the owner is entering (monthly class entered daily, or a daily class entered
+  // monthly), using the divisor the server publishes -- so the owner knows what to type in the empty field.
+  const divisor = employment.monthly_to_daily_divisor ?? 26;
+  let expectedInYourUnit = "";
+  if (selected?.minimum != null && !selected.piece_rate && rateType) {
+    if (selected.rate_type === "monthly" && rateType === "daily") expectedInYourUnit = `${formatRupees(selected.minimum / divisor)}/day`;
+    else if (selected.rate_type === "monthly" && rateType === "weekly") expectedInYourUnit = `${formatRupees((selected.minimum / divisor) * 6)}/week`;
+    else if (selected.rate_type === "daily" && rateType === "monthly") expectedInYourUnit = `${formatRupees(selected.minimum * divisor)}/month`;
+    else if (selected.rate_type === "daily" && rateType === "weekly") expectedInYourUnit = `${formatRupees(selected.minimum * 6)}/week`;
+  }
 
   // Classes are listed under the notification's own headings (Group I - Skilled, ...)
   const options: { label: string; value: string; header?: boolean }[] = [
@@ -107,6 +117,7 @@ export default function MinimumWageClassSelect({ token, employmentId, value, onC
       {selected?.minimum != null && (
         <Text style={styles.hint}>
           Statutory minimum: {formatRupees(selected.minimum)}/{unit} (Basic {formatRupees(selected.basic ?? 0)} + DA)
+          {expectedInYourUnit ? ` = about ${expectedInYourUnit}` : ""}
           {employment.da_verified === false ? " -- DA pending official verification" : ""}
           {employment.da_stale ? " -- DA is for the period ending " + (employment.da_valid_to ?? "") + "; the next revision is not entered yet" : ""}
         </Text>

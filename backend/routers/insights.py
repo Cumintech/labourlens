@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter
 
+import worker_requirements
+
 from common import *  # noqa: F401,F403
 
 router = APIRouter()
@@ -139,6 +141,21 @@ def get_compliance_check(
         current_wage_by_worker.setdefault(row.worker_id, row)
     no_wage_rate = [w for w in active_workers if w.id not in current_wage_by_worker]
 
+    compliance_by_worker = {
+        c.worker_id: c
+        for c in db.query(models.WorkerCompliance)
+        .join(models.Worker, models.Worker.id == models.WorkerCompliance.worker_id)
+        .filter(models.Worker.owner_id == owner.id)
+        .all()
+    }
+
+    def _joined_on(w) -> date_:
+        """When the worker joined (the recorded date, else when the record was created)."""
+        c = compliance_by_worker.get(w.id)
+        if c and c.date_of_joining:
+            return c.date_of_joining
+        return w.created_at.date() if w.created_at else today
+
     # --- wages: last month's payment recorded, for workers who are actually paid (basic > 0) ---
     first_of_this_month = today.replace(day=1)
     last_month_end = first_of_this_month - timedelta(days=1)
@@ -154,23 +171,12 @@ def get_compliance_check(
         )
         .all()
     }
-    payable_workers = [w for w in active_workers if (p := current_wage_by_worker.get(w.id)) and p.basic > 0]
+    # a worker who joined after last month ended cannot have last month's wages or attendance to record
+    employed_last_month = [w for w in active_workers if _joined_on(w) <= last_month_end]
+    payable_workers = [w for w in employed_last_month if (p := current_wage_by_worker.get(w.id)) and p.basic > 0]
     unpaid_last_month = [w for w in payable_workers if w.id not in paid_last_month_ids]
 
-    # --- workers: Form 12 completeness -- same 5 fields as the app's own completeness calc ---
-    compliance_by_worker = {
-        c.worker_id: c
-        for c in db.query(models.WorkerCompliance)
-        .join(models.Worker, models.Worker.id == models.WorkerCompliance.worker_id)
-        .filter(models.Worker.owner_id == owner.id)
-        .all()
-    }
-    FORM12_FIELDS = ("father_or_spouse_name", "designation_or_nature_of_work", "epf_uan_no", "esic_no", "date_of_joining")
 
-    def _form12_filled(c) -> int:
-        return sum(1 for f in FORM12_FIELDS if c and getattr(c, f)) if c else 0
-
-    form12_incomplete = [w for w in active_workers if _form12_filled(compliance_by_worker.get(w.id)) < len(FORM12_FIELDS)]
 
     # --- attendance: at least one record last month -- a coarse "ever marked",
     # not a day-by-day diff; a worker can still have gaps within the month and pass ---
@@ -186,7 +192,7 @@ def get_compliance_check(
         .distinct()
         .all()
     }
-    unmarked_last_month = [w for w in active_workers if w.id not in marked_last_month_ids]
+    unmarked_last_month = [w for w in employed_last_month if w.id not in marked_last_month_ids]
 
     # --- registers: biometric consent on file ---
     consented_ids = {
@@ -198,8 +204,13 @@ def get_compliance_check(
     }
     no_consent = [w for w in active_workers if w.id not in consented_ids]
 
+    # Form 12 completeness = the same REQUIRED list the Add Worker screen asks (EPF/ESIC/bank are optional)
+    def _missing_required(w) -> bool:
+        present = worker_requirements._present(w, compliance_by_worker.get(w.id), w.id in current_wage_by_worker)
+        return any(not present[key] for key, _l, _u in worker_requirements.REQUIRED)
+
+    form12_incomplete = [w for w in active_workers if _missing_required(w)]
     no_photo = [w for w in active_workers if not w.photo_key]
-    no_bank = [w for w in active_workers if not w.bank_account_number or not w.bank_ifsc]
     no_worker_type = [w for w in active_workers if not w.worker_type_id]
 
     # --- registers: mapped to a biometric device -- only scored if the
@@ -227,28 +238,30 @@ def get_compliance_check(
         items.append(_compliance_item("form12_incomplete", "missing Form 12 details", "Form 12 details incomplete",
                                        "Form 12 details are complete for every active worker.",
                                        "workers", "important", form12_incomplete, total_active, "Form 12 incomplete"))
-        items.append(_compliance_item("attendance_unmarked_last_month", "with no attendance marked last month",
-                                       "no attendance marked last month",
-                                       "Every active worker has at least one attendance record for last month.",
-                                       "attendance", "important", unmarked_last_month, total_active, "Unmarked last month"))
-        items.append(_compliance_item("no_biometric_consent", "missing biometric consent", "biometric consent not captured",
-                                       "Biometric consent is on file for every active worker.",
-                                       "registers", "important", no_consent, total_active, "Missing consent"))
         items.append(_compliance_item("no_photo", "missing a photo", "no ID photo uploaded",
                                        "Every active worker has a photo on file.",
                                        "workers", "minor", no_photo, total_active, "No photo"))
-        items.append(_compliance_item("no_bank_details", "missing bank details", "bank details missing",
-                                       "Bank details are on file for every active worker.",
-                                       "wages", "minor", no_bank, total_active, "Missing bank details"))
         items.append(_compliance_item("no_worker_type", "without a worker type", "rate set manually",
                                        "Every active worker has a worker type assigned.",
                                        "wages", "minor", no_worker_type, total_active, "No worker type"))
+
+    if employed_last_month:
+        items.append(_compliance_item("attendance_unmarked_last_month", "with no attendance marked last month",
+                                       "no attendance marked last month",
+                                       "Every active worker has at least one attendance record for last month.",
+                                       "attendance", "important", unmarked_last_month, len(employed_last_month), "Unmarked last month"))
 
     if payable_workers:
         items.append(_compliance_item("last_month_unpaid", "with last month's wages unpaid",
                                        "last month's wages not recorded as paid",
                                        "Last month's wages are recorded as paid for every worker who earns one.",
                                        "wages", "critical", unpaid_last_month, len(payable_workers), "Wages unpaid"))
+
+    if device_count > 0 and total_active > 0:
+        # Consent matters only where fingerprints / faces are actually collected, i.e. a device is registered
+        items.append(_compliance_item("no_biometric_consent", "missing biometric consent", "biometric consent not captured",
+                                       "Biometric consent is on file for every active worker.",
+                                       "registers", "important", no_consent, total_active, "Missing consent"))
 
     if device_unmapped is not None:
         items.append(_compliance_item("device_unmapped", "not on the biometric device", "attendance won't clock in automatically",

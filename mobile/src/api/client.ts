@@ -371,6 +371,8 @@ export type MinimumWageEmployment = {
   name: string;
   jurisdiction: string;
   da_value: number | null;
+  da_days_per_month?: number;
+  monthly_to_daily_divisor?: number;
   da_verified: boolean | null;
   da_valid_to?: string | null;
   // The DA in force was published for a period that has ended (a revision is pending)

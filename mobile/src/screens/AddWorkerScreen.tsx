@@ -51,7 +51,7 @@ import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
 import { colors, radius, spacing } from "../theme";
 import { isValidAadhaar, isValidIndianMobile, normalizeIndianMobile, stripToDigits } from "../validators";
-import { autofillFromWorkerType } from "../workerTypeAutofill";
+import { DEFAULT_PF_RATE_PERCENT } from "../workerTypeAutofill";
 
 type Props = NativeStackScreenProps<RootStackParamList, "NewWorkerScan">;
 
@@ -313,28 +313,54 @@ export default function AddWorkerScreen({ navigation }: Props) {
     }
   }
 
+  // The worker type, the nature of work and the minimum-wage class are one choice: picking a type
+  // always sets all three. The salary type is NOT taken from the type (it stays what the owner chose,
+  // Daily by default), and the Basic is only pre-filled when the class is quoted in the same unit.
   function handleSelectWorkerType(typeId: number | null) {
     setSelectedWorkerTypeId(typeId);
     const type = workerTypes.find((t) => t.id === typeId);
-    if (type) {
-      const filled = autofillFromWorkerType(type, { basic, pfRate });
-      setRateType(filled.rateType);
-      setBasic(filled.basic);
-      setPfRate(filled.pfRate);
-      setTypeAutoFilled(true);
-      if (!designation.trim()) setDesignation(type.name); // the type names the job
-      // A type made from a minimum-wage class carries the class and its Basic + DA: set them, so the
-      // rate starts at the statutory minimum and the minimum-wage check is on for this worker.
-      if (type.min_wage_class_id != null) {
-        setMinWageClassId(type.min_wage_class_id);
-        if (type.default_da != null && type.default_basic != null && !type.piece_rate) {
-          setBasic(String(type.default_basic));
-          setDa(String(type.default_da));
-          setMorePayOpen(true);
-        }
-      }
-    } else {
+    if (!type) {
       setTypeAutoFilled(false);
+      return;
+    }
+    setDesignation(type.name);
+    setPfRate((cur) => (!cur.trim() || parseFloat(cur) === 0 ? DEFAULT_PF_RATE_PERCENT : cur));
+    setMinWageClassId(type.min_wage_class_id ?? null);
+    applyTypeRate(type, rateType);
+  }
+
+  // Pre-fills Basic + DA from the type only when its unit matches the chosen salary type; otherwise the
+  // fields are cleared so the owner types the rate (the screen shows the expected minimum in their unit).
+  function applyTypeRate(type: WorkerType, unit: WageRateType) {
+    if (type.piece_rate) return;
+    if (type.default_rate_type === unit) {
+      const hasClassRate = type.min_wage_class_id != null && type.default_da != null && type.default_basic != null;
+      setBasic(String(hasClassRate ? type.default_basic : type.default_rate));
+      setDa(hasClassRate ? String(type.default_da) : "");
+      if (hasClassRate) setMorePayOpen(true);
+      setTypeAutoFilled(true);
+    } else {
+      setBasic("");
+      setDa("");
+      setTypeAutoFilled(false);
+    }
+  }
+
+  // Changing the salary type re-applies (or clears) the type's rate so a monthly figure never sits in a daily field.
+  function handleChangeRateType(unit: WageRateType) {
+    setRateType(unit);
+    const type = workerTypes.find((t) => t.id === selectedWorkerTypeId);
+    if (type) applyTypeRate(type, unit);
+  }
+
+  // Choosing a class on the wage step keeps the worker type and nature of work in step with it.
+  function handleChangeMinWageClass(classId: number | null) {
+    setMinWageClassId(classId);
+    if (classId == null) return;
+    const type = workerTypes.find((t) => t.min_wage_class_id === classId);
+    if (type) {
+      setSelectedWorkerTypeId(type.id);
+      setDesignation(type.name);
     }
   }
 
@@ -752,7 +778,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                 { label: "Weekly", value: "weekly" },
                 { label: "Monthly", value: "monthly" },
               ]}
-              onChange={(v) => setRateType(v as WageRateType)}
+              onChange={(v) => handleChangeRateType(v as WageRateType)}
             />
             <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} required />
             <WorkerTypeSelect
@@ -788,12 +814,12 @@ export default function AddWorkerScreen({ navigation }: Props) {
           <>
             {wageEnabled ? (
               <>
-                <RateTypeSelect value={rateType} onChange={setRateType} />
+                <RateTypeSelect value={rateType} onChange={handleChangeRateType} />
                 <MinimumWageClassSelect
                   token={token ?? ""}
                   employmentId={owner?.min_wage_employment_id}
                   value={minWageClassId}
-                  onChange={setMinWageClassId}
+                  onChange={handleChangeMinWageClass}
                   onCheck={setMinWageCheck}
                   rate={{ rateType, basic: parseFloat(basic) || 0, da: parseFloat(da) || 0 }}
                 />

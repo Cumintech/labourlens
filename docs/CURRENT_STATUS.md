@@ -84,6 +84,10 @@
 - Scan now starts only when BOTH sides are photographed (one request; retaking re-reads). Includes the parked OCR hardening: per-scan memory guard (shrinks detector / answers 503 "busy" instead of the host killing the service), gc+malloc_trim after each scan, thread default 2 when no CPU quota is visible, app retries 502/503/504 twice. Cause of "scan service not available" on Render is still unconfirmed (no logs seen): check Render Events for "Ran out of memory" and Logs for "ocr scan refused" / "OCR engine failed to load".
 - Appointment letter PDF = page 1 the covering narrative letter, page 2 the 16-item form. Blood group moved to Add Worker step 1 (scan and manual).
 
+## Required info asked at creation (2026-11-12, feat/required-info-at-creation)
+- backend/worker_requirements.py = ONE list: REQUIRED (dob, gender, present + permanent address, father/spouse, nature of work, joining date, employment type, wage) and OPTIONAL (EPF/UAN, ESIC [not temporary], blood group, mobile, bank). GET /workers/{id}/compliance-gaps returns what is missing + wage_below_minimum; the worker profile card shows it ("Missing: ...", "Wage below the minimum...", "N optional can be added") instead of the old 2-of-5 count.
+- Add Worker: step 1 asks name/DOB/gender/Aadhaar + PERMANENT address (the scan fills it) with "present = same" ticked by default; step 2 asks worker type (fills nature of work, class, rate), nature of work (required), father/spouse (required), joining date, EPF/ESIC/bank (optional); step 3 wage is REQUIRED (no skip). Below the minimum: warning with "Raise the wage" / "Continue anyway"; POST wage-profile needs acknowledge_below_minimum=true to save it (else 422), writes audit action wage_below_minimum_confirmed and the worker card flags it until raised. No migration.
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)

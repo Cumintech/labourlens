@@ -27,6 +27,8 @@ import {
   generateIdCard,
   getWageProfileHistory,
   getWorker,
+  ComplianceGaps,
+  getComplianceGaps,
   getWorkerCompliance,
   getWorkerWageComputation,
   listShiftConfigs,
@@ -50,7 +52,6 @@ import TradeIcon from "../components/TradeIcon";
 import { useAuth } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import { sharePdfBytes } from "../pdfShare";
-import { complianceProgress } from "../employment";
 import { formatINR, MONTH_NAMES } from "../format";
 import { colors, radius, spacing, type } from "../theme";
 
@@ -105,12 +106,19 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
   const [headerType, setHeaderType] = useState<string | null>(null);
   const [photoFailed, setPhotoFailed] = useState(false);
 
+  const [gaps, setGaps] = useState<ComplianceGaps | null>(null);
   const loadCompliance = useCallback(async () => {
     if (!token) return;
     try {
       setCompliance(await getWorkerCompliance(token, workerId));
     } catch {
       setCompliance(null); // no Form 12 record yet -- not an error
+    }
+    // What is still missing, from the server's single list of required information
+    try {
+      setGaps(await getComplianceGaps(token, workerId));
+    } catch {
+      setGaps(null);
     } finally {
       setComplianceLoaded(true);
     }
@@ -131,17 +139,21 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
     }, [loadCompliance, token, workerId]),
   );
 
-  const completeness = useMemo(
-    () =>
-      complianceProgress(headerWorker?.employment_type ?? null, {
-        father: compliance?.father_or_spouse_name,
-        nature: compliance?.designation_or_nature_of_work,
-        joined: compliance?.date_of_joining,
-        epf: compliance?.epf_uan_no,
-        esic: compliance?.esic_no,
-      }),
-    [compliance, headerWorker],
-  );
+  // Required items asked when a worker is added; "filled" = how many of them are on file
+  const REQUIRED_TOTAL = 9;
+  const completeness = useMemo(() => {
+    const missing = gaps?.required.length ?? 0;
+    const below = gaps?.wage_below_minimum ?? null;
+    return {
+      filled: REQUIRED_TOTAL - missing,
+      total: REQUIRED_TOTAL,
+      complete: gaps != null && missing === 0 && below == null,
+      missing,
+      labels: (gaps?.required ?? []).map((g) => g.label),
+      optionalCount: gaps?.optional.length ?? 0,
+      below,
+    };
+  }, [gaps]);
 
   return (
     <View style={styles.container}>
@@ -196,9 +208,16 @@ export default function WorkerProfileScreen({ route, navigation }: Props) {
               <FileCheck2 size={20} color={completeness.complete ? colors.present : colors.leave} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.complianceTitle}>Form 12 details</Text>
+              <Text style={styles.complianceTitle}>Compliance details</Text>
               <Text style={styles.complianceSubtitle}>
-                {completeness.complete ? "All details on file" : `${completeness.filled} of ${completeness.total} filled`}
+                {completeness.missing > 0
+                  ? `Missing: ${completeness.labels.slice(0, 3).join(", ")}${completeness.missing > 3 ? ` +${completeness.missing - 3} more` : ""}`
+                  : completeness.below
+                    ? `Wage below the minimum for ${completeness.below.class_name ?? "this class"}: short by ₹${completeness.below.shortfall}/${completeness.below.unit ?? "day"}`
+                    : "All required details on file"}
+                {completeness.missing === 0 && !completeness.below && completeness.optionalCount > 0
+                  ? ` · ${completeness.optionalCount} optional can be added`
+                  : ""}
               </Text>
             </View>
             <View style={[styles.complianceAction, completeness.complete && styles.complianceActionDone]}>

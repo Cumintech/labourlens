@@ -522,6 +522,10 @@ class WageProfileIn(BaseModel):
     esi_rate: float = 0
     lwf_amount: float = 0
     effective_from: date
+    # The owner saw the "below the minimum wage" warning and chose to continue. Without it the
+    # server refuses a rate under the statutory minimum; with it the rate is saved, audit-logged
+    # and shown on the worker's compliance card until it is raised.
+    acknowledge_below_minimum: bool = False
 
 
 class WageProfileOut(BaseModel):
@@ -869,3 +873,23 @@ class MinimumWageEmploymentIn(BaseModel):
 
 class WorkerMinimumWageClassIn(BaseModel):
     class_id: int | None = None  # None clears
+
+
+class GapItem(BaseModel):
+    key: str
+    label: str
+    used_for: str
+
+
+class WageBelowMinimum(BaseModel):
+    class_name: str | None = None
+    offered: float
+    minimum: float
+    shortfall: float
+    unit: str | None = None
+
+
+class ComplianceGapsOut(BaseModel):
+    required: list[GapItem]  # asked at creation; still missing
+    optional: list[GapItem]  # can be added later, never blocks
+    wage_below_minimum: WageBelowMinimum | None = None

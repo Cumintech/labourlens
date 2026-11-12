@@ -115,7 +115,7 @@ export default function MinimumWageClassSelect({ token, employmentId, value, onC
         <Text style={styles.error}>
           Minimum wage not met:
           {" "}{formatRupees(check.proposed ?? 0)}/{check.unit} offered vs {formatRupees(check.minimum ?? 0)}/
-          {check.unit} required (short by {formatRupees(check.shortfall ?? 0)}). Basic + DA are compared, and a rate below the minimum can't be saved.
+          {check.unit} required (short by {formatRupees(check.shortfall ?? 0)}). Basic + DA are compared. You can raise the wage or continue anyway (it will be flagged on the worker's compliance card).
         </Text>
       )}
       {check?.available && check.meets === true && <Text style={styles.ok}>Meets the statutory minimum wage.</Text>}

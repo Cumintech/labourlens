@@ -145,7 +145,11 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState("");
   const [aadhaarNumber, setAadhaarNumber] = useState("");
+  // The Aadhaar address is the PERMANENT address; the present address defaults to the same.
+  const [permanentAddress, setPermanentAddress] = useState("");
+  const [sameAddress, setSameAddress] = useState(true);
   const [currentAddress, setCurrentAddress] = useState("");
+  const presentAddress = sameAddress ? permanentAddress : currentAddress;
   const [mobile, setMobile] = useState("");
 
   // --- Step 2: Employment + Compliance (Form 12) ---
@@ -157,12 +161,14 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [designation, setDesignation] = useState("");
   const [epfUanNo, setEpfUanNo] = useState("");
   const [esicNo, setEsicNo] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankIfsc, setBankIfsc] = useState("");
   const [dateOfJoining, setDateOfJoining] = useState(isoDate(new Date()));
   const [fitnessCertNo, setFitnessCertNo] = useState("");
   const [fitnessCertValidTill, setFitnessCertValidTill] = useState("");
 
   // --- Step 3: Wage, optional ---
-  const [wageEnabled, setWageEnabled] = useState(true);
+  const wageEnabled = true; // the wage is required: there is no "skip for now"
   const [workerTypes, setWorkerTypes] = useState<WorkerType[]>([]);
   const [bloodGroup, setBloodGroup] = useState<string>("");
   const [minWageClassId, setMinWageClassId] = useState<number | null>(null);
@@ -202,18 +208,20 @@ export default function AddWorkerScreen({ navigation }: Props) {
   // current address -- once only, never overriding a state the owner
   // already picked (manually or from an earlier match).
   useEffect(() => {
-    if (homeState || !currentAddress.trim()) return;
-    const match = ALL_INDIAN_STATE_OPTIONS.find((s) => currentAddress.toLowerCase().includes(s.value.toLowerCase()));
+    if (homeState || !permanentAddress.trim()) return;
+    const match = ALL_INDIAN_STATE_OPTIONS.find((s) => permanentAddress.toLowerCase().includes(s.value.toLowerCase()));
     if (match) setHomeState(match.value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentAddress]);
+  }, [permanentAddress]);
 
   const estimate = useMemo(() => estimateCategory(dob), [dob]);
   const aadhaarValid = isValidAadhaar(aadhaarNumber);
   // Mobile is optional here (unlike the owner's own login mobile) -- an
   // empty field is fine, a partial/malformed one is an error.
   const mobileValid = mobile.trim().length === 0 || isValidIndianMobile(mobile);
-  const identityValid = name.trim().length > 0 && aadhaarValid && mobileValid;
+  // Required at creation: name, Aadhaar, date of birth, gender and an address (permanent, with present the same unless changed)
+  const identityValid =
+    name.trim().length > 0 && aadhaarValid && mobileValid && dob.trim().length > 0 && gender.trim().length > 0 && permanentAddress.trim().length > 0 && presentAddress.trim().length > 0;
 
   useFocusEffect(
     useCallback(() => {
@@ -280,7 +288,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
       // an invalid result is kept in the field (not cleared) so the
       // inline error below tells the owner to correct it.
       setAadhaarNumber(stripToDigits(fields.aadhaar_number ?? "", 12));
-      setCurrentAddress(fields.current_address ?? "");
+      setPermanentAddress(fields.current_address ?? "");
       setAutoFilled({
         name: !!fields.name,
         dob: !!fields.dob,
@@ -314,6 +322,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
       setBasic(filled.basic);
       setPfRate(filled.pfRate);
       setTypeAutoFilled(true);
+      if (!designation.trim()) setDesignation(type.name); // the type names the job
       // A type made from a minimum-wage class carries the class and its Basic + DA: set them, so the
       // rate starts at the statutory minimum and the minimum-wage check is on for this worker.
       if (type.min_wage_class_id != null) {
@@ -332,7 +341,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   function goContinue() {
     if (step === 1) {
       if (!identityValid) {
-        Alert.alert("Missing required fields", "Name and Aadhaar number are required.");
+        Alert.alert("Missing required fields", "Name, date of birth, gender, Aadhaar number and address are required.");
         return;
       }
       setStep(2);
@@ -343,32 +352,39 @@ export default function AddWorkerScreen({ navigation }: Props) {
     }
   }
 
-  // The live check above can be a moment behind the typing, so the rate is
-  // checked once more, against the server, before the worker is created.
+  // The wage is required. A rate below the statutory minimum only WARNS: the owner can raise it or
+  // continue anyway -- the server then saves it, logs the confirmation and flags the worker.
   async function verifyMinimumWageThenCreate() {
-    if (wageEnabled && basic.trim() && token && owner?.min_wage_employment_id) {
-      if (minWageClassId == null) {
+    if (!token || !owner?.min_wage_employment_id) return handleCreateWorker(false);
+    if (minWageClassId == null) {
+      Alert.alert(
+        "No minimum-wage class selected",
+        "Without a class the rate can't be checked against the statutory minimum.",
+        [
+          { text: "Select a class", style: "cancel" },
+          { text: "Continue without checking", onPress: () => handleCreateWorker(false) },
+        ],
+      );
+      return;
+    }
+    try {
+      const check = await checkMinimumWage(token, minWageClassId, rateType, parseFloat(basic) || 0, parseFloat(da) || 0);
+      if (check.available && check.meets === false) {
         Alert.alert(
-          "Select the minimum-wage class",
-          "Choose this worker's minimum-wage class so the rate can be checked against the statutory minimum, or turn off \"Set up wage rate now\" and set it later.",
+          "Below the minimum wage",
+          `This rate is ₹${check.proposed}/${check.unit} (Basic + DA) but the minimum for ${check.class_name} is ₹${check.minimum}/${check.unit} -- ₹${check.shortfall} short. DA can be added under "Add more pay components".`,
+          [
+            { text: "Raise the wage", style: "cancel" },
+            { text: "Continue anyway", style: "destructive", onPress: () => handleCreateWorker(true) },
+          ],
         );
         return;
       }
-      try {
-        const check = await checkMinimumWage(token, minWageClassId, rateType, parseFloat(basic) || 0, parseFloat(da) || 0);
-        if (check.available && check.meets === false) {
-          Alert.alert(
-            "Below minimum wage",
-            `This rate is ₹${check.proposed}/${check.unit} (Basic + DA) but the minimum for ${check.class_name} is ₹${check.minimum}/${check.unit}. Raise it by ₹${check.shortfall} (DA can be added under "Add more pay components").`,
-          );
-          return;
-        }
-      } catch {
-        Alert.alert("Couldn't check the minimum wage", "Check your connection and try again.");
-        return;
-      }
+    } catch {
+      Alert.alert("Couldn't check the minimum wage", "Check your connection and try again.");
+      return;
     }
-    handleCreateWorker();
+    handleCreateWorker(false);
   }
 
   function goBack() {
@@ -386,7 +402,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
   // old single final save step -- now happens at the Wage -> ID Card
   // transition instead of at the very end, since Step 4's photo upload
   // needs a real worker_id to attach to.
-  async function handleCreateWorker() {
+  async function handleCreateWorker(belowMinimumConfirmed: boolean = false) {
     if (!identityValid || !token) return;
     setSaving(true);
     const warnings: string[] = [];
@@ -397,7 +413,10 @@ export default function AddWorkerScreen({ navigation }: Props) {
         dob: dob.trim() || undefined,
         gender: gender.trim() || undefined,
         mobile: mobile.trim() || undefined,
-        current_address: currentAddress.trim() || undefined,
+        current_address: presentAddress.trim() || undefined,
+        native_address: permanentAddress.trim() || undefined,
+        bank_account_number: bankAccount.trim() || undefined,
+        bank_ifsc: bankIfsc.trim().toUpperCase() || undefined,
         employment_type: employmentType,
         is_ism: isIsmValue,
         home_state: homeState.trim() || undefined,
@@ -450,6 +469,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
               esi_rate: employmentType === "temporary" ? 0 : parseFloat(esiRate) || 0,
               lwf_amount: parseFloat(lwfAmount) || 0,
               effective_from: isoDate(new Date()),
+              acknowledge_below_minimum: belowMinimumConfirmed,
             });
           } catch {
             warnings.push("wage rate");
@@ -575,7 +595,9 @@ export default function AddWorkerScreen({ navigation }: Props) {
   // Step 3: a rate below the statutory minimum (Basic + DA) for the chosen class is not allowed.
   const belowMinimumWage =
     step === 3 && wageEnabled && basic.trim() !== "" && minWageClassId != null && minWageCheck?.available === true && minWageCheck.meets === false;
-  const step2Blocked = step === 2 && (!fatherOrSpouseName.trim() || !rateType);
+  const step2Blocked = step === 2 && (!fatherOrSpouseName.trim() || !designation.trim() || !dateOfJoining.trim() || !rateType);
+  // The wage is required (a below-minimum rate only warns: see verifyMinimumWageThenCreate)
+  const step3Blocked = step === 3 && !(parseFloat(basic) > 0);
 
   return (
     <KeyboardAvoidingView
@@ -656,7 +678,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
             {detailsRevealed && (
               <Animated.View entering={FadeInDown.duration(300)}>
                 <Text style={styles.sectionTitle}>Worker details</Text>
-                <Field label="Name" value={name} onChangeText={(v) => { setName(v); setAutoFilled((a) => ({ ...a, name: false })); }} autoFilled={autoFilled.name} />
+                <Field label="Name" required value={name} onChangeText={(v) => { setName(v); setAutoFilled((a) => ({ ...a, name: false })); }} autoFilled={autoFilled.name} />
                 <View style={styles.dateFieldWrap}>
                   <DateField label="Date of birth" value={dob} onChange={(v) => { setDob(v); setAutoFilled((a) => ({ ...a, dob: false })); }} placeholder="Select date" />
                   {autoFilled.dob && <Text style={styles.autoTag}>Auto-filled</Text>}
@@ -684,7 +706,12 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   error={aadhaarNumber.length === 12 && !aadhaarValid ? "Enter a valid 12-digit Aadhaar number" : undefined}
                   maxLength={12}
                 />
-                <Field label="Current address" value={currentAddress} onChangeText={(v) => { setCurrentAddress(v); setAutoFilled((a) => ({ ...a, current_address: false })); }} autoFilled={autoFilled.current_address} />
+                <Field label="Permanent address" value={permanentAddress} onChangeText={(v) => { setPermanentAddress(v); setAutoFilled((a) => ({ ...a, current_address: false })); }} autoFilled={autoFilled.current_address} required />
+                <TouchableOpacity style={styles.checkRow} onPress={() => setSameAddress((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: sameAddress }}>
+                  <Text style={styles.checkBox}>{sameAddress ? "☑" : "☐"}</Text>
+                  <Text style={styles.checkLabel}>Present address is the same as the permanent address</Text>
+                </TouchableOpacity>
+                {!sameAddress && <Field label="Present address" value={currentAddress} onChangeText={setCurrentAddress} required />}
                 <Field
                   label="Mobile"
                   value={mobile}
@@ -713,8 +740,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
             />
             <View style={styles.helpBox}>
               <Text style={styles.helpBoxText}>
-                These details feed the statutory Form 12 register. Fields marked * are required; the rest (including EPF
-                and ESIC) are optional and can be added later from the worker's profile.
+                These details feed the statutory Form 12 register. Fields marked * are required; EPF, ESIC and bank details are optional and can be added later from the worker's profile.
               </Text>
             </View>
             <SelectField
@@ -729,9 +755,20 @@ export default function AddWorkerScreen({ navigation }: Props) {
               onChange={(v) => setRateType(v as WageRateType)}
             />
             <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} required />
-            <Field label="Nature of work" value={designation} onChangeText={setDesignation} />
-            <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} />
-            <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} />
+            <WorkerTypeSelect
+              label="Worker type (sets the nature of work, wage class and rate)"
+              token={token ?? ""}
+              workerTypes={workerTypes}
+              value={selectedWorkerTypeId}
+              onChange={handleSelectWorkerType}
+              onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
+              noneLabel="No type -- enter the details below"
+            />
+            <Field label="Nature of work" value={designation} onChangeText={setDesignation} required />
+            <Field label="EPF / UAN no. (optional)" value={epfUanNo} onChangeText={setEpfUanNo} />
+            <Field label="ESIC no. (optional)" value={esicNo} onChangeText={setEsicNo} />
+            <Field label="Bank account no. (optional)" value={bankAccount} onChangeText={setBankAccount} keyboardType="number-pad" />
+            <Field label="Bank IFSC (optional)" value={bankIfsc} onChangeText={(v) => setBankIfsc(v.toUpperCase())} maxLength={11} />
             <JoiningDateField
               value={dateOfJoining}
               onChange={setDateOfJoining}
@@ -749,26 +786,8 @@ export default function AddWorkerScreen({ navigation }: Props) {
 
         {step === 3 && (
           <>
-            <View style={styles.segToggle}>
-              <TouchableOpacity style={[styles.segOption, wageEnabled && styles.segOptionActive]} onPress={() => setWageEnabled(true)}>
-                <Text style={[styles.segText, wageEnabled && styles.segTextActive]}>Set up wage rate now</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.segOption, !wageEnabled && styles.segOptionActive]} onPress={() => setWageEnabled(false)}>
-                <Text style={[styles.segText, !wageEnabled && styles.segTextActive]}>Skip for now</Text>
-              </TouchableOpacity>
-            </View>
-
             {wageEnabled ? (
               <>
-                <WorkerTypeSelect
-                  label="Worker Type"
-                  token={token ?? ""}
-                  workerTypes={workerTypes}
-                  value={selectedWorkerTypeId}
-                  onChange={handleSelectWorkerType}
-                  onCreated={(created) => setWorkerTypes((prev) => [...prev, created])}
-                  noneLabel="No type -- set a custom rate below"
-                />
                 <RateTypeSelect value={rateType} onChange={setRateType} />
                 <MinimumWageClassSelect
                   token={token ?? ""}
@@ -785,7 +804,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   autoFilled={typeAutoFilled}
                   autoFilledLabel="Auto-filled from type"
                   keyboardType="numeric"
-                  error={belowMinimumWage ? "Below the minimum wage for the selected class -- raise Basic or add DA" : undefined}
+                  error={belowMinimumWage ? "Below the minimum wage for the selected class -- raise Basic or add DA (you can still continue)" : undefined}
                 />
                 <Field
                   label="PF rate (%)"
@@ -896,9 +915,9 @@ export default function AddWorkerScreen({ navigation }: Props) {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || step2Blocked || belowMinimumWage || saving) && styles.buttonDisabled]}
+            style={[styles.nextBtn, ((step === 1 && !step1Continueable) || step2Blocked || step3Blocked || saving) && styles.buttonDisabled]}
             onPress={goContinue}
-            disabled={(step === 1 && !step1Continueable) || step2Blocked || belowMinimumWage || saving}
+            disabled={(step === 1 && !step1Continueable) || step2Blocked || step3Blocked || saving}
           >
             {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.nextBtnText}>Continue</Text>}
           </TouchableOpacity>
@@ -1006,6 +1025,9 @@ const styles = StyleSheet.create({
   labelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.xs },
   label: { fontSize: 12, fontWeight: "600", color: colors.muted },
   requiredStar: { color: colors.danger },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
+  checkBox: { fontSize: 20, color: colors.primary },
+  checkLabel: { flex: 1, fontSize: 13, color: colors.textSecondary },
   autoTag: { fontSize: 10, fontWeight: "700", color: colors.tealDark, backgroundColor: colors.tealLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
   input: { borderWidth: 0, backgroundColor: colors.fieldBg, borderRadius: radius.sm, padding: 12, fontSize: 16, color: colors.navy },
   fieldError: { fontSize: 11, color: colors.danger, marginTop: 4 },

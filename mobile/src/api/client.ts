@@ -461,6 +461,8 @@ export type WorkerCreateInput = {
   is_ism?: boolean;
   home_state?: string | null;
   blood_group?: string | null;
+  bank_account_number?: string;
+  bank_ifsc?: string;
 };
 
 // Multipart upload -- not JSON, so this bypasses the request() helper
@@ -1075,6 +1077,8 @@ export type WageProfileInput = {
   esi_rate?: number;
   lwf_amount?: number;
   effective_from: string;
+  // the owner saw the below-minimum-wage warning and chose to continue
+  acknowledge_below_minimum?: boolean;
 };
 
 export type WageProfile = {
@@ -1509,3 +1513,14 @@ export function captureBiometricConsent(token: string, workerId: number, noticeT
 }
 
 export { ApiError };
+
+export type ComplianceGap = { key: string; label: string; used_for: string };
+export type ComplianceGaps = {
+  required: ComplianceGap[]; // asked at creation, still missing
+  optional: ComplianceGap[]; // can be added later
+  wage_below_minimum: { class_name: string | null; offered: number; minimum: number; shortfall: number; unit: string | null } | null;
+};
+
+export function getComplianceGaps(token: string, workerId: number): Promise<ComplianceGaps> {
+  return request<ComplianceGaps>(`/workers/${workerId}/compliance-gaps`, { headers: { Authorization: `Bearer ${token}` } });
+}

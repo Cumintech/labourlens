@@ -3,6 +3,9 @@
 from fastapi import APIRouter
 
 import calendar
+
+import worker_requirements
+from schemas import ComplianceGapsOut
 from typing import Literal
 
 from common import *  # noqa: F401,F403
@@ -476,23 +479,29 @@ def create_wage_profile(
     # rate even after a later correction. See
     # PHASE3_STATUTORY_FORMS_PLAN.md's Day 2 section.
     worker = _get_owned_worker(worker_id, owner, db)
-    # A rate below the statutory minimum (Basic + DA of the worker's
-    # minimum-wage class, as in force on the effective date) is refused. No class,
-    # or no rate in force on that date, means nothing to compare against.
+    # A rate below the statutory minimum (Basic + DA of the worker's minimum-wage class, as in force
+    # on the effective date) is refused unless the owner saw the warning and confirmed
+    # (acknowledge_below_minimum). A confirmed one is saved, audit-logged and flagged on the
+    # compliance card. No class, or no rate in force on that date, means nothing to compare.
+    below = None
     if worker.min_wage_class_id is not None:
         check = minimum_wage.MinimumWageResolver(db).check(
             worker.min_wage_class_id, body.rate_type, body.basic, body.da, body.effective_from
         )
         if check["available"] and not check["meets"]:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"Below the minimum wage for {check['class_name']}: Rs {check['proposed']:g}/{check['unit']} "
-                    f"(Basic + DA) vs the required Rs {check['minimum']:g}/{check['unit']}. "
-                    f"Raise the rate by Rs {check['shortfall']:g}."
-                ),
-            )
-    profile = models.WageProfile(worker_id=worker_id, created_by=owner.id, **body.model_dump())
+            below = check
+            if not body.acknowledge_below_minimum:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Below the minimum wage for {check['class_name']}: Rs {check['proposed']:g}/{check['unit']} "
+                        f"(Basic + DA) vs the required Rs {check['minimum']:g}/{check['unit']}. "
+                        f"Raise the rate by Rs {check['shortfall']:g}."
+                    ),
+                )
+    profile = models.WageProfile(
+        worker_id=worker_id, created_by=owner.id, **body.model_dump(exclude={"acknowledge_below_minimum"})
+    )
     db.add(profile)
     db.add(
         models.AuditLog(
@@ -502,9 +511,32 @@ def create_wage_profile(
             reason=f"{body.rate_type} rate set to {body.basic}, effective {body.effective_from}",
         )
     )
+    if below is not None:
+        db.add(
+            models.AuditLog(
+                owner_id=owner.id,
+                worker_id=worker_id,
+                action="wage_below_minimum_confirmed",
+                reason=(
+                    f"owner confirmed {below['class_name']} rate Rs {below['proposed']:g}/{below['unit']} below the "
+                    f"minimum Rs {below['minimum']:g} (short by Rs {below['shortfall']:g}), effective {body.effective_from}"
+                ),
+            )
+        )
     db.commit()
     db.refresh(profile)
     return profile
+
+
+@router.get("/workers/{worker_id}/compliance-gaps", response_model=ComplianceGapsOut)
+def get_worker_compliance_gaps(
+    worker_id: int,
+    owner: models.Owner = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+):
+    """What is still missing for this worker: required items (asked at creation), optional
+    ones, and a wage below the statutory minimum. Drives the compliance card."""
+    return worker_requirements.compute_gaps(db, _get_owned_worker(worker_id, owner, db))
 
 
 @router.get("/workers/{worker_id}/wage-profile", response_model=WageProfileOut)

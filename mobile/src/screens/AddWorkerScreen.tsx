@@ -75,6 +75,7 @@ const ID_PHOTO_JPEG_QUALITY = 0.65;
 // Aadhaar scan photos are shrunk to this long side before upload (the server reads at ~1280px anyway).
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const BLOOD_GROUP_OPTIONS = BLOOD_GROUPS.map((g) => ({ label: g, value: g }));
+type ScanPhoto = { uri: string; width: number; height: number };
 const SCAN_MAX_DIMENSION = 1280;
 const SCAN_JPEG_QUALITY = 0.8;
 
@@ -127,11 +128,10 @@ export default function AddWorkerScreen({ navigation }: Props) {
   const [scanMode, setScanMode] = useState(true);
   const [frontUri, setFrontUri] = useState<string | null>(null);
   const [backUri, setBackUri] = useState<string | null>(null);
-  const [frontScanning, setFrontScanning] = useState(false);
-  const [backScanning, setBackScanning] = useState(false);
-  const scanning = frontScanning || backScanning;
-  // Bumped on every capture so a slow scan of a photo that was since retaken is ignored.
-  const scanSeq = useRef({ front: 0, back: 0 });
+  const [scanning, setScanning] = useState(false);
+  // Bumped on every scan so a slow scan of photos that were since retaken is ignored.
+  const scanSeq = useRef(0);
+  const captured = useRef<{ front?: ScanPhoto; back?: ScanPhoto }>({});
   const [autoFilled, setAutoFilled] = useState({ name: false, dob: false, gender: false, aadhaar_number: false, current_address: false });
   // Worker Details starts hidden -- showing empty Name/DOB/etc. fields
   // above an unstarted scan implied they should be filled in manually
@@ -241,9 +241,10 @@ export default function AddWorkerScreen({ navigation }: Props) {
     const asset = result.assets[0];
     if (side === "front") setFrontUri(asset.uri);
     else setBackUri(asset.uri);
-    // Each side is scanned the moment it is captured, so the front is being
-    // read while the owner photographs the back.
-    void scanSide(side, asset.uri, asset.width, asset.height);
+    captured.current[side] = { uri: asset.uri, width: asset.width, height: asset.height };
+    // Reading starts once BOTH sides have been photographed (retaking one re-reads both).
+    const { front, back } = captured.current;
+    if (front && back) void scanBoth(front, back);
   }
 
   // A phone photo is several MB; the server only needs ~1280px. Sending the
@@ -260,50 +261,47 @@ export default function AddWorkerScreen({ navigation }: Props) {
     }
   }
 
-  async function scanSide(side: "front" | "back", uri: string, width: number, height: number) {
+  async function scanBoth(front: ScanPhoto, back: ScanPhoto) {
     if (!token) return;
-    const seq = ++scanSeq.current[side];
-    const setBusy = side === "front" ? setFrontScanning : setBackScanning;
-    setBusy(true);
+    const seq = ++scanSeq.current;
+    setScanning(true);
     try {
-      const small = await shrinkForScan(uri, width, height);
-      const fields = side === "front" ? await scanAadhaar(token, small, null) : await scanAadhaar(token, null, small);
-      if (seq !== scanSeq.current[side]) return; // retaken since; a newer scan owns the fields
+      const [smallFront, smallBack] = await Promise.all([
+        shrinkForScan(front.uri, front.width, front.height),
+        shrinkForScan(back.uri, back.width, back.height),
+      ]);
+      const fields = await scanAadhaar(token, smallFront, smallBack);
+      if (seq !== scanSeq.current) return; // retaken since; a newer scan owns the fields
+      setName(fields.name ?? "");
+      setDob(fields.dob ?? "");
+      setGender(normalizeGender(fields.gender));
       // Stripped the same way manual typing is -- OCR noise (stray
       // spaces, a misread letter) shouldn't bypass the digits-only rule;
       // an invalid result is kept in the field (not cleared) so the
       // inline error below tells the owner to correct it.
-      const digits = stripToDigits(fields.aadhaar_number ?? "", 12);
-      if (side === "front") {
-        setName(fields.name ?? "");
-        setDob(fields.dob ?? "");
-        setGender(normalizeGender(fields.gender));
-        setAadhaarNumber((prev) => digits || prev);
-        setAutoFilled((a) => ({ ...a, name: !!fields.name, dob: !!fields.dob, gender: !!fields.gender, aadhaar_number: a.aadhaar_number || !!digits }));
-        if (fields.current_address) {
-          setCurrentAddress((prev) => prev || fields.current_address!);
-          setAutoFilled((a) => ({ ...a, current_address: true }));
-        }
-      } else {
-        setCurrentAddress(fields.current_address ?? "");
-        // The number is printed on the back too -- only a fallback if the front missed it
-        setAadhaarNumber((prev) => prev || digits);
-        setAutoFilled((a) => ({ ...a, current_address: !!fields.current_address, aadhaar_number: a.aadhaar_number || !!digits }));
-      }
+      setAadhaarNumber(stripToDigits(fields.aadhaar_number ?? "", 12));
+      setCurrentAddress(fields.current_address ?? "");
+      setAutoFilled({
+        name: !!fields.name,
+        dob: !!fields.dob,
+        gender: !!fields.gender,
+        aadhaar_number: !!fields.aadhaar_number,
+        current_address: !!fields.current_address,
+      });
       setDetailsRevealed(true);
     } catch (e) {
-      if (seq !== scanSeq.current[side]) return;
+      if (seq !== scanSeq.current) return;
       // A 5xx / timeout means the scan service itself is down or overloaded,
       // not that this card was unreadable: point the owner at manual entry.
       const serviceDown = e instanceof ApiError && (e.status >= 500 || e.status === 0);
       const message = serviceDown
-        ? "The scan service is not available right now. Try again in a minute, or tap \"Enter manually\"."
+        ? `${e instanceof ApiError && e.status === 503 ? e.message : "The scan service is not available right now."} You can try again in a minute, or tap "Enter manually".`
         : e instanceof ApiError
           ? e.message
           : "Couldn't reach the server. Check your connection.";
       Alert.alert("Scan failed", message);
     } finally {
-      if (seq === scanSeq.current[side]) setBusy(false);
+      if (seq === scanSeq.current) setScanning(false);
     }
   }
 
@@ -650,7 +648,7 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.hint}>
-                  {scanning ? "Reading the card…" : "Scan the front, then the back -- each is read as soon as you take it and fills in the fields below. Lay the card flat in good light, fill the frame and hold steady until it is sharp."}
+                  {scanning ? "Reading the card…" : "Scan the front and the back -- the card is read once both are taken and fills in the fields below. Lay the card flat in good light, fill the frame and hold steady until it is sharp."}
                 </Text>
               </>
             )}
@@ -670,6 +668,13 @@ export default function AddWorkerScreen({ navigation }: Props) {
                   </Text>
                 )}
                 <SelectField label="Gender" value={gender || null} options={GENDER_OPTIONS} onChange={(v) => { setGender(v); setAutoFilled((a) => ({ ...a, gender: false })); }} placeholder="Select" />
+                <SelectField
+                  label="Blood group (printed on the ID card)"
+                  value={bloodGroup || null}
+                  options={BLOOD_GROUP_OPTIONS}
+                  onChange={setBloodGroup}
+                  placeholder="Optional"
+                />
                 <Field
                   label="Aadhaar number"
                   value={aadhaarNumber}
@@ -725,13 +730,6 @@ export default function AddWorkerScreen({ navigation }: Props) {
             />
             <Field label="Father / Spouse name" value={fatherOrSpouseName} onChangeText={setFatherOrSpouseName} required />
             <Field label="Nature of work" value={designation} onChangeText={setDesignation} />
-            <SelectField
-              label="Blood group (printed on the ID card)"
-              value={bloodGroup || null}
-              options={BLOOD_GROUP_OPTIONS}
-              onChange={setBloodGroup}
-              placeholder="Optional"
-            />
             <Field label="EPF / UAN no." value={epfUanNo} onChangeText={setEpfUanNo} />
             <Field label="ESIC no." value={esicNo} onChangeText={setEsicNo} />
             <JoiningDateField

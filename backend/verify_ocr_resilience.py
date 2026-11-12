@@ -92,6 +92,37 @@ assert len(loads) == 1, loads
 ocr._engine = None
 del sys.modules["rapidocr_onnxruntime"]
 
+# Memory guard: a scan on a nearly-full container is shrunk, or refused with a 503 -- never allowed to
+# push the host into killing the whole service (which every user sees as a 502).
+real_mem = ocr._memory_usage_limit_mb
+try:
+    engine = ocr._get_engine()
+    det = lambda: engine.text_detector.preprocess_op[0].limit_side_len
+    ocr._memory_usage_limit_mb = lambda: (100, 512)      # plenty free -> full size
+    ocr.extract_fields(buf.getvalue(), None)
+    assert det() == ocr.OCR_DET_LIMIT_SIDE, det()
+    ocr._memory_usage_limit_mb = lambda: (370, 512)      # 142 MB free -> reduced detector size
+    ocr.extract_fields(buf.getvalue(), None)
+    assert det() == ocr.REDUCED_DET_LIMIT_SIDE, det()
+    ocr._memory_usage_limit_mb = lambda: (450, 512)      # 62 MB free -> refuse
+    refused = client.post("/workers/ocr", headers=h, files=files())
+    assert refused.status_code == 503 and "busy" in refused.json()["detail"], refused.text
+    ocr._memory_usage_limit_mb = lambda: None            # no limit visible (laptop) -> just scan
+    assert client.post("/workers/ocr", headers=h, files=files()).status_code == 200
+finally:
+    ocr._memory_usage_limit_mb = real_mem
+
+# No CPU quota visible (some hosts hide it): use a small fixed pool, not the host's core count
+real_limit = ocr._container_cpu_limit
+try:
+    ocr._container_cpu_limit = lambda: None
+    ocr._engine = None
+    e2 = ocr._get_engine()
+    assert e2.text_detector.infer.session.get_session_options().intra_op_num_threads == ocr.DEFAULT_OCR_THREADS
+finally:
+    ocr._container_cpu_limit = real_limit
+    ocr._engine = None
+
 # Lines ending in commas must not produce ",," when joined
 addr = ocr._guess_address(["Address:", "S/O Muthu, 12, Gandhi Street,", "Anna Nagar, Madurai,", "Tamil Nadu - 625020"])
 assert addr and ",," not in addr.replace(" ", "") and addr.endswith("625020"), addr

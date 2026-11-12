@@ -487,26 +487,47 @@ export function warmUpScanner(token: string): void {
   }, LONG_TIMEOUT_MS).catch(() => {});
 }
 
+// A 502/503/504 or a dropped connection while the host restarts, redeploys or
+// wakes from sleep is short-lived: retry a couple of times before giving up.
+const TRANSIENT_STATUSES = [502, 503, 504];
+async function withTransientRetry<T>(attempt: () => Promise<T>, delaysMs: number[] = [3000, 8000]): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await attempt();
+    } catch (e) {
+      // A dropped connection is transient; a bug in building the request (not a network error) is not.
+      const transient =
+        e instanceof ApiError
+          ? TRANSIENT_STATUSES.includes(e.status)
+          : /network|connect|socket|reset|aborted|offline/i.test(String((e as Error)?.message ?? e));
+      if (!transient || i >= delaysMs.length) throw e;
+      await new Promise((resolve) => setTimeout(resolve, delaysMs[i]));
+    }
+  }
+}
+
 // Either side can be sent alone: the app scans the front as soon as it is
 // captured (while the owner photographs the back), then the back.
-export async function scanAadhaar(
+export function scanAadhaar(
   token: string,
   frontUri: string | null,
   backUri: string | null,
 ): Promise<OcrFields> {
-  const formData = new FormData();
-  if (frontUri) await appendImagePart(formData, "front_image", frontUri, "front.jpg");
-  if (backUri) await appendImagePart(formData, "back_image", backUri, "back.jpg");
+  return withTransientRetry(async () => {
+    const formData = new FormData();
+    if (frontUri) await appendImagePart(formData, "front_image", frontUri, "front.jpg");
+    if (backUri) await appendImagePart(formData, "back_image", backUri, "back.jpg");
 
-  const res = await apiFetch(`${API_BASE_URL}/workers/ocr`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  }, LONG_TIMEOUT_MS);
-  if (!res.ok) {
-    await throwForErrorResponse(res, "OCR failed");
-  }
-  return res.json();
+    const res = await apiFetch(`${API_BASE_URL}/workers/ocr`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    }, LONG_TIMEOUT_MS);
+    if (!res.ok) {
+      await throwForErrorResponse(res, "OCR failed");
+    }
+    return res.json();
+  });
 }
 
 // `uri` is expected to already be a small, compressed JPEG (see

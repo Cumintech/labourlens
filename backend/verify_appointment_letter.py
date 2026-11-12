@@ -53,8 +53,11 @@ import io as _io
 
 def letter_text(content: bytes) -> str:
     reader = PdfReader(_io.BytesIO(content))
-    assert len(reader.pages) == 1, "the letter fits on one page"
-    return " ".join(reader.pages[0].extract_text().split())  # labels wrap over lines in the PDF
+    assert len(reader.pages) == 2, "page 1 is the covering letter, page 2 the 16-item form"
+    cover = " ".join(reader.pages[0].extract_text().split())
+    assert "Dear " in cover and "We are pleased to appoint you as" in cover and "Authorized Signatory" in cover, cover
+    assert "Name of employee" not in cover, "the form starts on page 2"
+    return " ".join(reader.pages[1].extract_text().split())  # labels wrap over lines in the PDF
 
 bare_text = letter_text(bare_letter.content)
 # the 16-item format is there even when nothing is on file: every label, the worker's name, blank lines (no dashes)

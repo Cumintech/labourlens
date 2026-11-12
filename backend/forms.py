@@ -2078,8 +2078,8 @@ def build_id_card_v2(
 
 
 def build_appointment_letter(db: Session, owner: models.Owner, worker: models.Worker) -> tuple[bytes, str, str]:
-    """The 16-item appointment letter (Code on Wages / Code on Social Security format):
-    (i) name ... (xvi) any other information, then the employer's signature. Each
+    """Two pages: the covering appointment letter, then the 16-item form (Code on Wages /
+    Code on Social Security format): (i) name ... (xvi) any other information, then the employer's signature. Each
     value comes from what is on file; anything not held (e.g. the establishment's
     Labour Identification Number, "any other information") is a blank ruled line to
     fill by hand -- nothing is guessed."""
@@ -2199,7 +2199,39 @@ def build_appointment_letter(db: Session, owner: models.Owner, worker: models.Wo
     )
     signature.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, 0), 0.6, navy), ("TOPPADDING", (0, 0), (-1, -1), 3)]))
 
-    elements = [Paragraph("Appointment Letter", title_style), Spacer(1, 0.15 * cm), bar, Spacer(1, 0.25 * cm)]
+    # Page 1: the covering appointment letter (letterhead, "Dear ...", the appointment); page 2: the 16-item form
+    styles = getSampleStyleSheet()
+    body_style = ParagraphStyle("letter_body", parent=styles["Normal"], spaceAfter=10, leading=15)
+    body_size = body_style.fontSize
+    safe_name = _safe_paragraph_text(worker.name, body_size)
+    safe_designation = _safe_paragraph_text(designation or "-", body_size)
+    safe_factory = _safe_paragraph_text(owner.factory_name, body_size)
+    joining = compliance.date_of_joining.isoformat() if compliance and compliance.date_of_joining else "-"
+    elements = _header_elements(owner, styles, "Appointment Letter")
+    elements += [Paragraph(f"Date: {date.today().isoformat()}", styles["Normal"]), Spacer(1, 0.6 * cm), Paragraph("To,", body_style), Paragraph(safe_name, body_style)]
+    if worker.current_address:
+        elements.append(Paragraph(_safe_paragraph_text(worker.current_address, body_size), body_style))
+    if worker.numeric_employee_code:
+        elements.append(Paragraph(f"Employee ID: {worker.numeric_employee_code}", body_style))
+    elements += [
+        Spacer(1, 0.4 * cm),
+        Paragraph(f"Dear {safe_name},", body_style),
+        Paragraph(
+            f"We are pleased to appoint you as <b>{safe_designation}</b> at <b>{safe_factory}</b>, with effect from "
+            f"<b>{joining}</b>. Your wage for this role will be <b>{wages or '-'}</b>, subject to applicable statutory "
+            "deductions. This appointment is governed by the applicable provisions of labour law and the factory's "
+            "standing policies.",
+            body_style,
+        ),
+        Paragraph("Please treat this letter as confirmation of your appointment. We look forward to your valuable contribution.", body_style),
+        Spacer(1, 1.2 * cm),
+        Paragraph(f"For {safe_factory},", body_style),
+        Spacer(1, 1.4 * cm),
+        Paragraph("_________________________", body_style),
+        Paragraph("Authorized Signatory", body_style),
+        PageBreak(),
+    ]
+    elements += [Paragraph("Appointment Letter", title_style), Spacer(1, 0.15 * cm), bar, Spacer(1, 0.25 * cm)]
     elements.append(Paragraph(f"<b>{_safe_paragraph_text(owner.factory_name, head_style.fontSize)}</b>", head_style))
     if owner.factory_address:
         elements.append(Paragraph(_safe_paragraph_text(owner.factory_address, head_style.fontSize), head_style))

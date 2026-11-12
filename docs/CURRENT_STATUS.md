@@ -80,6 +80,10 @@
 ## Profile save blocked for numeric usernames (2026-11-10, fix/profile-save-numeric-username)
 - Accounts from before usernames existed use their mobile number as the username (starts with a digit). ProfileScreen re-validated it on every save ("starts with a letter") and re-sent it to PUT /owners/me/account, so saving the profile (or adding an email) failed. Now only a CHANGED username/email is validated and sent. New usernames still must start with a letter. Test: verify_legacy_username.py.
 
+## Scan on both sides, letter + form, blood group (2026-11-12, fix/scan-both-sides-letter-bloodgroup)
+- Scan now starts only when BOTH sides are photographed (one request; retaking re-reads). Includes the parked OCR hardening: per-scan memory guard (shrinks detector / answers 503 "busy" instead of the host killing the service), gc+malloc_trim after each scan, thread default 2 when no CPU quota is visible, app retries 502/503/504 twice. Cause of "scan service not available" on Render is still unconfirmed (no logs seen): check Render Events for "Ran out of memory" and Logs for "ocr scan refused" / "OCR engine failed to load".
+- Appointment letter PDF = page 1 the covering narrative letter, page 2 the 16-item form. Blood group moved to Add Worker step 1 (scan and manual).
+
 ## Open pilot blockers (vs ARCHITECTURE_REVIEW §2)
 1. OCR debug print of Aadhaar/name — FIXED (was already opt-in gated; dead block removed, backend/ocr.py:322)
 2. Privacy policy discloses biometric + bank/IFSC — FIXED (backend/privacy_policy.py:39,50)
